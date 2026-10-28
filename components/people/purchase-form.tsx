@@ -3,19 +3,25 @@ import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { PurchaseQuote } from "@/lib/server/purchases";
+import styles from "./purchase-form.module.css";
 type Quote = PurchaseQuote & { gcashAvailable?: boolean };
-export function PurchaseForm({ admin = false, personId, previousRequestId, onSubmitted }: { admin?: boolean; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
+export function PurchaseForm({ admin = false, portal = false, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
   const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<"cash" | "gcash">("cash");
   const [file, setFile] = useState<File | null>(null), [fileKey, setFileKey] = useState("");
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const attempt = useRef<{ key: string; id: string; proof?: { receiptId: string; receiptToken: string } } | null>(null);
   const endpoint = admin ? `/api/finance/purchases?personId=${encodeURIComponent(personId ?? "")}` : `/api/customer/purchase${previousRequestId ? `?previousRequestId=${encodeURIComponent(previousRequestId)}` : ""}`;
   async function headers(): Promise<Record<string, string>> { return admin ? { Authorization: `Bearer ${await user?.getIdToken()}` } : {}; }
   async function refresh() {
+    setRefreshing(true);
+    try {
     const response = await fetch(endpoint, { headers: await headers() });
     if (!response.ok) { setQuote(null); throw new Error("A purchase quote is unavailable. Ask the admin to verify the profile, rate category, and monthly price, then refresh."); }
     setQuote(await response.json());
+    setMessage("");
+    } finally { setRefreshing(false); }
   }
   useEffect(() => {
     let active = true;
@@ -48,6 +54,21 @@ export function PurchaseForm({ admin = false, personId, previousRequestId, onSub
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not submit the request. Retry to recover it safely."); }
     finally { setBusy(false); }
   }
+  if (portal) return <section className={styles.purchase} aria-labelledby="purchase-title">
+    <div className={styles.heading}><h2 id="purchase-title">{previousRequestId ? "Correct your payment" : "Start or renew"}</h2><button type="button" disabled={busy || refreshing} onClick={() => refresh().catch(e => setMessage(e.message))}>{refreshing ? "Refreshing…" : "Refresh quote"}</button></div>
+    <p className={styles.description}>{previousRequestId ? "Review this replacement before sending it for approval." : "Review your price and payment details before submitting."}</p>
+    {!quote && !message && <p className={styles.loading} role="status">Loading your price and membership dates…</p>}
+    {quote && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <div className={styles.quote}><div><span>{quote.kind === "daily_session" ? "Daily session" : "One-month membership"}</span><strong>{new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(quote.amountMinor / 100)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind.replaceAll("_", " ")}</span>
+      {quote.coverage && <dl className={styles.coverage}><div><dt>Estimated start</dt><dd>{coverageDate(quote.coverage.startDate)}</dd></div><span aria-hidden="true">→</span><div><dt>Estimated expiry</dt><dd>{coverageDate(quote.coverage.expiryDate)}</dd></div></dl>}</div>
+      {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
+      <label htmlFor="customer-payment-method">Payment method</label><select id="customer-payment-method" value={method} disabled={busy || refreshing} onChange={e => setMethod(e.target.value as "cash" | "gcash")}><option value="cash">Cash — confirm with the gym</option><option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option></select>
+      {method === "cash" && <p className={styles.hint}>Pay at the gym. Your request stays pending until staff confirm receipt.</p>}
+      {method === "gcash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">GCash receipt</label><input id="customer-payment-receipt" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s confirmed GCash account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
+      <button className={styles.submit} disabled={busy || refreshing} type="submit">{busy ? "Submitting request…" : previousRequestId ? "Submit corrected payment" : "Submit payment request"}<span aria-hidden="true">→</span></button><p className={styles.approvalNote}>Reviewed by the gym before membership activation.</p>
+    </form>}
+    {message && <p className={styles.message} role="status">{message}</p>}
+  </section>;
   return <section className="rs-financial-ui" style={{ display: "grid", gap: 14, marginBlock: 20 }}><h2>{previousRequestId ? "Replace rejected payment" : "Membership purchase / renewal"}</h2>
     <p>One month at the configured price. Package and custom-expiry purchase prices await an agreed policy.</p>
     {!quote && !message && <p role="status">Loading configured price and coverage…</p>}
@@ -62,6 +83,9 @@ export function PurchaseForm({ admin = false, personId, previousRequestId, onSub
     <button type="button" disabled={busy} onClick={() => refresh().catch(e => setMessage(e.message))}>Refresh purchase quote</button>
     {message && <p role="status">{message}</p>}
   </section>;
+}
+function coverageDate(value: string) {
+  return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 }
 export function NewProfilePurchaseQuote({ category, onQuote }: { category: string; onQuote(quote: PurchaseQuote | null): void }) {
   const { user } = useAuth(); const [message, setMessage] = useState("Choose a category to review monthly pricing.");
