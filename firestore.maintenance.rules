@@ -1,0 +1,25 @@
+// Temporary cutover boundary. Admin SDK bypasses rules; pair with the deployed
+// API maintenance gate and keep the scanner disabled. Do not leave active after
+// reconciliation: replace with firestore.cutover.rules before reopening writes.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == get(/databases/$(database)/documents/_serverConfig/admin).data.uid;
+    }
+
+    match /persons/{personId} { allow get, list: if true; allow write: if false; }
+    match /attendanceLogs/{logId} { allow get, list: if true; allow write: if false; }
+    match /profileDetails/{personId} { allow read: if isAdmin(); allow write: if false; }
+    match /weightEntries/{entryId} { allow read: if isAdmin(); allow write: if false; }
+    match /statusChanges/{changeId} { allow read: if isAdmin(); allow write: if false; }
+    match /_connectivity_test/{docId} { allow read: if isAdmin(); allow write: if false; }
+    match /rfidDeviceStatus/{deviceId} { allow read: if isAdmin(); allow write: if false; }
+    match /rfidAssignments/{assignmentId} { allow read: if isAdmin(); allow write: if false; }
+    match /rfidTapEvents/{eventId} { allow read: if isAdmin(); allow write: if false; }
+    match /rfidCardChanges/{changeId} { allow read: if isAdmin(); allow write: if false; }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

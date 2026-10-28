@@ -1,0 +1,57 @@
+{
+  "name": "reshape",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "prebuild": "node scripts/check-server-runtime.cjs",
+    "dev": "next dev",
+    "dev:isolated": "node scripts/isolated-dev.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "supabase:check": "node --experimental-strip-types --conditions=react-server scripts/supabase-check.mjs",
+    "receipts:setup": "node scripts/receipts-setup.mjs",
+    "test:abuse": "node scripts/test-abuse.mjs",
+    "test:abuse:http": "node scripts/test-abuse.mjs --http",
+    "rfid:provision": "node scripts/rfid-provision.mjs",
+    "rfid:backup": "node scripts/rfid-backup.mjs",
+    "rfid:rules-probe": "node scripts/rfid-rules-probe.mjs",
+    "rfid:maintenance": "node scripts/rfid-maintenance.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "firebase": "^12.18.0",
+    "firebase-admin": "13.10.0",
+    "jspdf": "^4.2.1",
+    "next": "16.3.3",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.4",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.20.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.3",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^5.0.0"
+  }
+}

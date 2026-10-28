@@ -1,0 +1,93 @@
+// Active after the coordinated Phase 11 guard reconciliation. Browser attendance
+// and card mutations must remain denied on subsequent rules deployments.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == get(/databases/$(database)/documents/_serverConfig/admin).data.uid;
+    }
+    function writablePerson(personId) {
+      return existsAfter(/databases/$(database)/documents/persons/$(personId))
+        && getAfter(/databases/$(database)/documents/persons/$(personId)).data.get('deletingAt', null) == null;
+    }
+    // Public QR requests use server endpoints; browser reads require the admin.
+    match /persons/{personId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+    match /attendanceLogs/{logId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+    // Public registrations are isolated from the official roster and totals.
+    // Only trusted server transactions may scan, approve, or reject them.
+    match /unverifiedPersons/{personId} {
+      allow get, list: if isAdmin();
+      allow write: if false;
+    }
+    match /unverifiedAttendanceLogs/{logId} {
+      allow get, list: if isAdmin();
+      allow write: if false;
+    }
+    match /unverifiedAttendanceState/{personId} { allow read, write: if false; }
+    match /profileDetails/{personId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // --- weightEntries (private time series) ------------------------------
+    match /weightEntries/{entryId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // --- statusChanges (append-only audit trail; admin may delete) -------
+    match /statusChanges/{changeId} {
+      allow read: if isAdmin();
+      allow create: if false;
+      allow update: if false;
+      // Only so `deletePerson` can cascade; rows are never rewritten.
+      allow delete: if false;
+    }
+
+    // --- dev connectivity probe (app/dev/firebase-check) ----------------
+    // Admin-only now; the dev page needs a signed-in session to run.
+    match /_connectivity_test/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // RFID foundation: no browser mutations. Credential verifiers, ownership,
+    // retry receipts, guards, configuration, and throttle buckets remain private.
+    match /rfidCards/{uid} { allow read, write: if false; }
+    match /rfidDevices/{deviceId} { allow read, write: if false; }
+    match /attendanceState/{personId} { allow read, write: if false; }
+    match /scanResults/{receiptId} { allow read, write: if false; }
+    match /rfidRateLimits/{bucketId} { allow read, write: if false; }
+    match /_serverConfig/{configId} { allow read, write: if false; }
+
+    // These collections contain only the sanitized model/projection fields.
+    // Rules cannot redact fields; secrets must stay in the private documents.
+    // Read authorization is independent of document shape to support listeners.
+    match /rfidDeviceStatus/{deviceId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /rfidAssignments/{assignmentId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /rfidTapEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /rfidCardChanges/{changeId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Everything else: deny (explicit; unmatched paths deny by default too).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

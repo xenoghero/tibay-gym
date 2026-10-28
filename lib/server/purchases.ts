@@ -1,0 +1,169 @@
+import "server-only";
+import { createHash } from "node:crypto";
+import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
+import type { Charge, GymSettings, PaymentRequest } from "@/lib/finance/contracts";
+import { snapshotRate, operationId, philippineDate } from "@/lib/finance/rules";
+import { membershipCoverage, snapshotMembership, coverageExpiryMs, type MembershipSnapshot } from "@/lib/finance/coverage";
+import { adminDb } from "./firebase-admin";
+import { ApiError } from "./rfid/http";
+import { documentId } from "./rfid/validation";
+import { prepareTransactionNumber } from "./transaction-numbers";
+import { readyReceipt } from "./receipt-proof";
+import { appendAudit } from "./audit";
+import { prepareReferenceClaim } from "./gcash-references";
+type Person = Record<string, unknown> & { type: string; status: string | null; membershipExpiry: Timestamp | null };
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const purchaseChargeId = (personId: string, operation: string) => `purchase-${hash([personId, operation])}`;
+export const purchaseRequestId = (personId: string, operation: string) => `pay-${hash([personId, operation])}`;
+export interface PurchaseQuote {
+  kind: Charge["kind"]; amountMinor: number; categorySnapshot: string; rateRevision: number;
+  coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null;
+}
+function quoteFor(person: Person, settings: GymSettings, at: number, previous?: { charge: Charge; requestId: string }): PurchaseQuote {
+  let snapshot;
+  try { snapshot = previous ? previous.charge : snapshotRate(settings, person.rateCategory, person.type === "member" ? "renewal" : "new_membership"); }
+  catch { throw new ApiError(409, "monthly-price-or-category-unset"); }
+  const kind = previous?.charge.kind ?? (person.type === "member" ? "renewal" : "new_membership");
+  const coverage = kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at);
+  const fields = { kind, amountMinor: snapshot.amountMinor, categorySnapshot: snapshot.categorySnapshot,
+    rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null };
+  return { ...fields, quoteToken: hash([fields, snapshotMembership(person), philippineDate(at)]) };
+}
+export async function getPurchaseQuote(personId: string, previousRequestId?: string) {
+  const db = adminDb(), person = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
+  if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
+  const settings = (await db.doc("gymSettings/finance").get()).data() as GymSettings | undefined;
+  if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
+  let previous: { charge: Charge; requestId: string } | undefined;
+  if (previousRequestId) {
+    const request = (await db.doc(`paymentRequests/${documentId(previousRequestId)}`).get()).data();
+    if (!request || request.personId !== personId || request.status !== "rejected") throw new ApiError(409, "replacement-unavailable");
+    const charge = (await db.doc(`charges/${request.chargeId}`).get()).data() as Charge;
+    if (!charge || charge.personId !== personId || charge.confirmedPaymentRequestId) throw new ApiError(409, "replacement-unavailable");
+    previous = { charge, requestId: previousRequestId };
+  }
+  return quoteFor(person, settings, Date.now(), previous);
+}
+export async function newProfileQuote(category: unknown) {
+  const settings = (await adminDb().doc("gymSettings/finance").get()).data() as GymSettings | undefined;
+  if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
+  return quoteFor({ type: "guest", status: null, membershipExpiry: null, rateCategory: category }, settings, Date.now());
+}
+/** Read-only preparation shared by customer/admin submissions and atomic admin profile creation. */
+export async function preparePurchase(tx: Transaction, db: Firestore, actorId: string, personId: string, person: Person, body: Record<string, unknown>) {
+  let operation: string;
+  try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
+  if (body.method !== "cash" && body.method !== "gcash") throw new ApiError(400, "invalid-payment-method");
+  const settings = (await tx.get(db.doc("gymSettings/finance"))).data() as GymSettings | undefined;
+  if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
+  let prior: { charge: Charge; requestId: string } | undefined;
+  if (body.previousRequestId) {
+    const previousId = documentId(body.previousRequestId), request = (await tx.get(db.doc(`paymentRequests/${previousId}`))).data();
+    if (!request || request.personId !== personId || request.status !== "rejected") throw new ApiError(409, "replacement-unavailable");
+    const charge = (await tx.get(db.doc(`charges/${request.chargeId}`))).data() as Charge;
+    if (!charge || charge.personId !== personId || charge.confirmedPaymentRequestId || charge.activePaymentRequestId !== previousId) throw new ApiError(409, "replacement-unavailable");
+    prior = { charge, requestId: previousId };
+  }
+  const now = Date.now(), quote = quoteFor(person, settings, now, prior);
+  if (body.quoteToken !== quote.quoteToken) throw new ApiError(409, "purchase-quote-changed");
+  const stateRef = db.doc(`membershipPurchaseState/${personId}`), state = (await tx.get(stateRef)).data();
+  if (quote.kind !== "daily_session" && state?.activeRequestId) {
+    const active = (await tx.get(db.doc(`paymentRequests/${state.activeRequestId}`))).data();
+    if (active?.status === "pending") throw new ApiError(409, "pending-purchase-exists");
+  }
+  const chargeId = prior?.charge.id ?? purchaseChargeId(personId, operation);
+  const requestId = purchaseRequestId(personId, operation);
+  const proof = body.method === "gcash" ? await readyReceipt(tx, db, { personId, chargeId, amountMinor: quote.amountMinor, at: now,
+    receiptId: typeof body.receiptId === "string" ? body.receiptId : undefined, receiptToken: typeof body.receiptToken === "string" ? body.receiptToken : undefined }) : null;
+  if (proof && proof.paymentRequestId !== requestId) throw new ApiError(409, "valid-receipt-required");
+  const number = prior ? null : await prepareTransactionNumber(tx, db);
+  const price = prior?.charge ?? snapshotRate(settings, person.rateCategory, quote.kind);
+  const charge: Charge = prior?.charge ?? { id: chargeId, ...price, tibayTransactionNumber: number!.number, personId, kind: quote.kind, chargeDate: philippineDate(now),
+    createdAt: now, recognizedPurchaseAt: null, requestedCoverage: quote.coverage, approvedCoverage: null, dailyVisitDate: null, attendanceLogId: null, uniqueDailyKey: null, operationId: operation };
+  const payment: PaymentRequest & { membershipSnapshot: MembershipSnapshot } = { id: requestId, chargeId, personId, method: body.method, status: "pending", amountMinor: quote.amountMinor,
+    receiptId: proof?.receiptId ?? null, submittedAt: now, previousRequestId: prior?.requestId ?? null, reviewedBy: null, reviewedAt: null, rejectionReason: null,
+    confirmedAt: null, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: operation, membershipSnapshot: snapshotMembership(person) };
+  return { result: { id: requestId, chargeId }, commit: () => {
+    number?.commit(); proof?.commit();
+    tx.set(db.doc(`charges/${chargeId}`), { ...charge, activePaymentRequestId: requestId });
+    tx.set(db.doc(`paymentRequests/${requestId}`), payment);
+    if (quote.kind !== "daily_session") tx.set(stateRef, { activeRequestId: requestId });
+    appendAudit(tx, db, { actorId, action: prior ? "payment-replacement-submitted" : "membership-purchase-submitted", entityType: "paymentRequest", entityId: requestId,
+      personId, operationId: operation, after: { kind: quote.kind, method: payment.method, amountMinor: quote.amountMinor, status: "pending" } });
+  } };
+}
+export async function submitPurchase(actorId: string, personId: string, body: Record<string, unknown>) {
+  documentId(personId);
+  let operation: string;
+  try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
+  const db = adminDb(), operationRef = db.doc(`purchaseOperations/${operation}`), digest = hash([actorId, personId, body]);
+  return db.runTransaction(async tx => {
+    const prior = (await tx.get(operationRef)).data();
+    if (prior) { if (prior.digest !== digest) throw new ApiError(409, "operation-conflict"); return prior.result; }
+    const person = (await tx.get(db.doc(`persons/${personId}`))).data() as Person | undefined;
+    if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
+    const staged = await preparePurchase(tx, db, actorId, personId, person, body);
+    staged.commit(); tx.set(operationRef, { digest, result: staged.result }); return staged.result;
+  });
+}
+function approvalPreview(payment: PaymentRequest, charge: Charge, person: Person, review: Record<string, unknown> | undefined, at: number) {
+  const coverage = payment.status === "approved" ? payment.appliedCoverage : charge.kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at);
+  return { coverage, previewToken: hash([payment.id, charge.amountMinor, payment.method, snapshotMembership(person), coverage, review?.reviewRevision ?? 0, philippineDate(at)]) };
+}
+export async function paymentReviewPreview(id: string) {
+  const db = adminDb(), payment = (await db.doc(`paymentRequests/${documentId(id)}`).get()).data() as (PaymentRequest & { membershipSnapshot?: MembershipSnapshot }) | undefined;
+  if (!payment) throw new ApiError(404, "payment-unavailable");
+  const charge = (await db.doc(`charges/${payment.chargeId}`).get()).data() as Charge;
+  const person = ((await db.doc(`persons/${payment.personId}`).get()).data() ?? (await db.doc(`unverifiedPersons/${payment.personId}`).get()).data()) as Person | undefined;
+  if (!charge || !person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
+  const review = payment.receiptId ? (await db.doc(`receiptReviews/${payment.receiptId}`).get()).data() : undefined;
+  return { ...approvalPreview(payment, charge, person, review, Date.now()), membershipChanged: payment.status === "pending" && charge.kind !== "daily_session" && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person)),
+    payment, charge, customer: { id: payment.personId, name: person.name, rateCategory: person.rateCategory }, receiptReview: review ?? null };
+}
+export async function decidePayment(actorId: string, body: Record<string, unknown>) {
+  const id = documentId(body.paymentRequestId);
+  if (body.decision !== "approve" && body.decision !== "reject") throw new ApiError(400, "invalid-decision");
+  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+  if (body.decision === "reject" && (!reason || reason.length > 500)) throw new ApiError(400, "rejection-reason-required");
+  if (body.reviewed !== true) throw new ApiError(400, "payment-review-required");
+  const db = adminDb();
+  return db.runTransaction(async tx => {
+    const paymentRef = db.doc(`paymentRequests/${id}`), payment = (await tx.get(paymentRef)).data() as (PaymentRequest & { membershipSnapshot?: MembershipSnapshot }) | undefined;
+    if (!payment) throw new ApiError(404, "payment-unavailable");
+    if (payment.status === (body.decision === "approve" ? "approved" : "rejected")) return { ok: true, status: payment.status };
+    if (payment.status !== "pending") throw new ApiError(409, "payment-not-pending");
+    const chargeRef = db.doc(`charges/${payment.chargeId}`), charge = (await tx.get(chargeRef)).data() as Charge | undefined;
+    if (!charge || charge.confirmedPaymentRequestId || charge.activePaymentRequestId !== id) throw new ApiError(409, "charge-review-changed");
+    if (payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "payment-amount-conflict");
+    const personRef = db.doc(`persons/${payment.personId}`), person = (await tx.get(personRef)).data() as Person | undefined;
+    const pending = !person ? (await tx.get(db.doc(`unverifiedPersons/${payment.personId}`))).data() as Person | undefined : undefined;
+    if (!(person ?? pending) || (person ?? pending)!.deletingAt || (charge.kind !== "daily_session" && !person)) throw new ApiError(409, "verified-profile-required");
+    const receiptReview = payment.receiptId ? (await tx.get(db.doc(`receiptReviews/${payment.receiptId}`))).data() : undefined;
+    const now = Date.now(), preview = approvalPreview(payment, charge, (person ?? pending)!, receiptReview, now);
+    if (body.previewToken !== preview.previewToken) throw new ApiError(409, "payment-review-changed");
+    const changed = charge.kind !== "daily_session" && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person!));
+    if (body.decision === "approve" && changed && body.acknowledgeMembershipChange !== true) throw new ApiError(409, "membership-review-required");
+    let reference: Awaited<ReturnType<typeof prepareReferenceClaim>> | null = null;
+    if (body.decision === "approve" && payment.method === "gcash") {
+      if (!payment.receiptId || !receiptReview?.confirmedReference || receiptReview.confirmedAmountMinor !== payment.amountMinor || payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "receipt-review-required");
+      reference = await prepareReferenceClaim(tx, db, receiptReview.confirmedReference, id, charge.id);
+    }
+    const approved = body.decision === "approve";
+    tx.update(paymentRef, { status: approved ? "approved" : "rejected", reviewedBy: actorId, reviewedAt: now, rejectionReason: approved ? null : reason,
+      confirmedAt: approved ? now : null, appliedCoverage: approved ? preview.coverage : null, gcashReferenceSnapshot: reference?.normalizedReference ?? null });
+    if (approved) {
+      reference?.commit();
+      tx.update(chargeRef, { confirmedPaymentRequestId: id, recognizedPurchaseAt: charge.kind === "daily_session" ? null : now, approvedCoverage: preview.coverage });
+      if (preview.coverage) {
+        tx.update(personRef, { type: "member", status: "active", membershipExpiry: Timestamp.fromMillis(coverageExpiryMs(preview.coverage)),
+          joinDate: person!.joinDate ?? Timestamp.fromMillis(Date.parse(`${preview.coverage.startDate}T00:00:00+08:00`)), updatedAt: Timestamp.fromMillis(now) });
+        tx.set(db.doc(`statusChanges/${id}`), { personId: payment.personId, fromStatus: person!.status, toStatus: "active", reason: "Approved membership purchase", changedAt: Timestamp.fromMillis(now),
+          previousExpiry: person!.membershipExpiry ?? null, newExpiry: Timestamp.fromMillis(coverageExpiryMs(preview.coverage)) });
+      }
+    }
+    appendAudit(tx, db, { actorId, action: approved ? "payment-approved" : "payment-rejected", entityType: "paymentRequest", entityId: id, personId: payment.personId,
+      operationId: `${body.decision}-${id}`, before: { status: "pending" }, after: { status: approved ? "approved" : "rejected", kind: charge.kind, amountMinor: payment.amountMinor, method: payment.method,
+        ...(preview.coverage && approved ? { membershipExpiry: coverageExpiryMs(preview.coverage) } : {}), normalizedReference: reference?.normalizedReference ?? null }, reason: approved ? "Payment received and reviewed" : reason });
+    return { ok: true, status: approved ? "approved" : "rejected" };
+  });
+}
