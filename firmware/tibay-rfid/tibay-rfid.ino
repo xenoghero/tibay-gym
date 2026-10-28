@@ -20,7 +20,7 @@
 
 constexpr uint32_t REMOVAL_MS = 3000, RESULT_MS = 3000;
 constexpr uint32_t ATTENDANCE_RETRY_MS = 30000, ENROLLMENT_RETRY_MS = 600000;
-constexpr uint32_t NORMAL_POLL_MS = 15000, ARMED_POLL_MS = 2000;
+constexpr uint32_t NORMAL_POLL_MS = 60000, ARMED_POLL_MS = 2000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
 constexpr uint8_t LCD_COLUMNS = 20, LCD_ROWS = 4;
@@ -258,7 +258,7 @@ void scan() {
   readBeep();
   if (!uid[0]) { message("Unsupported card", "Only verified 4 bytes"); return; }
   if (assignmentId.isEmpty()) {
-    // The admin may have reserved enrollment since the last 15-second idle poll.
+    // The admin may have reserved enrollment since the last 60-second idle poll.
     // Refresh before choosing the mode for this same physical tap.
     poll();
     if (!healthy || !authorized) return;

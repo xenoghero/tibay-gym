@@ -53,7 +53,7 @@ Reference: [Espressif secure-client documentation](https://github.com/espressif/
 
 | Behavior | Firmware / backend contract |
 |---|---|
-| Normal command polling | Every 15 seconds; first poll immediately after startup/reconnect. A newly read card in idle mode triggers an immediate command refresh before its capture, so a card tapped after the admin arms enrollment can be assigned on that same tap without waiting for the next scheduled poll. The idle LCD can still take up to 15 seconds to switch to the enrollment prompt when no card is presented. |
+| Normal command polling | Every 60 seconds; first poll immediately after startup/reconnect. A newly read card in idle mode triggers an immediate command refresh before its capture, so a card tapped after the admin arms enrollment can be assigned on that same tap without waiting for the next scheduled poll. The idle LCD can still take up to 60 seconds to switch to the enrollment prompt when no card is presented. |
 | Armed command polling | Every 2 seconds with backend assignment ID and UTC deadline |
 | Heartbeat | Backend persists `lastSeenAt` at most once per 60 seconds; offline threshold is 180 seconds |
 | Error backoff | 5 → 10 → 20 → 40 → 60 seconds; authorization/throttle errors wait 60 seconds |
