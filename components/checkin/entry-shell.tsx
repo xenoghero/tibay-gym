@@ -12,8 +12,8 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
   const registering = mode === "register";
   return <main className={styles.page}>
     <div className={styles.frame}>
-      <header className={styles.brand}><BrandLogo /><span>YOUR NEXT SESSION STARTS HERE</span></header>
       <div className={styles.workspace} data-mode={mode}>
+        <header className={styles.brand}><BrandLogo sidebar /><span>YOUR NEXT SESSION STARTS HERE</span></header>
         <aside className={styles.overview} aria-label="Visit overview">
           <span className={styles.eyebrow}>TIBAY GYM · WELCOME IN</span>
           <h2>{mode === "complete" ? "All set.\nKeep showing up." : registering ? "Your first step.\nA stronger you." : "Show up.\nGet stronger."}</h2>

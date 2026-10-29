@@ -7,8 +7,8 @@ import { PrintQrView } from "@/components/print-qr/print-qr-view";
 // here is Phase 7.
 
 export const metadata: Metadata = {
-  title: "Print Check-in QR — Tibay Gym Admin",
-  description: "Generate and print the entrance check-in QR poster.",
+  title: "QR codes — Tibay Gym Admin",
+  description: "Download and print check-in and customer membership QR posters.",
 };
 
 export default function PrintQrPage() {

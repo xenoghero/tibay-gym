@@ -15,7 +15,7 @@ const NAV = [
   { label: "Audit history", href: "/dashboard/audit", Icon: IconAudit },
   { label: "Payment review", href: "/dashboard/payments", Icon: IconPayment },
   { label: "SMS operations", href: "/dashboard/sms", Icon: IconMessage },
-  { label: "Print Check-in QR", href: "/dashboard/print-qr", Icon: IconQr },
+  { label: "QR codes", href: "/dashboard/print-qr", Icon: IconQr },
   { label: "Account Settings", href: "/dashboard/settings", Icon: IconSettings },
 ];
 const STORAGE_KEY = "tibay-sidebar-collapsed";

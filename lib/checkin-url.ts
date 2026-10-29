@@ -17,7 +17,7 @@ export const GYM_NAME = "Tibay Gym";
  * dev and preview builds. Returns an empty string during SSR (no `window`); the
  * Print QR view only calls this from an effect, client-side.
  */
-export function resolveCheckInUrl(): string {
+export function resolvePublicPageUrl(path: "/checkin" | "/customer"): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
   const origin =
     configured && configured.length > 0
@@ -25,5 +25,9 @@ export function resolveCheckInUrl(): string {
       : typeof window !== "undefined"
         ? window.location.origin
         : "";
-  return `${origin}${CHECKIN_PATH}`;
+  return `${origin}${path}`;
+}
+
+export function resolveCheckInUrl(): string {
+  return resolvePublicPageUrl(CHECKIN_PATH);
 }

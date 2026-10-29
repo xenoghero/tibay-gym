@@ -2058,3 +2058,35 @@ body {
 .rs-st-finance .rs-st-tile-hero { border-top: 3px solid var(--rs-accent) !important; }
 .rs-st-finance .rs-st-value { font-family: inherit !important; font-variant-numeric: tabular-nums; font-size: 38px; font-weight: 600 !important; }
 .rs-st-finance .rs-st-tile-hero :is(.rs-st-label,.rs-st-note) { color: var(--rs-muted) !important; opacity: 1 !important; }
+
+/* Destination controls for the shared QR poster exporter. */
+.rs-qr-selector {
+  display: flex;
+  gap: 8px;
+  margin: 24px 0 16px;
+}
+.rs-qr-selector button {
+  flex: 0 1 180px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--rs-line);
+  border-radius: 6px;
+  background: var(--rs-panel);
+  color: var(--rs-fg);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 160ms, border-color 160ms;
+}
+.rs-qr-selector button[aria-pressed="true"] {
+  background: var(--rs-accent);
+  color: var(--rs-on-accent);
+  border-color: var(--rs-accent);
+}
+.rs-qr-selector button:hover { border-color: var(--rs-fg); }
+.rs-qr-selector button:focus-visible,
+.rs-qr-btn:focus-visible,
+.rs-qr-url-btn:focus-visible {
+  outline: 2px solid var(--rs-accent);
+  outline-offset: 4px;
+}

@@ -46,7 +46,7 @@ const SHEET_LINKS = [
   { label: "SMS operations", href: "/dashboard/sms", Icon: IconStatistics },
   { label: "Payment review", href: "/dashboard/payments", Icon: IconStatistics },
   { label: "Audit history", href: "/dashboard/audit", Icon: IconStatistics },
-  { label: "Print Check-in QR", href: "/dashboard/print-qr", Icon: IconQr },
+  { label: "QR codes", href: "/dashboard/print-qr", Icon: IconQr },
   { label: "Account Settings", href: "/dashboard/settings", Icon: IconSettings },
 ];
 
