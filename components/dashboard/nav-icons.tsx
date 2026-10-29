@@ -25,6 +25,30 @@ const BASE = {
   focusable: "false" as const,
 };
 
+export function IconAudit({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" /></svg>;
+}
+
+export function IconPayment({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3ZM9 7h6M9 11h6M9 15h3" /></svg>;
+}
+
+export function IconMessage({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2ZM7 8h10M7 12h7" /></svg>;
+}
+
+export function IconPanel({ size = 20 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 9l-3 3 3 3" /></svg>;
+}
+
+export function IconMenu({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M4 6h16M4 12h16M4 18h16" /></svg>;
+}
+
+export function IconClose({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="m6 6 12 12M18 6 6 18" /></svg>;
+}
+
 /** Overview — a four-pane grid. */
 export function IconOverview({ size = 22, filled = false }: IconProps) {
   return (

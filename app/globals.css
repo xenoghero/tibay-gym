@@ -81,6 +81,25 @@
 .rs-brand-hero .rs-brand-mark { width: clamp(82px, 10vw, 144px); }
 .rs-brand-hero .rs-brand-name { font-size: clamp(34px, 4vw, 52px); }
 
+.rs-brand-sidebar {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--rs-fg);
+  font-family: var(--font-barlow-condensed), sans-serif;
+  font-size: 34px;
+}
+.rs-brand-sidebar .rs-brand-mark {
+  width: auto;
+  height: 1cap;
+}
+.rs-brand-sidebar .rs-brand-name {
+  font-size: inherit;
+  text-box: trim-both cap alphabetic;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -224,11 +243,10 @@ body {
 
 /* --- Responsive dashboard chrome ------------------------------------------
    The 252px sidebar (`components/dashboard/dashboard-nav.tsx`) and the mobile
-   bottom bar (`components/dashboard/mobile-bottom-nav.tsx`) are mutually
+   mobile header and drawer are mutually
    exclusive; they swap at 860px. That breakpoint is where the dashboard's
    tables start to crowd against the sidebar, not a phone width — the layout is
-   already uncomfortable well before true mobile. Both components style
-   themselves inline, so only the show/hide lives here. */
+   already uncomfortable well before true mobile. */
 
 /* Desktop: the shell grows with its content and the document scrolls, which is
    what the sticky sidebar expects. */
@@ -237,11 +255,8 @@ body {
 }
 
 @media (max-width: 860px) {
-  /* !important is load-bearing: the sidebar sets `display: flex` as an inline
-     style (the dashboard components style themselves inline), and an inline
-     declaration outranks a stylesheet rule of any selector specificity. */
   .rs-dashboard-sidebar {
-    display: none !important;
+    display: none;
   }
 
   /* App-shell scrolling. The shell is pinned to exactly one viewport and never
@@ -264,8 +279,9 @@ body {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    /* Clear the fixed bar so the last row of any page stays reachable. */
-    padding-bottom: calc(58px + env(safe-area-inset-bottom));
+    /* Clear the mobile navigation header and the device's bottom safe area. */
+    padding-top: 68px;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   /* Several pages set `min-height: 100vh` inline on their own <main> (Print QR,
