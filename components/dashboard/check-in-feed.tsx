@@ -43,7 +43,7 @@ export function CheckInFeed({ rows, loading }: { rows: CheckInRow[]; loading: bo
     </header>
     <div className="rs-ov-feed-columns" aria-hidden="true"><span>Person / source</span><span>Check-in time</span></div>
     <div ref={scrollRef} className="rs-ov-feed-scroll" role="region" aria-label="Check-in rows" tabIndex={0} aria-busy={loading}>
-      {loading ? <div className="rs-ov-feed-loading" role="status">Loading check-ins…</div> : !rows.length ?
+      {loading && !rows.length ? <div className="rs-ov-feed-loading" role="status">Loading check-ins…</div> : !rows.length ?
         <div className="rs-ov-feed-empty"><h3>No check-ins yet today</h3><p>The first QR scan or RFID tap will appear here automatically.</p></div> :
         visibleRows.map(row => <Link key={row.logId} href={row.personId ? `/dashboard/people/${row.personId}` : "/dashboard/people"} className="rs-ov-checkin">
           <span className="rs-ov-avatar" aria-hidden="true">{row.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("")}</span>

@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { GymSettings, Rates } from "@/lib/finance/contracts";
@@ -58,7 +61,7 @@ export function FinanceSettings() {
   const changed = settings && fields.some(([key]) => values[key] !== valuesFor(settings)[key]);
   return <section className={styles.section} aria-labelledby="pricing-title" aria-busy={loading}>
     <div className={styles.head}><div><h2 id="pricing-title">Gym pricing</h2><p className={styles.sub}>Daily visits and one-month memberships, in Philippine pesos.</p></div>{settings && !editing && <button className={styles.primary} onClick={() => setEditing(true)}>Edit prices</button>}</div>
-    {loading ? <div role="status"><p>Loading pricing…</p><div className={styles.skeleton} /></div> : !settings ? <button onClick={() => load().catch(e => setMessage(e.message))}>Retry loading pricing</button> : <form onSubmit={validate}>
+    {loading ? <LoadingSkeleton label="Loading pricing…" variant="form" count={4} /> : !settings ? <button onClick={() => load().catch(e => setMessage(e.message))}>Retry loading pricing</button> : <form onSubmit={validate}>
       <table className={`${styles.table} ${styles.rates}`}><thead><tr><th>Category</th><th>Daily · PHP</th><th>Monthly · PHP</th></tr></thead><tbody>
         {(["student", "regular"] as const).map(category => <tr key={category}><td>{category === "student" ? "Student" : "Regular"}<small>{category === "student" ? "Student rate category" : "Standard rate category"}</small></td>
           {(["Daily", "Monthly"] as const).map(term => { const key = `${category}${term}Minor` as keyof Rates; return <td key={term} data-label={`${term} · PHP`}>

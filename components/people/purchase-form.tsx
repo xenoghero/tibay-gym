@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -71,7 +74,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
   if (portal) return <section className={styles.purchase} aria-labelledby="purchase-title">
     <div className={styles.heading}><h2 id="purchase-title">{previousRequestId ? "Correct your payment" : "Start or renew"}</h2><button type="button" disabled={busy || refreshing} onClick={() => refresh().catch(e => setMessage(e.message))}>{refreshing ? "Refreshing…" : "Refresh quote"}</button></div>
     <p className={styles.description}>{previousRequestId ? "Review this replacement before sending it for approval." : "Review your price and payment details before submitting."}</p>
-    {!quote && !message && <p className={styles.loading} role="status">Loading your price and membership dates…</p>}
+    {!quote && !message && <LoadingSkeleton label="Loading your price and membership dates…" variant="form" />}
     {quote && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className={styles.quote}><div><span>{quote.kind === "daily_session" ? "Daily session" : "One-month membership"}</span><strong>{new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(quote.amountMinor / 100)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind.replaceAll("_", " ")}</span>
       {quote.coverage && <dl className={styles.coverage}><div><dt>Estimated start</dt><dd>{coverageDate(quote.coverage.startDate)}</dd></div><span aria-hidden="true">→</span><div><dt>Estimated expiry</dt><dd>{coverageDate(quote.coverage.expiryDate)}</dd></div></dl>}</div>
@@ -87,7 +90,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
   </section>;
   return <section className="rs-financial-ui" style={{ display: "grid", gap: 14, marginBlock: 20 }}><h2>{previousRequestId ? "Replace rejected payment" : "Membership purchase / renewal"}</h2>
     <p>One month at the configured price. Package and custom-expiry purchase prices await an agreed policy.</p>
-    {!quote && !message && <p role="status">Loading configured price and coverage…</p>}
+    {!quote && !message && <LoadingSkeleton label="Loading configured price and coverage…" variant="form" />}
     {quote && <><p><strong>PHP {(quote.amountMinor / 100).toFixed(2)}</strong> · {quote.categorySnapshot} · {quote.kind.replaceAll("_", " ")}</p>
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}

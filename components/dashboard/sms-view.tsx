@@ -1,4 +1,9 @@
 "use client";
+
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { SmsContact, SmsMessage, SmsSettings } from "@/lib/sms/contracts";
@@ -89,6 +94,8 @@ export function SmsView() {
     try { await work(); } catch (error) { setNotice(error instanceof Error ? error.message : "Request failed. Retry safely."); }
     finally { setBusy(false); }
   }
+  const tabContent = useRef<HTMLDivElement>(null);
+  useContentTransition(tabContent, `${tab}:${journey}`);
   return <main className={styles.root}>
     <header className={styles.header}>
       <div><div className={styles.kicker}>Member communications</div><h1>SMS operations</h1></div>
@@ -107,9 +114,9 @@ export function SmsView() {
           event.preventDefault(); selectTab(tabs[next], true);
         }}>{item}</button>)}
     </nav>
-    <div className={styles.content}>
+    <div ref={tabContent} className={styles.content}>
       {notice && <p className={styles.notice} role="status">{notice}</p>}
-      {!data || !settings ? <div className={styles.empty} aria-busy={!notice}><h2>{notice ? "SMS workspace unavailable" : "Loading SMS workspace…"}</h2><p>{notice ? "Use Refresh to try loading again." : "Checking your gateway, settings and contacts."}</p></div> : <>
+      {!data || !settings ? notice ? <div className={styles.empty}><h2>SMS workspace unavailable</h2><p>Use Refresh to try loading again.</p></div> : <LoadingSkeleton label="Loading SMS workspace…" variant={tab === "Settings" ? "form" : "cards"} /> : <>
         <aside className={styles.gateway} data-ready={data.configured && data.settings.enabled} aria-label="Sending status">
           <span className={styles.statusDot} data-ready={data.configured && data.settings.enabled} />
           <div><strong>{!data.configured ? "Sending disabled — gateway setup required" : data.settings.enabled ? "SMS sending enabled" : "SMS sending paused"}</strong>

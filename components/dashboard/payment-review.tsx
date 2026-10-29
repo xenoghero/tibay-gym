@@ -1,4 +1,9 @@
 "use client";
+
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { Charge, PaymentRequest, Coverage } from "@/lib/finance/contracts";
@@ -21,6 +26,8 @@ export function PaymentReview() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
   const requestSequence = useRef(0);
+  const tabContent = useRef<HTMLDivElement>(null);
+  useContentTransition(tabContent, kind);
   async function headers() { return { Authorization: `Bearer ${await user?.getIdToken()}` }; }
   async function list(next?: string) {
     if (kind === "daily_session") return;
@@ -112,11 +119,11 @@ export function PaymentReview() {
       <details className={styles.maintenance}><summary>Maintenance</summary><div className={styles.maintenanceMenu}><p>Remove eligible receipt evidence and photos. Protected records are kept.</p><button disabled={busy} onClick={() => void cleanupEvidence()}>Run retention cleanup</button></div></details>
     </div>
     {message && <p className={styles.message} role="status">{message}</p>}
-    <div className={styles.scroll}>
+    <div ref={tabContent} className={styles.scroll}>
       {kind === "daily_session" && <DailyPayments key={refreshKey} disabled={busy} search={search} status={status} method={method} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
       {kind !== "daily_session" && <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
         <div className={styles.sectionHead}><h2>Renewal requests</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
-        {loading ? <div className={styles.loading} role="status"><p>Loading payment requests…</p>{[0, 1, 2].map(i => <div className={styles.skeleton} key={i} aria-hidden="true" />)}</div> : <>
+        {loading ? <LoadingSkeleton label="Loading payment requests…" count={5} /> : <>
           {!visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching requests" : "No requests on this page."}</h3><p>{rows.length ? "Try another search or change the filters." : "Refresh to check for new payment requests."}</p></div> :
           <table className={styles.table}><thead><tr>{["Customer", "Payment", "Coverage", "Submitted", "Status", "Action"].map(s => <th scope="col" key={s}>{s}</th>)}</tr></thead>
             <tbody>{visibleRows.map(row => <tr key={row.payment.id}>
@@ -132,7 +139,7 @@ export function PaymentReview() {
         <div className={styles.pagination}><span>Search and filters apply to this loaded page.</span>{cursor && <button disabled={busy || loading} onClick={() => list(cursor).catch(e => setMessage(e.message))}>Next 50 requests →</button>}</div>
       </section>}
     </div>
-    {reviewLoading && !selected && <p className={styles.message} role="status">Opening payment details…</p>}
+    {reviewLoading && !selected && <LoadingSkeleton label="Opening payment details…" variant="form" />}
     {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
       {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}

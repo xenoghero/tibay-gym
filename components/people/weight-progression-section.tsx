@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   createWeightEntry,
@@ -270,7 +271,7 @@ export function WeightProgressionSection({
       {formError && !pending && <p role="alert" style={errorStyle}>{formError}</p>}
 
       {loading ? (
-        <div style={stateStyle}>Loading weight history…</div>
+        <LoadingSkeleton label="Loading weight history…" variant="chart" count={6} />
       ) : loadError ? (
         <div role="alert" style={stateStyle}>
           <p style={{ margin: 0 }}>{loadError}</p>

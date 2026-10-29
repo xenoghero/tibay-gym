@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { attendanceApi } from "@/lib/attendance-api";
 import { watchUnverifiedPersons, watchUnverifiedVisits, type UnverifiedPerson } from "@/lib/db/unverified";
@@ -99,7 +100,7 @@ export function UnverifiedMembersView() {
       <label className={styles.selectAll}><input type="checkbox" checked={allSelected} disabled={busy || !visible.length} onChange={() => setSelected(current => {
         const next = new Set(current); for (const person of visible) { if (allSelected) next.delete(person.id); else next.add(person.id); } return next;
       })} />Select all shown <span>{visible.length} shown</span></label>
-      {!loaded ? <p className={styles.empty}>Loading registrations…</p> : visible.length === 0 ? <p className={styles.empty}>{people.length ? "No registrations match your search." : "No unverified registrations awaiting review."}</p> : visible.map(person => <article key={person.id} className={styles.row}>
+      {!loaded ? <LoadingSkeleton label="Loading registrations…" count={5} /> : visible.length === 0 ? <p className={styles.empty}>{people.length ? "No registrations match your search." : "No unverified registrations awaiting review."}</p> : visible.map(person => <article key={person.id} className={styles.row}>
         <div className={styles.identity}>
           <input type="checkbox" aria-label={`Select ${person.name}`} checked={selected.has(person.id)} disabled={busy} onChange={() => toggle(person.id)} />
           <div><h2>{person.name}</h2><p>{person.phone}</p><span className={styles.badge}>{person.deletingAt ? "Deletion unfinished" : "Unverified"}</span></div>
@@ -132,7 +133,7 @@ function VisitHistory({ personId }: { personId: string }) {
   }, [personId, open, retry]);
   return <details className={styles.history} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Check-in history</summary>
-    {open && (failed ? <p role="alert">Could not load visits. <button onClick={() => setRetry(value => value + 1)}>Retry</button></p> : !visits ? <p>Loading visits…</p> : visits.length === 0 ? <p>No visits recorded.</p> : <div className={styles.historyScroll}><table>
+    {open && (failed ? <p role="alert">Could not load visits. <button onClick={() => setRetry(value => value + 1)}>Retry</button></p> : !visits ? <LoadingSkeleton label="Loading visits…" /> : visits.length === 0 ? <p>No visits recorded.</p> : <div className={styles.historyScroll}><table>
       <thead><tr><th>Checked in</th><th>Checked out</th></tr></thead>
       <tbody>{visits.map(visit => <tr key={visit.id}><td>{formatShortDateTime(visit.checkInAt)}</td><td>{visit.checkOutAt ? formatShortDateTime(visit.checkOutAt) : "Open visit"}</td></tr>)}</tbody>
     </table></div>)}

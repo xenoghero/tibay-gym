@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { ReceiptRetention } from "@/lib/receipt-retention";
@@ -58,7 +61,7 @@ export function ReceiptRetentionControls({ receiptId }: { receiptId: string }) {
         <button onClick={() => void save()}>Save retention and holds</button>
       </>}
     </fieldset>}
-    {!policy && !message && <p role="status">Loading retention policy…</p>}
+    {!policy && !message && <LoadingSkeleton label="Loading retention policy…" variant="form" />}
     <button disabled={busy} onClick={() => { setPolicy(null); setMessage(""); setReload(value => value + 1); }}>Refresh retention</button>
     {message && <p role="status">{message}</p>}
   </details>;

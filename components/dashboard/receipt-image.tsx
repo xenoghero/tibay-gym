@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -32,8 +33,8 @@ export function ReceiptImage({ receiptId }: { receiptId: string }) {
       className={styles.receiptImage} data-ready={status === "ready"} aria-hidden={status !== "ready"}
       onLoad={() => setStatus("ready")} onError={() => setStatus("error")} />}
     {status !== "ready" && <div className={styles.receiptImagePlaceholder}>
-      <svg width="48" height="60" viewBox="0 0 48 60" fill="none" aria-hidden="true"><path d="M9 3h21l9 9v43l-5-3-5 3-5-3-5 3-5-3-5 3V3Z" stroke="currentColor" strokeWidth="1.5" /><path d="M29 3v11h10M16 24h16M16 31h16M16 38h10" stroke="currentColor" strokeWidth="1.5" /></svg>
-      {status === "loading" ? <div role="status" className={styles.receiptImageProgress}><span className={styles.receiptSpinner} aria-hidden="true" /><strong>Loading receipt image…</strong><span>The receipt will appear as soon as it is ready.</span></div> :
+      {status === "error" && <svg width="48" height="60" viewBox="0 0 48 60" fill="none" aria-hidden="true"><path d="M9 3h21l9 9v43l-5-3-5 3-5-3-5 3-5-3-5 3V3Z" stroke="currentColor" strokeWidth="1.5" /><path d="M29 3v11h10M16 24h16M16 31h16M16 38h10" stroke="currentColor" strokeWidth="1.5" /></svg>}
+      {status === "loading" ? <LoadingSkeleton label="Loading receipt image…" variant="image" count={4} /> :
         <div role="status" className={styles.receiptImageProgress}><strong>Receipt image unavailable</strong><span>We couldn’t load the image. Try again.</span><button onClick={() => { setImage(null); setStatus("loading"); setAttempt(value => value + 1); }}>Retry image</button></div>}
     </div>}
   </div>;

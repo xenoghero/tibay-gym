@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { watchPerson, type Person } from "@/lib/db/person";
@@ -8,7 +11,7 @@ export function RenewMembershipView({ personId }: { personId: string }) {
   const [person, setPerson] = useState<Person | null>(), [error, setError] = useState(false);
   useEffect(() => watchPerson(personId, setPerson, () => setError(true)), [personId]);
   return <PeopleFormShell title="Renew membership" backHref="/dashboard/people" backLabel="Back to people">
-    {error ? <p role="alert">Could not load membership. Refresh this page to retry.</p> : person === undefined ? <p>Loading membership…</p> : !person ? <p>Profile not found.</p> : person.type !== "member" ? <p>This customer is a guest. <Link href={`/dashboard/people/${person.id}/convert`}>Add membership</Link></p> : <RenewMembershipForm person={person} onReload={() => window.location.reload()} />}
+    {error ? <p role="alert">Could not load membership. Refresh this page to retry.</p> : person === undefined ? <LoadingSkeleton label="Loading membership…" variant="form" /> : !person ? <p>Profile not found.</p> : person.type !== "member" ? <p>This customer is a guest. <Link href={`/dashboard/people/${person.id}/convert`}>Add membership</Link></p> : <RenewMembershipForm person={person} onReload={() => window.location.reload()} />}
   </PeopleFormShell>;
 }
 export function RenewMembershipForm({ person, onReload }: { person: Person; onReload: () => void }) {

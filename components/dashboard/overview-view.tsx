@@ -31,6 +31,7 @@ export function OverviewView() {
   const [openSessions, setOpenSessions] = useState<AttendanceLog[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
+  const [openSessionsLoaded, setOpenSessionsLoaded] = useState(false);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [listenerError, setListenerError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -82,7 +83,7 @@ export function OverviewView() {
         setListenerError(true);
       },
     );
-    const unsubOpen = watchOpenSessions(setOpenSessions, (err) => {
+    const unsubOpen = watchOpenSessions((sessions) => { setOpenSessions(sessions); setOpenSessionsLoaded(true); }, (err) => {
       console.error("[OverviewView] open-sessions listener failed", err);
       setListenerError(true);
     });
@@ -127,6 +128,7 @@ export function OverviewView() {
     setListenerError(false);
     setAlertError(null);
     setLogsLoaded(false);
+    setOpenSessionsLoaded(false);
     setPeopleLoaded(false);
     setRetryKey((k) => k + 1);
   }
@@ -208,11 +210,11 @@ export function OverviewView() {
             <button type="button" onClick={() => void dismissAlert(alert.eventId)} disabled={dismissing.includes(alert.eventId)} aria-label={`Dismiss alert for ${alert.name}`}>×</button>
           </div>)}
         </div>}
-        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading}>
-          <div className="rs-ov-tile rs-ov-tile-hero"><h2>Currently inside</h2><strong>{loading ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
+        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading || !openSessionsLoaded}>
+          <div className="rs-ov-tile rs-ov-tile-hero"><h2>Currently inside</h2><strong>{!openSessionsLoaded || !peopleLoaded ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
           <div className="rs-ov-tile"><h2>Check-ins today</h2><strong>{loading ? "—" : checkinsToday}</strong><span>Live, all sources</span></div>
           <div className="rs-ov-tile"><h2>Members / Guests</h2><strong>{loading ? "—" : `${membersToday} / ${guestsToday}`}</strong><span>Today’s check-ins</span></div>
-          <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{loading ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
+          <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{!peopleLoaded ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
         </section>
         <div className="rs-ov-workspace">
           <div className="rs-ov-panel-selector" role="group" aria-label="Overview panel">

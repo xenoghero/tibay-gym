@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -109,7 +112,7 @@ function CustomerPurchases({ allowPurchases, onRefreshMembership }: { allowPurch
       {allowPurchases && <div id="customer-purchase" className={styles.purchasePanel} tabIndex={-1}><PurchaseForm portal key={previous ?? "new"} previousRequestId={previous} onSubmitted={() => { setPrevious(undefined); void load().catch(e => setError(e.message)); }} />{previous && <button className={styles.textButton} onClick={() => setPrevious(undefined)}>Cancel replacement</button>}</div>}
       <section className={styles.paymentsPanel} aria-labelledby="payments-title"><div className={styles.sectionHeading}><h2 id="payments-title">Payment status</h2><button className={styles.textButton} disabled={refreshing || loading} onClick={() => load().catch(e => setError(e.message))}>{refreshing ? "Refreshing…" : "Refresh payment status"}</button></div>
         {updatedAt && <p className={styles.updated} role="status">Updated at {new Date(updatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>}
-        {loading && <div className={styles.skeleton} role="status">Loading payment status…</div>}
+        {loading && <LoadingSkeleton label="Loading payment status…" />}
         {error && <p className={styles.error} role="alert">{error}</p>}
         {!loading && !error && !payments.length && <div className={styles.empty}><span aria-hidden="true">↗</span><h3>No payment requests yet</h3><p>Your submitted payments and their review status will appear here.</p></div>}
         {browsingOlder ? <><span className={styles.eyebrow}>Earlier requests</span>{payments.map(paymentRow)}<button className={styles.textButton} disabled={refreshing} onClick={() => load().catch(e => setError(e.message))}>Back to latest requests</button></> : latest && <><span className={styles.eyebrow}>Latest request</span>{paymentRow(latest)}{latest.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your membership updates once payment is approved.</p>}{payments.length > 1 && <details className={styles.history}><summary>View payment history <span>{payments.length - 1} earlier on this page</span></summary>{payments.slice(1).map(paymentRow)}</details>}</>}

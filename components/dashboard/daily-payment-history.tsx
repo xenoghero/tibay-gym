@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { PaymentRequest } from "@/lib/finance/contracts";
@@ -28,7 +29,7 @@ export function DailyPaymentHistory({ chargeId, currentPaymentRequestId }: { cha
   }, [user, chargeId, retry]);
   return <section aria-label="Payment history">
     <h3>Payment history</h3>
-    {loading ? <p role="status">Loading payment history…</p> : error ? <p role="alert">{error} <button onClick={() => { setError(""); setLoading(true); setRetry(value => value + 1); }}>Retry history</button></p> : payments.length ? payments.map(payment => <details key={payment.id}>
+    {loading ? <LoadingSkeleton label="Loading payment history…" /> : error ? <p role="alert">{error} <button onClick={() => { setError(""); setLoading(true); setRetry(value => value + 1); }}>Retry history</button></p> : payments.length ? payments.map(payment => <details key={payment.id}>
       <summary>{payment.method === "gcash" ? "GCash" : "Cash"} · {peso(payment.amountMinor)} · {paymentDate(payment.submittedAt)} <PaymentStatus status={payment.status} /></summary>
       <dl className={styles.details}>
         <div><dt>Submitted</dt><dd>{new Date(payment.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</dd></div>

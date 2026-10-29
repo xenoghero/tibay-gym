@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { parsePesoInput } from "@/lib/finance/rules";
@@ -96,7 +99,7 @@ export function ReceiptReview({ receiptId, expectedAmountMinor, onReviewed }: { 
   }
   return <section className={styles.receipt}><h3>Private receipt review</h3>
     <p>Check the receipt against the gym&apos;s received GCash transaction. OCR is a suggestion; saving a review does not approve payment.</p>
-    {!data && !message && <p role="status">Loading receipt…</p>}
+    {!data && !message && <LoadingSkeleton label="Loading receipt…" variant="form" />}
     {scanning && <p role="status">Scanning this receipt for the reference and amount…</p>}
     <ReceiptImage key={`image-${receiptId}`} receiptId={receiptId} />
     {data && <>{!scanning && data.receipt.ocr_status === "failed" && <p role="alert">The receipt could not be read. Scan again or enter the values manually.</p>}{!scanning && data.receipt.ocr_status === "needs_review" && data.receipt.processed_at && <p role="status">Check the detected values. Unclear or conflicting details need manual review.</p>}<p>OCR: {scanning ? "Scanning" : data.receipt.ocr_status === "queued" || !data.receipt.processed_at && data.receipt.ocr_status === "needs_review" ? "Not scanned" : data.receipt.ocr_status} · Confidence: {data.receipt.confidence ?? "unavailable"}% · Expected: PHP {(expectedAmountMinor / 100).toFixed(2)}</p>

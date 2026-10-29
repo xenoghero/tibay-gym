@@ -1,4 +1,7 @@
 "use client";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { Charge } from "@/lib/finance/contracts";
@@ -55,7 +58,7 @@ export function DailyPayments({ refreshKey = 0, search = "", status = "all", met
     <div className={styles.sectionHead}><h2>Daily payments</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
     <p className={styles.note}>One row per daily visit. Confirm cash received or review a submitted payment; open details for payment history.</p>
     {message && <p className={styles.message} role="status">{message}</p>}
-    {loading ? <div className={styles.loading} role="status"><p>Loading daily charges…</p>{[0, 1].map(i => <div className={styles.skeleton} key={i} aria-hidden="true" />)}</div> : !visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching charges" : "No daily charges recorded yet."}</h3><p>{rows.length ? "Try another search or change the filters." : "New daily charges will appear here."}</p></div> :
+    {loading ? <LoadingSkeleton label="Loading daily charges…" count={5} /> : !visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching charges" : "No daily charges recorded yet."}</h3><p>{rows.length ? "Try another search or change the filters." : "New daily charges will appear here."}</p></div> :
       <table className={styles.table}><thead><tr>{["Customer", "Payment", "Visit date", "Status", "Action"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
         <tbody>{visibleRows.map(row => <tr key={row.id}>
           <td><strong>{row.customerName ?? row.personId}</strong><small className={styles.method}>{row.categorySnapshot}</small></td>

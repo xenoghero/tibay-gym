@@ -1,5 +1,6 @@
 "use client";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { GYM_TIME_ZONE } from "@/lib/dates";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -61,9 +62,9 @@ export function RfidCardControls({ personId, personName }: { personId: string; p
     <section style={panel} aria-label="RFID card controls">
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: "var(--font-barlow-condensed)", fontSize: 24 }}>RFID card</h2>
-        <span style={{ color: "var(--rs-muted)", fontSize: 13 }}>{error ? "Scanner status unavailable" : !status ? "Loading scanner…" : `Scanner ${status.scanner.online ? "online" : "offline"}`}</span>
+        <span style={{ color: "var(--rs-muted)", fontSize: 13 }}>{error ? "Scanner status unavailable" : !status ? <span role="status" aria-label="Loading scanner…"><Skeleton width={100} /></span> : `Scanner ${status.scanner.online ? "online" : "offline"}`}</span>
       </div>
-      <p style={{ fontFamily: "var(--font-geist-mono)", overflowWrap: "anywhere" }}>{error ? "Card status unavailable" : !status ? "Loading card…" : status.uid ?? "No card assigned"}</p>
+      <p style={{ fontFamily: "var(--font-geist-mono)", overflowWrap: "anywhere" }}>{error ? "Card status unavailable" : !status ? <span role="status" aria-label="Loading card…"><Skeleton width={160} /></span> : status.uid ?? "No card assigned"}</p>
       <p style={hint}>Cards are optional for members and guests. Enrollment assigns a card and never records a visit.</p>
       {error && <div role="alert"><p>{error}</p><button style={button} onClick={() => void refresh()}>Retry card controls</button></div>}
       {status && !error && <>

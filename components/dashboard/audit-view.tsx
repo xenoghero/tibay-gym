@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuditEvent } from "@/lib/server/audit";
@@ -224,7 +225,7 @@ export function AuditView() {
     {error && <div className={styles.error} role="alert"><span>{error}{loaded && " Previously loaded activity remains below."}</span>
       <button className={styles.textButton} disabled={busy} onClick={() => void load(lastRequest.current.filters, lastRequest.current.cursor)}>Retry</button></div>}
     <section className={styles.results} aria-label="Audit history events" aria-busy={busy}>
-      {busy && !loaded ? <div className={styles.empty} role="status"><span className={styles.loadingMark} aria-hidden="true" />Loading audit history…</div>
+      {busy && !loaded ? <LoadingSkeleton label="Loading audit history…" count={6} />
         : !page.events.length ? <div className={styles.empty}><h3>{error ? "Activity unavailable" : "No events found"}</h3>
           <p>{error ? "Retry to load the audit history." : activeCount ? "Try a wider date range or clear your filters." : "Administrative changes will appear here as they happen."}</p>
           {!error && activeCount > 0 && <button className={styles.button} disabled={busy} onClick={clearFilters}>Clear filters</button>}</div>

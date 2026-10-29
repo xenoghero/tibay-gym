@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { watchPerson, type Person } from "@/lib/db";
@@ -52,7 +53,7 @@ export function ConvertToMemberView({ personId }: ConvertToMemberViewProps) {
   if (load.state === "loading") {
     return (
       <PeopleFormShell title="Convert to member">
-        <p style={mutedText}>Loading…</p>
+        <LoadingSkeleton label="Loading profile…" variant="form" count={4} />
       </PeopleFormShell>
     );
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ReportDateSheet } from "./report-date-sheet";
@@ -86,7 +87,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   if (compact) return <section className="rs-finance rs-finance-compact" aria-label="Today's collections" aria-busy={loading}>
     <div className="rs-finance-heading"><h2>Today’s collections</h2><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
     <div className="rs-ov-collections-scroll" role="region" aria-label="Today's collection details" tabIndex={0}>
-    {loading && <p role="status">{report ? "Updating collections…" : "Loading collections…"}</p>}
+    {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}
     {error && <p role="alert">{error}</p>}
     {!error && report && totals && <>
       <div className="rs-ov-collection-hero"><span>Confirmed collections</span><strong>{money(totals.confirmedMinor)}</strong><small>{totals.confirmedCount} confirmed transactions · Updated {new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</small></div>
@@ -119,7 +120,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
       <div className="rs-collection-refresh"><small>{!error && report ? `Updated ${new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}` : "Philippine time"}</small><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
     </div>
     <ReportDateSheet open={dateSheetOpen} onClose={() => setDateSheetOpen(false)}><div className="rs-finance-filters">{filters}</div></ReportDateSheet>
-    {loading && <p role="status">{report ? "Updating collections…" : "Loading collections…"}</p>}
+    {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}
     {error && <p className="rs-report-error" role="alert">{error}</p>}
     {!error && report && totals && <>
       <p className="rs-collection-range">{report.range.from}{report.range.through !== report.range.from ? ` through ${report.range.through}` : ""} · Philippine dates · Weeks start Monday</p>
@@ -152,6 +153,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
             <div><dt>Customer ID</dt><dd>{row.personId}</dd></div><div><dt>Category</dt><dd>{row.category}</dd></div><div><dt>Payment method</dt><dd>{row.method ?? "—"}</dd></div><div><dt>Purchase / visit</dt><dd>{row.purchaseDate}</dd></div><div><dt>Confirmed (Manila)</dt><dd>{row.confirmedAt === null ? "Not confirmed" : new Date(row.confirmedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</dd></div><div><dt>In selected period</dt><dd>{[row.expectedInPeriod && "Expected", row.confirmedInPeriod && "Confirmed"].filter(Boolean).join(" · ") || "Submission only"}</dd></div>
           </dl></details>)}</div>
         </div>}
+        {pageLoading && <LoadingSkeleton label="Loading records…" />}
         {pageError && <p role="alert">{pageError}</p>}{cursor && <button type="button" disabled={pageLoading} onClick={() => void more()}>{pageLoading ? "Loading records…" : "Load more records"}</button>}
       </div>
     </>}

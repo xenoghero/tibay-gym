@@ -1,5 +1,9 @@
 "use client";
 
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import Link from "next/link";
 import { FinanceStatistics } from "./finance-statistics";
 import { ReportDateSheet } from "./report-date-sheet";
@@ -284,6 +288,7 @@ function daysUntil(expiry: Timestamp | null): number {
 export function StatisticsView() {
   const reportScroller = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"collections" | "attendance" | "renewals">("collections");
+  useContentTransition(reportScroller, tab);
   const [attendanceRefresh, setAttendanceRefresh] = useState(0);
   const [renewalsRefresh, setRenewalsRefresh] = useState(0);
   const [preset, setPreset] = useState<RangePreset | null>("7d");
@@ -621,25 +626,8 @@ export function StatisticsView() {
 
       {!loadError && (loading ? (
         <>
-          <div className="rs-st-tiles" style={tileGridStyle}>
-            {[0, 1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className={`rs-st-skeltile${
-                  n === 0 ? " rs-st-skeltile-hero" : ""
-                }`}
-                style={skeletonTileStyle}
-              >
-                <div style={{ ...skelBar, width: "60%" }} />
-                <div
-                  className="rs-st-skelvalue"
-                  style={{ ...skelBar, height: 34, width: "45%" }}
-                />
-                <div style={{ ...skelBar, width: "80%" }} />
-              </div>
-            ))}
-          </div>
-          <div className="rs-st-skelblock" style={skeletonBlockStyle} />
+          <LoadingSkeleton label="Loading attendance summary…" variant="cards" count={4} />
+          <LoadingSkeleton label="Loading attendance chart…" variant="chart" count={7} />
         </>
       ) : empty ? (
         <>
@@ -937,13 +925,7 @@ export function StatisticsView() {
           </div>
 
           {expiryError ? null : expiryList === null ? (
-            [0, 1, 2].map((n) => (
-              <div key={n} className="rs-st-expskel" style={expirySkeletonRow}>
-                {[0, 1, 2, 3, 4].map((c) => (
-                  <div key={c} style={skelBar} />
-                ))}
-              </div>
-            ))
+            <LoadingSkeleton label="Loading expiring memberships…" />
           ) : expiryRows.length === 0 ? (
             <div className="rs-st-emptysmall" style={emptyStyleSmall}>
               <div style={emptyHeadingStyleSmall}>Nothing due for renewal</div>
@@ -1311,31 +1293,6 @@ const tileSplitSecondary: CSSProperties = {
   color: "var(--rs-muted)",
 };
 
-const skeletonTileStyle: CSSProperties = {
-  boxSizing: "border-box",
-  border: "1px solid var(--rs-line)",
-  borderRadius: 10,
-  padding: 20,
-  height: 136,
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
-
-const skeletonBlockStyle: CSSProperties = {
-  flex: "none",
-  border: "1px solid var(--rs-line)",
-  borderRadius: 10,
-  height: 348,
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
-
-const skelBar: CSSProperties = {
-  height: 10,
-  background: "var(--rs-line)",
-  borderRadius: 3,
-};
 
 const emptyPanelStyle: CSSProperties = {
   border: "1px dashed var(--rs-line)",
@@ -1555,14 +1512,6 @@ const expiryRowStyle: CSSProperties = {
   color: "var(--rs-fg)",
 };
 
-const expirySkeletonRow: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1.4fr 1fr 1fr 1.1fr 0.8fr",
-  gap: 16,
-  padding: "16px 20px",
-  borderTop: "1px solid var(--rs-line)",
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
 
 const emptyStyleSmall: CSSProperties = {
   padding: "48px 24px",

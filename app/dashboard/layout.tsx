@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useContentTransition } from "@/lib/use-content-transition";
 import { usePathname } from "next/navigation";
 import { RequireAuth } from "@/lib/auth/require-auth";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
@@ -23,12 +24,7 @@ import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const content = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    // Animate the existing content node without remounting pages or form state.
-    const animation = content.current?.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
-    return () => animation?.cancel();
-  }, [pathname]);
+  useContentTransition(content, pathname);
   return (
     <RequireAuth>
       <div

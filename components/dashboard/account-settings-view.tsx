@@ -1,5 +1,7 @@
 "use client";
 
+import { useContentTransition } from "@/lib/use-content-transition";
+
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -91,6 +93,8 @@ function IconGo() {
 export function AccountSettingsView() {
   const { user, signOut } = useAuth();
   const section = useSyncExternalStore(subscribeSection, currentSection, () => "pricing");
+  const tabContent = useRef<HTMLDivElement>(null);
+  useContentTransition(tabContent, section);
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -206,7 +210,7 @@ export function AccountSettingsView() {
       <nav className={settingsStyles.navigation} aria-label="Settings sections">
         {[["pricing", "Pricing"], ["vouchers", "Vouchers"], ["account", "Account & security"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
       </nav>
-      <div className={settingsStyles.content}>
+      <div ref={tabContent} className={settingsStyles.content}>
       <div hidden={section !== "pricing"}><FinanceSettings /></div>
       <div hidden={section !== "vouchers"}><VoucherSettings /></div>
       <div hidden={section !== "account"} className={settingsStyles.account}>
