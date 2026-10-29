@@ -17,6 +17,21 @@ beforeEach(() => {
   store().set("smsContacts/p1", { phone: "+639171234567", permission: true, optedOut: false, revision: 1 });
 });
 async function enable() { return saveSmsSettings("admin", { ...DEFAULT_SMS_SETTINGS, enabled: true, policyConfirmed: true, operationId: "settings-operation-001" }); }
+it("queues gateway-compatible IDs and preserves them for delivery reconciliation", async () => {
+  state.send.mockImplementation(async message => message.providerMessageId.length <= 36
+    ? { outcome: "accepted", code: 202, state: "Pending" }
+    : { outcome: "rejected", code: 400, state: null });
+  await enable();
+  const { id } = await queueSmsTest("admin", body);
+  await runSmsWorker();
+  expect(store().get(`smsMessages/${id}`)?.status).toBe("accepted");
+  const providerId = state.send.mock.calls[0][0].providerMessageId;
+  store().get(`smsMessages/${id}`)!.scheduledAt = 0;
+  await runSmsWorker();
+  expect(state.lookup.mock.calls[0][0].providerMessageId).toBe(providerId);
+  expect(store().get(`smsMessages/${id}`)?.status).toBe("delivered");
+  expect(state.send).toHaveBeenCalledTimes(1);
+});
 it("defaults disabled and does not send unconfigured or disabled messages", async () => {
   expect((await getSmsSettings()).enabled).toBe(false); await queueSmsTest("admin", body);
   expect(await runSmsWorker()).toEqual({ disabled: true, processed: 0 }); expect(state.send).not.toHaveBeenCalled();

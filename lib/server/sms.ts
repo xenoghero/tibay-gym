@@ -56,8 +56,10 @@ export async function saveSmsContact(actorId: string, body: Record<string, unkno
   });
 }
 export function newSmsMessage(id: string, personId: string, destination: string, text: string, purpose: SmsMessage["purpose"], now = Date.now()): SmsMessage {
+  // Gateway IDs allow at most 36 characters; retain a stable 144-bit hash prefix.
+  // Persist this once so status lookups never change IDs for existing submissions.
   return { id, personId, destination, text, purpose, campaignId: null, status: "queued", scheduledAt: now, createdAt: now,
-    attempts: 0, leaseUntil: 0, providerMessageId: id, providerState: null, errorCode: null, expirySnapshot: null,
+    attempts: 0, leaseUntil: 0, providerMessageId: id.slice(0, 36), providerState: null, errorCode: null, expirySnapshot: null,
     reminderOffset: null, lastVisitSnapshot: null, completedAt: null };
 }
 export async function queueSmsTest(actorId: string, body: Record<string, unknown>) {
