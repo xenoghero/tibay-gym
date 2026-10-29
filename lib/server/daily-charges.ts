@@ -1,4 +1,8 @@
 import "server-only";
+import { preparePaymentAccount } from "./payment-methods";
+import { isPaymentMethod } from "@/lib/finance/payment-methods";
+
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import type { Charge, GymSettings, PaymentRequest } from "@/lib/finance/contracts";
@@ -17,7 +21,7 @@ export function dailyChargeId(personId: string, at: number) {
 /** Reads only; call commit after all attendance transaction reads have finished. */
 export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: {
   personId: string; category: unknown; at: number; logId: string; source: "qr" | "rfid";
-  paymentMethod?: "cash" | "gcash"; eventId: string; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string;
+  paymentMethod?: PaymentMethod; paymentRevision?: number; eventId: string; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string;
   voucherCode?: unknown; voucherRevision?: unknown; voucherRateRevision?: unknown;
 }) {
   const settings = (await tx.get(db.doc("gymSettings/finance"))).data() as GymSettings | undefined;
@@ -25,7 +29,7 @@ export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: 
   const id = dailyChargeId(input.personId, input.at), ref = db.doc(`charges/${id}`);
   const existing = (await tx.get(ref)).data();
   if (existing) {
-    if (input.paymentMethod === "gcash") {
+    if (input.paymentMethod && input.paymentMethod !== "cash") {
       const proof = await readyReceipt(tx, db, { ...input, chargeId: id, amountMinor: existing.amountMinor });
       if (existing.activePaymentRequestId !== proof.paymentRequestId) throw new ApiError(409, "daily-payment-already-submitted");
     }
@@ -34,19 +38,20 @@ export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: 
   let price;
   try { price = snapshotRate(settings, input.category, "daily_session"); }
   catch { throw new ApiError(409, "category-required"); }
-  if (input.source === "qr" && input.paymentMethod !== "cash" && input.paymentMethod !== "gcash") throw new ApiError(409, "daily-payment-required");
+  if (input.source === "qr" && !isPaymentMethod(input.paymentMethod)) throw new ApiError(409, "daily-payment-required");
   const voucher = input.source === "qr" && input.voucherCode ? await prepareVoucher(tx, db, { code: input.voucherCode, personId: input.personId,
     kind: "daily_session", category: price.categorySnapshot, baseAmountMinor: price.amountMinor, at: input.at }) : null;
   if (voucher && (voucher.voucherSnapshot?.revision !== input.voucherRevision || price.rateRevision !== input.voucherRateRevision)) throw new ApiError(409, "voucher-changed");
   if (voucher) price = { ...price, baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot };
   if (input.source === "qr" && input.expectedAmountMinor !== price.amountMinor) throw new ApiError(409, "daily-price-changed");
-  const proof = input.paymentMethod === "gcash" ? await readyReceipt(tx, db, { ...input, chargeId: id, amountMinor: price.amountMinor }) : null;
+  const paymentAccountSnapshot = input.paymentMethod ? await preparePaymentAccount(tx, db, input.paymentMethod, input.paymentRevision) : null;
+  const proof = input.paymentMethod && input.paymentMethod !== "cash" ? await readyReceipt(tx, db, { ...input, chargeId: id, amountMinor: price.amountMinor }) : null;
   const number = await prepareTransactionNumber(tx, db);
   const charge: Charge = { id, ...price, personId: input.personId, kind: "daily_session", chargeDate: philippineDate(input.at),
     tibayTransactionNumber: number.number, createdAt: input.at, recognizedPurchaseAt: null, requestedCoverage: null, approvedCoverage: null,
     dailyVisitDate: philippineDate(input.at), attendanceLogId: input.logId, uniqueDailyKey: dailyChargeKey(input.personId, input.at), operationId: input.eventId };
   const requestId = proof?.paymentRequestId ?? `${id}-cash`;
-  const payment: PaymentRequest = { id: requestId, chargeId: id, personId: input.personId, method: input.paymentMethod ?? "cash", status: "pending", amountMinor: price.amountMinor,
+  const payment: PaymentRequest = { id: requestId, chargeId: id, personId: input.personId, method: input.paymentMethod ?? "cash", paymentAccountSnapshot, status: "pending", amountMinor: price.amountMinor,
     receiptId: proof?.receiptId ?? null, submittedAt: input.at, previousRequestId: null, reviewedBy: null, reviewedAt: null, rejectionReason: null,
     confirmedAt: null, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: input.eventId };
   return () => {

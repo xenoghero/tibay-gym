@@ -1,4 +1,6 @@
 import "server-only";
+import { preparePaymentAccount } from "./payment-methods";
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash, createHmac } from "node:crypto";
 import { adminDb } from "./firebase-admin";
 import { supabaseAdmin } from "./supabase";
@@ -27,7 +29,9 @@ export async function receiptsAvailable() {
   catch { return false; }
 }
 export async function uploadDailyReceipt(input: { personId: string; category: unknown; operationId: unknown; expectedAmountMinor: number; bytes: Buffer; registration?: boolean;
-  kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string }) {
+  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string }) {
+  const paymentMethod = input.paymentMethod ?? "gcash";
+  if (paymentMethod === "cash") throw new ApiError(400, "invalid-payment-method");
   let operation: string;
   try { operation = operationId(input.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
   if (!await receiptsAvailable()) throw new ApiError(503, "receipt-storage-not-ready");
@@ -74,11 +78,12 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
     const official = (await tx.get(db.doc(`persons/${input.personId}`))).data();
     const pending = (await tx.get(db.doc(`unverifiedPersons/${input.personId}`))).data();
     const deleted = (await tx.get(db.doc(`deletedPersonIds/${input.personId}`))).data();
+    await preparePaymentAccount(tx, db, paymentMethod, input.paymentRevision);
     if (deleted) throw new ApiError(409, "registration-reuse");
     if ((official ?? pending)?.deletingAt || (!input.registration && !official && !pending)) throw new ApiError(409, "person-unavailable");
-    if (previous && (previous.digest !== digest || previous.chargeId !== chargeId || previous.personId !== input.personId || previous.amountMinor !== price.amountMinor)) throw new ApiError(409, "receipt-operation-conflict");
+    if (previous && (previous.digest !== digest || previous.chargeId !== chargeId || previous.personId !== input.personId || previous.amountMinor !== price.amountMinor || (previous.paymentMethod ?? "gcash") !== paymentMethod)) throw new ApiError(409, "receipt-operation-conflict");
     if (previous?.linked) return;
-    tx.set(ref, { personId: input.personId, chargeId, paymentRequestId, amountMinor: price.amountMinor, chargeDate: philippineDate(now),
+    tx.set(ref, { paymentRevision: input.paymentRevision ?? 0, paymentMethod, personId: input.personId, chargeId, paymentRequestId, amountMinor: price.amountMinor, chargeDate: philippineDate(now),
       digest, path, tokenHash: createHash("sha256").update(token).digest("hex"), state: "ready", linked: false, reconciled: false,
       createdAt: previous?.createdAt ?? now, expiresAt: now + 86400000 });
   });

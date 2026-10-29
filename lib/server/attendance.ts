@@ -1,4 +1,5 @@
 import "server-only";
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "./firebase-admin";
 import { effectiveMemberStatusAt } from "@/lib/member-status";
@@ -17,7 +18,7 @@ export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
 export const STALE_SESSION_MS = 4 * 60 * 60 * 1_000;
 type ScanRequest = { eventId: string; requestedAt: number } & (
-  { source: "qr"; personId: string; guest?: { phone: string; name: string; address: string } & Partial<RegistrationFields>; intent?: "checkout"; expectedLogId?: string; paymentMethod?: "cash" | "gcash"; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number } |
+  { source: "qr"; personId: string; guest?: { phone: string; name: string; address: string } & Partial<RegistrationFields>; intent?: "checkout"; expectedLogId?: string; paymentMethod?: PaymentMethod; paymentRevision?: number; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number } |
   { source: "rfid"; uid: string; request: Request }
 );
 interface PersonData {
@@ -46,7 +47,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     eventId: input.eventId, requestedAt: input.requestedAt };
   const digest = fingerprint(["attendance-v1", identity.origin, input.source, target, input.requestedAt,
     ...(input.source === "qr" && input.guest ? [input.guest] : []),
-    ...(input.source === "qr" && input.paymentMethod ? [input.paymentMethod] : []),
+    ...(input.source === "qr" && input.paymentMethod ? [input.paymentMethod, ...(input.paymentRevision !== undefined ? [input.paymentRevision] : [])] : []),
     ...(input.source === "qr" && input.expectedAmountMinor !== undefined ? [input.expectedAmountMinor] : []),
     ...(input.source === "qr" && input.voucherCode ? [input.voucherCode, input.voucherRevision, input.voucherRateRevision] : []),
     ...(input.source === "qr" && input.receiptId ? [input.receiptId, input.receiptToken] : []),
@@ -158,6 +159,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
       ? await prepareDailyCharge(tx, db, { personId: personId!, category: guest?.rateCategory ?? storedPerson?.rateCategory,
         at: now, logId: newLog.id, source: input.source, eventId: input.eventId,
         paymentMethod: input.source === "qr" ? input.paymentMethod : undefined,
+        paymentRevision: input.source === "qr" ? input.paymentRevision : undefined,
         expectedAmountMinor: input.source === "qr" ? input.expectedAmountMinor : undefined,
         voucherCode: input.source === "qr" ? input.voucherCode : undefined, voucherRevision: input.source === "qr" ? input.voucherRevision : undefined,
         voucherRateRevision: input.source === "qr" ? input.voucherRateRevision : undefined,

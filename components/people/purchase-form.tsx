@@ -1,5 +1,10 @@
 "use client";
 
+import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
+import type { PaymentAccount } from "@/lib/finance/payment-methods";
+
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
@@ -8,10 +13,10 @@ import { useAuth } from "@/lib/auth/auth-context";
 import type { PurchaseQuote } from "@/lib/server/purchases";
 import styles from "./purchase-form.module.css";
 import { VoucherEntry, PriceBreakdown, voucherError } from "./voucher-entry";
-type Quote = PurchaseQuote & { gcashAvailable?: boolean };
+type Quote = PurchaseQuote & { paymentRevision?: number; paymentAccounts?: PaymentAccount[]; gcashAvailable?: boolean };
 export function PurchaseForm({ admin = false, portal = false, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
   const { user } = useAuth();
-  const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<"cash" | "gcash">("cash");
+  const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<PaymentMethod>("cash");
   const [file, setFile] = useState<File | null>(null), [fileKey, setFileKey] = useState("");
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -53,13 +58,14 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     if (!quote || busy || refreshing) return;
     setBusy(true); setMessage("");
     try {
-      const body = { method, quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
+      if (method !== "cash" && quote.paymentAccounts && !quote.paymentAccounts.some(account => account.id === method)) throw new Error("This payment account is no longer available. Select another method.");
+      const body = { method, ...(method !== "cash" ? { paymentRevision: quote.paymentRevision } : {}), quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
       const key = JSON.stringify([body, fileKey]);
       if (attempt.current?.key !== key) attempt.current = { key, id: crypto.randomUUID() };
       const current = attempt.current;
-      if (method === "gcash" && !current.proof) {
+      if (method !== "cash" && !current.proof) {
         if (!file || file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Choose a JPG, PNG or WebP receipt up to 5 MB.");
-        const uploaded = await fetch("/api/receipts/upload", { method: "POST", headers: { "Content-Type": file.type, "x-operation-id": current.id,
+        const uploaded = await fetch("/api/receipts/upload", { method: "POST", headers: { "Content-Type": file.type, "x-payment-revision": String(quote.paymentRevision ?? 0), "x-payment-method": method, "x-operation-id": current.id,
           "x-expected-amount": String(quote.amountMinor), "x-charge-kind": quote.kind, ...(!previousRequestId && quote.voucherSnapshot ? { "x-voucher-code": quote.voucherSnapshot.code } : {}), ...(previousRequestId ? { "x-previous-request-id": previousRequestId } : {}) }, body: file });
         if (!uploaded.ok) throw new Error("Receipt upload did not complete. Retry the same image or choose cash. No membership was activated.");
         current.proof = await uploaded.json();
@@ -81,9 +87,10 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
       {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
-      <label htmlFor="customer-payment-method">Payment method</label><select id="customer-payment-method" value={method} disabled={busy || refreshing} onChange={e => setMethod(e.target.value as "cash" | "gcash")}><option value="cash">Cash — confirm with the gym</option><option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option></select>
+      <label htmlFor="customer-payment-method">Payment method</label><select id="customer-payment-method" value={method} disabled={busy || refreshing} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }}><option value="cash">Cash — confirm with the gym</option>{quote.paymentAccounts ? quote.paymentAccounts.map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</select>
       {method === "cash" && <p className={styles.hint}>Pay at the gym. Your request stays pending until staff confirm receipt.</p>}
-      {method === "gcash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">GCash receipt</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s confirmed GCash account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
+      {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
+      {method !== "cash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">{method === "gcash" ? "GCash receipt" : "Payment receipt"}</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s selected payment account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
       <button className={styles.submit} disabled={busy || refreshing} type="submit">{busy ? "Submitting request…" : previousRequestId ? "Submit corrected payment" : "Submit payment request"}<span aria-hidden="true">→</span></button><p className={styles.approvalNote}>Reviewed by the gym before membership activation.</p>
     </form>}
     {message && <p className={styles.message} role="status">{message}</p>}
@@ -95,10 +102,11 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
       {quote.coverage && <p>Preview: {quote.coverage.startDate} to {quote.coverage.expiryDate}. Final dates are calculated at approval; active memberships extend from the current expiry.</p>}
-      <label>Payment method<select aria-label="Purchase payment method" value={method} disabled={busy} onChange={e => setMethod(e.target.value as "cash" | "gcash")} style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }}>
-        <option value="cash">Cash — pending confirmation</option>{!admin && <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — receipt setup pending" : ""}</option>}
+      <label>Payment method<select aria-label="Purchase payment method" value={method} disabled={busy} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }}>
+        <option value="cash">Cash — pending confirmation</option>{!admin && <>{quote.paymentAccounts ? quote.paymentAccounts.map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</>}
       </select></label>
-      {method === "gcash" && <label>GCash receipt<input aria-label="Purchase receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p>Submit evidence only for money already sent to the gym&apos;s confirmed GCash account.</p><p>{RECEIPT_RETENTION_NOTICE}</p></label>}
+      {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
+      {method !== "cash" && <label>{method === "gcash" ? "GCash receipt" : "Payment receipt"}<input aria-label="Purchase receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p>Submit evidence only for money already sent to the gym&apos;s selected payment account.</p><p>{RECEIPT_RETENTION_NOTICE}</p></label>}
       <button disabled={busy || refreshing} onClick={() => void submit()}>{busy ? "Submitting…" : "Submit payment request for review"}</button>
     </>}
     <button type="button" disabled={busy} onClick={() => refresh().catch(e => setMessage(e.message))}>Refresh purchase quote</button>

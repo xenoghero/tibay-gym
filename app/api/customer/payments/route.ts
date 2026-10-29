@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       const data = doc.data();
       const charge = data.chargeId ? (await db.doc(`charges/${data.chargeId}`).get()).data() : undefined;
       return { id: doc.id, status: data.status, amountMinor: data.amountMinor, method: data.method,
-        submittedAt: data.submittedAt, rejectionReason: data.rejectionReason ?? null,
+        ...(data.paymentAccountSnapshot ? { paymentAccountSnapshot: data.paymentAccountSnapshot } : {}), submittedAt: data.submittedAt, rejectionReason: data.rejectionReason ?? null,
         ...(charge?.abandonedAt ? { closed: true } : {}),
         ...(charge?.voucherSnapshot ? { voucherCode: charge.voucherSnapshot.code, discountAmountMinor: charge.discountAmountMinor, baseAmountMinor: charge.baseAmountMinor } : {}) };
     })), nextCursor: rows.size > 20 ? page.at(-1)!.id : null });

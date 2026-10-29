@@ -1,3 +1,4 @@
+import { customerPaymentOptions } from "@/lib/server/payment-methods";
 import { adminDb } from "@/lib/server/firebase-admin";
 import { attendanceIntent, attendancePhone, onlyFields } from "@/lib/server/attendance-request";
 import { ApiError, handleApi, json, readBody } from "@/lib/server/rfid/http";
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
     const settings = (await db.doc("gymSettings/finance").get()).data() as GymSettings | undefined;
     const enabled = settings?.financialCutoverAt && settings.financialCutoverAt <= Date.now();
     const gcashAvailable = enabled ? await receiptsAvailable() : false;
-    const pricing = enabled ? { dailyRates: { studentDailyMinor: settings.studentDailyMinor, regularDailyMinor: settings.regularDailyMinor, gcashAvailable } } : {};
+    const options = enabled ? await customerPaymentOptions() : { paymentAccounts: [], paymentRevision: 0 };
+    const pricing = enabled ? { dailyRates: { studentDailyMinor: settings.studentDailyMinor, regularDailyMinor: settings.regularDailyMinor, ...options, gcashAvailable } } : {};
     if (snapshot.empty) return json({ person: null, ...pricing });
     const doc = snapshot.docs[0];
     const person = doc.data();
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
       if (!charge && (!open || open.checkOutAt !== null || Date.now() - open.checkInAt.toMillis() >= STALE_SESSION_MS)) {
         let amountMinor: number | null = null;
         try { amountMinor = snapshotRate(settings, person.rateCategory, "daily_session").amountMinor; } catch { /* Unclassified: admin action is required. */ }
-        return json({ person: result, ...pricing, paymentDue: { amountMinor, expiredMember: person.type === "member", gcashAvailable } });
+        return json({ person: result, ...pricing, paymentDue: { amountMinor, expiredMember: person.type === "member", ...options, gcashAvailable } });
       }
     }
     return json({ person: result, ...pricing });

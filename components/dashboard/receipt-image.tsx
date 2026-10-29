@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import styles from "./payment-review.module.css";
 
-export function ReceiptImage({ receiptId }: { receiptId: string }) {
+export function ReceiptImage({ receiptId, alt = "Private GCash receipt" }: { receiptId: string; alt?: string }) {
   const { user } = useAuth();
   const [image, setImage] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -29,7 +29,7 @@ export function ReceiptImage({ receiptId }: { receiptId: string }) {
   }, [user, receiptId, attempt]);
 
   return <div className={styles.receiptImageFrame} role="group" aria-label="Receipt image" aria-busy={status === "loading"}>
-    {image && status !== "error" && <Image key={image} src={image} alt="Private GCash receipt" width={500} height={650} unoptimized loading="eager"
+    {image && status !== "error" && <Image key={image} src={image} alt={alt} width={500} height={650} unoptimized loading="eager"
       className={styles.receiptImage} data-ready={status === "ready"} aria-hidden={status !== "ready"}
       onLoad={() => setStatus("ready")} onError={() => setStatus("error")} />}
     {status !== "ready" && <div className={styles.receiptImagePlaceholder}>

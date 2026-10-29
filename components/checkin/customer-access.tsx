@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentLabel } from "@/lib/finance/payment-methods";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { useEffect, useState, type FormEvent } from "react";
@@ -75,7 +77,7 @@ export function CustomerAccess() {
 const titleCase = (value: string) => value.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
 const formatDate = (value: number) => new Date(value).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
-interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
+interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; paymentAccountSnapshot?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
 function CustomerPurchases({ allowPurchases, onRefreshMembership }: { allowPurchases: boolean; onRefreshMembership(): Promise<void> }) {
   const [payments, setPayments] = useState<CustomerPayment[]>([]), [cursor, setCursor] = useState<string | null>(null), [error, setError] = useState("");
   const [previous, setPrevious] = useState<string | undefined>();
@@ -104,7 +106,7 @@ function CustomerPurchases({ allowPurchases, onRefreshMembership }: { allowPurch
     document.getElementById("customer-purchase")?.focus({ preventScroll: true });
   }
   function paymentRow(payment: CustomerPayment) {
-    return <article className={styles.paymentRow} key={payment.id}><div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong><span className={styles.badge} data-status={payment.status}>{payment.closed ? "closed" : payment.status}</span></div><p>{payment.method === "gcash" ? "GCash" : titleCase(payment.method)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>{payment.voucherCode && <p>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}{payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}{allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}</article>;
+    return <article className={styles.paymentRow} key={payment.id}><div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong><span className={styles.badge} data-status={payment.status}>{payment.closed ? "closed" : payment.status}</span></div><p>{paymentLabel(payment)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>{payment.voucherCode && <p>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}{payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}{allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}</article>;
   }
   return <>
     {!browsingOlder && !latest?.closed && latest?.status === "rejected" && <div className={styles.notice} data-tone="rejected"><div><strong>Your latest payment needs attention</strong><p>{latest.rejectionReason ? `Reason: ${latest.rejectionReason}` : "The gym rejected this submission. Review the details before sending a replacement."}</p></div>{allowPurchases && <button className={styles.secondaryButton} onClick={() => replace(latest.id)}>Correct submission →</button>}</div>}

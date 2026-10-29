@@ -1,0 +1,10 @@
+.details { display: flex; flex-wrap: wrap; align-items: start; gap: 20px; border: 1px solid var(--rs-line, #e7e2d2); background: var(--rs-panel, #faf8f0); padding: 20px; border-radius: 8px; margin-block: 16px; color: var(--rs-fg, #0d0d0d); }
+.details > div { flex: 1 1 180px; min-width: 0; }
+.details h3 { margin: 0 0 16px; font-size: 18px; }
+.details dl { margin: 0; display: grid; gap: 12px; }
+.details dt, .details p { font-size: 13px; color: var(--rs-muted, #6f6f6d); line-height: 1.6; }
+.details dd { margin: 4px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.details figure { margin: 0; display: grid; gap: 8px; justify-items: center; max-width: 100%; }
+.details img { display: block; width: 240px; max-width: 100%; height: auto; background: white; border-radius: 4px; }
+.details a { color: inherit; padding: 10px; font-size: 13px; text-underline-offset: 3px; }
+.details a:focus-visible { outline: 2px solid var(--rs-accent-text, #806000); outline-offset: 3px; }

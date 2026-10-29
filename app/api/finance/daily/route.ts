@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       const payment = paymentDoc?.data();
       const review = payment?.receiptId ? (await db.doc(`receiptReviews/${payment.receiptId}`).get()).data() : null;
       const person = personDoc.data() ?? (await db.doc(`unverifiedPersons/${charge.personId}`).get()).data();
-      return { ...charge, id: doc.id, customerName: person?.name ?? "Deleted customer", receiptId: payment?.receiptId ?? null, paymentMethod: payment?.method ?? null, paymentStatus: payment?.status ?? null,
+      return { ...charge, id: doc.id, customerName: person?.name ?? "Deleted customer", receiptId: payment?.receiptId ?? null, paymentMethod: payment?.method ?? null, paymentAccountSnapshot: payment?.paymentAccountSnapshot ?? null, paymentStatus: payment?.status ?? null,
         gcashReference: review?.confirmedReference ?? review?.extractedReference ?? payment?.gcashReferenceSnapshot ?? null };
     }));
     return json({ charges, nextCursor: rows.size > 50 ? page.at(-1)!.id : null });

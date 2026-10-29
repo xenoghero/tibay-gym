@@ -64,7 +64,7 @@ export function collectionTotals(charges: Charge[], requests: PaymentRequest[], 
   const between = (date: string) => date >= from && date <= through;
   const byId = new Map(charges.map(charge => [charge.id, charge]));
   const totals = { expectedMinor: 0, dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0,
-    pendingDailyMinor: 0, pendingRenewalMinor: 0, confirmedMinor: 0, confirmedCount: 0, cashMinor: 0, gcashMinor: 0 };
+    pendingDailyMinor: 0, pendingRenewalMinor: 0, confirmedMinor: 0, confirmedCount: 0, cashMinor: 0, gcashMinor: 0, otherElectronicMinor: 0 };
   for (const charge of charges) {
     const recognized = charge.kind === "daily_session" ? charge.chargeDate : charge.recognizedPurchaseAt === null ? null : philippineDate(charge.recognizedPurchaseAt);
     if (recognized && between(recognized)) {
@@ -84,7 +84,7 @@ export function collectionTotals(charges: Charge[], requests: PaymentRequest[], 
     if (request.status === "approved" && request.confirmedAt !== null && between(philippineDate(request.confirmedAt)) && !confirmedCharges.has(charge.id)) {
       confirmedCharges.add(charge.id);
       totals.confirmedMinor += request.amountMinor; totals.confirmedCount += 1;
-      totals[request.method === "cash" ? "cashMinor" : "gcashMinor"] += request.amountMinor;
+      totals[request.method === "cash" ? "cashMinor" : request.method === "gcash" || request.paymentAccountSnapshot?.kind === "gcash" ? "gcashMinor" : "otherElectronicMinor"] += request.amountMinor;
     }
   }
   return totals;

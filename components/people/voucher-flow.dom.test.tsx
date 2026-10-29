@@ -16,6 +16,23 @@ beforeEach(() => { posts.length = 0;
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it("uploads a bank renewal receipt with the selected account and settings revision", async () => {
+  const account = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
+  let uploadHeaders: Headers | null = null;
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/receipts/upload") { uploadHeaders = new Headers(init?.headers); return Response.json({ receiptId: "receipt-bank", receiptToken: "proof-bank" }); }
+    if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return Response.json({ id: "purchase-bank" }); }
+    return Response.json({ ...plain, paymentRevision: 3, paymentAccounts: [account] });
+  }));
+  await act(async () => { render(<PurchaseForm portal />); });
+  fireEvent.change(screen.getByLabelText("Payment method"), { target: { value: account.id } });
+  expect(screen.getByText(account.accountNumber)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Payment receipt"), { target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] } });
+  await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
+  expect(uploadHeaders!.get("x-payment-method")).toBe(account.id);
+  expect(uploadHeaders!.get("x-payment-revision")).toBe("3");
+  expect(posts[0]).toMatchObject({ method: account.id, paymentRevision: 3, receiptId: "receipt-bank", receiptToken: "proof-bank" });
+});
 async function apply(code: string) {
   const summary = screen.getByText(/Have a voucher|Use a different voucher/).closest("details")!;
   if (!summary.open) fireEvent.click(summary.querySelector("summary")!);

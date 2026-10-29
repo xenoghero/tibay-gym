@@ -124,3 +124,5 @@
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer[data-closing=true], .drawer::backdrop, .drawer[data-closing=true]::backdrop { animation-duration: 1ms; }
 }
+
+.qrPreview { display: block; width: 240px; max-width: 100%; height: auto; margin-bottom: 12px; background: white; }

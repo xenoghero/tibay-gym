@@ -1,3 +1,4 @@
+import { customerPaymentOptions } from "@/lib/server/payment-methods";
 import { requireCustomer } from "@/lib/server/customer-session";
 import { getPurchaseQuote, submitPurchase } from "@/lib/server/purchases";
 import { handleApi, json, readBody, ApiError } from "@/lib/server/rfid/http";
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
     if (!official) throw new ApiError(409, "verified-profile-required");
     const params = new URL(request.url).searchParams;
     if (params.get("voucherCode")) publicRateLimiter.consume(publicCaller(request), "lookup");
-    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined), gcashAvailable: await receiptsAvailable() });
+    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined), gcashAvailable: await receiptsAvailable(), ...await customerPaymentOptions() });
   });
 }
 export async function POST(request: Request) {

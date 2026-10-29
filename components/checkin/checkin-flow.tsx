@@ -1,5 +1,10 @@
 "use client";
 
+import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
+import type { PaymentAccount } from "@/lib/finance/payment-methods";
+
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
+
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { EntryShell } from "./entry-shell";
 import styles from "./entry.module.css";
@@ -28,7 +33,8 @@ const C = {
 const displayFont = "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
 const bodyFont = "var(--font-geist-sans), system-ui, sans-serif";
 interface Receipt {
-  paymentMethod?: "cash" | "gcash";
+  paymentMethod?: PaymentMethod;
+  paymentName?: string;
   paymentAmount?: number | null;
   unverified?: boolean;
   name: string;
@@ -52,7 +58,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [address, setAddress] = useState("");
   const [category, setCategory] = useState(""), [source, setSource] = useState(""), [other, setOther] = useState("");
   const [registrationError, setRegistrationError] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"" | "cash" | "gcash">("");
+  const [paymentMethod, setPaymentMethod] = useState<"" | PaymentMethod>("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null), [receiptKey, setReceiptKey] = useState("");
   const [voucher, setVoucher] = useState<(DiscountQuote & { rateRevision: number }) | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
@@ -129,7 +135,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     if (voucherBusy) return;
     if (state.pending) { void attempt.retry(); return; }
     if (state.stage === "payment") {
-      if (paymentMethod) void attempt.submitDailyPayment(paymentMethod, paymentMethod === "gcash" && receiptFile ? dailyReceiptUpload(receiptFile, state.phone, receiptKey) : undefined,
+      if (paymentMethod) void attempt.submitDailyPayment(paymentMethod, paymentMethod && paymentMethod !== "cash" && receiptFile ? dailyReceiptUpload(receiptFile, state.phone, receiptKey) : undefined,
         voucher?.voucherSnapshot ? { voucherCode: voucher.voucherSnapshot.code, voucherRevision: voucher.voucherSnapshot.revision, voucherRateRevision: voucher.rateRevision, amountMinor: voucher.amountMinor } : undefined);
       return;
     }
@@ -158,7 +164,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     name: state.displayName, type: person?.type ?? "guest",
     status: person ? effectiveMemberStatusAt({ ...person, membershipExpiry }, state.confirmedAt!) : null,
     membershipExpiry, visitCount: state.result.visitCount, unverified: state.result.unverified,
-    paymentMethod: paymentMethod || undefined, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
+    paymentMethod: paymentMethod || undefined, paymentName: state.paymentDue?.paymentAccounts?.find(account => account.id === paymentMethod)?.name, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
   } : null;
 
   return (
@@ -175,7 +181,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
                 <><PriceBreakdown quote={voucher ?? { amountMinor: state.paymentDue?.amountMinor ?? 0 }} /><p>Payment remains pending until the administrator confirms it.</p></>}
               </div>
               {state.paymentDue?.amountMinor != null && <VoucherEntry quote={voucher} disabled={locked || voucherBusy} onApply={applyVoucher} />}
-              <PaymentChoice value={paymentMethod} onChange={method => { setPaymentMethod(method); setReceiptFile(null); setReceiptKey(""); }} disabled={locked} gcashAvailable={state.paymentDue?.gcashAvailable ?? false} />
+              <PaymentChoice value={paymentMethod} onChange={method => { setPaymentMethod(method); setReceiptFile(null); setReceiptKey(""); }} disabled={locked} accounts={state.paymentDue?.paymentAccounts} gcashAvailable={state.paymentDue?.gcashAvailable ?? false} />
             </> : !registering ? (
               <>
                 <label htmlFor="phone" style={labelStyle}>Phone number</label>
@@ -206,8 +212,9 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
                 {registrationError && <p role="alert">{registrationError}</p>}
               </>
             )}
-            {state.stage === "payment" && paymentMethod === "gcash" && <>
-              <ImageUpload label="GCash receipt" required disabled={locked} file={receiptFile} onChange={file => { setReceiptFile(file); setReceiptKey(crypto.randomUUID()); }} />
+            {state.stage === "payment" && paymentMethod && paymentMethod !== "cash" && <>
+              <PaymentAccountDetails account={state.paymentDue?.paymentAccounts?.find(account => account.id === paymentMethod)} />
+              <ImageUpload label={paymentMethod === "gcash" ? "GCash receipt" : "Payment receipt"} required disabled={locked} file={receiptFile} onChange={file => { setReceiptFile(file); setReceiptKey(crypto.randomUUID()); }} />
               <p className={styles.actionNote}>Upload your receipt to continue. Payment will await admin review.</p>
               <details className={styles.disclosure}><summary>Receipt privacy & retention</summary><p>{RECEIPT_RETENTION_NOTICE}</p></details>
             </>}
@@ -249,13 +256,13 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   );
 }
 
-function PaymentChoice({ value, onChange, disabled, gcashAvailable }: { value: "" | "cash" | "gcash"; onChange(value: "cash" | "gcash"): void; disabled: boolean; gcashAvailable: boolean }) {
+function PaymentChoice({ value, onChange, disabled, gcashAvailable, accounts }: { value: "" | PaymentMethod; onChange(value: PaymentMethod): void; disabled: boolean; gcashAvailable: boolean; accounts?: PaymentAccount[] }) {
+  const choices: { id: PaymentMethod; name: string }[] = [{ id: "cash", name: "Cash" }, ...(accounts ?? [{ id: "gcash" as const, name: "GCash" }])];
   return <fieldset className={styles.choices} disabled={disabled}>
-    <legend>Daily payment method</legend>
-    <div className={styles.choiceGrid}>
-      {(["cash", "gcash"] as const).map(method => <label className={styles.choice} key={method}>
-        <input type="radio" name="daily-payment" required value={method} checked={value === method} disabled={disabled || (method === "gcash" && !gcashAvailable)} onChange={() => onChange(method)} />
-        <span><strong>{method === "cash" ? "Cash" : "GCash"}</strong>{" "}<small>{method === "cash" ? "Pay at the front desk" : gcashAvailable ? "Upload your receipt" : "Receipt setup pending"}</small></span>
+    <legend>Daily payment method</legend><div className={styles.choiceGrid}>
+      {choices.map(method => <label className={styles.choice} key={method.id}>
+        <input type="radio" name="daily-payment" required value={method.id} checked={value === method.id} disabled={disabled || (method.id !== "cash" && !gcashAvailable)} onChange={() => onChange(method.id)} />
+        <span><strong>{method.name}</strong>{" "}<small>{method.id === "cash" ? "Pay at the front desk" : gcashAvailable ? "Upload your receipt" : "Receipt setup pending"}</small></span>
       </label>)}
     </div>
   </fieldset>;
@@ -295,7 +302,7 @@ function ReceiptView({
 
       <dl style={detailList}>
         {receipt.paymentMethod && <>
-          <div style={detailRow}><dt style={detailKey}>Daily session</dt><dd style={detailVal}>{receipt.paymentAmount == null ? "See front desk" : `₱${(receipt.paymentAmount / 100).toFixed(2)}`} · {receipt.paymentMethod === "cash" ? "Cash" : "GCash"}</dd></div>
+          <div style={detailRow}><dt style={detailKey}>Daily session</dt><dd style={detailVal}>{receipt.paymentAmount == null ? "See front desk" : `₱${(receipt.paymentAmount / 100).toFixed(2)}`} · {receipt.paymentName ?? (receipt.paymentMethod === "cash" ? "Cash" : "GCash")}</dd></div>
           <div style={detailRow}><dt style={detailKey}>Payment</dt><dd style={detailVal}>Pending admin confirmation</dd></div>
         </>}
         {isMember ? (

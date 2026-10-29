@@ -1,4 +1,6 @@
 import "server-only";
+import { preparePaymentAccount } from "./payment-methods";
+import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
 import type { Charge, GymSettings, PaymentRequest } from "@/lib/finance/contracts";
@@ -65,7 +67,7 @@ export async function newProfileQuote(category: unknown, voucherCode?: string) {
 export async function preparePurchase(tx: Transaction, db: Firestore, actorId: string, personId: string, person: Person, body: Record<string, unknown>, newProfile = false) {
   let operation: string;
   try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
-  if (body.method !== "cash" && body.method !== "gcash") throw new ApiError(400, "invalid-payment-method");
+  if (!isPaymentMethod(body.method)) throw new ApiError(400, "invalid-payment-method");
   const settings = (await tx.get(db.doc("gymSettings/finance"))).data() as GymSettings | undefined;
   if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
   let prior: { charge: Charge; requestId: string } | undefined;
@@ -93,7 +95,8 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   }
   const chargeId = prior?.charge.id ?? purchaseChargeId(personId, operation);
   const requestId = purchaseRequestId(personId, operation);
-  const proof = body.method === "gcash" ? await readyReceipt(tx, db, { personId, chargeId, amountMinor: quote.amountMinor, at: now,
+  const paymentAccountSnapshot = await preparePaymentAccount(tx, db, body.method, body.paymentRevision);
+  const proof = body.method !== "cash" ? await readyReceipt(tx, db, { paymentMethod: body.method, paymentRevision: typeof body.paymentRevision === "number" ? body.paymentRevision : undefined, personId, chargeId, amountMinor: quote.amountMinor, at: now,
     receiptId: typeof body.receiptId === "string" ? body.receiptId : undefined, receiptToken: typeof body.receiptToken === "string" ? body.receiptToken : undefined }) : null;
   if (proof && proof.paymentRequestId !== requestId) throw new ApiError(409, "valid-receipt-required");
   const number = prior ? null : await prepareTransactionNumber(tx, db);
@@ -102,7 +105,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     ...(voucher ? { baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot } : {}),
     tibayTransactionNumber: number!.number, personId, kind: quote.kind, chargeDate: philippineDate(now),
     createdAt: now, recognizedPurchaseAt: null, requestedCoverage: quote.coverage, approvedCoverage: null, dailyVisitDate: null, attendanceLogId: null, uniqueDailyKey: null, operationId: operation };
-  const payment: PaymentRequest & { membershipSnapshot: MembershipSnapshot } = { id: requestId, chargeId, personId, method: body.method, status: "pending", amountMinor: quote.amountMinor,
+  const payment: PaymentRequest & { membershipSnapshot: MembershipSnapshot } = { id: requestId, chargeId, personId, method: body.method, paymentAccountSnapshot, status: "pending", amountMinor: quote.amountMinor,
     receiptId: proof?.receiptId ?? null, submittedAt: now, previousRequestId: prior?.requestId ?? null, reviewedBy: null, reviewedAt: null, rejectionReason: null,
     confirmedAt: null, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: operation, membershipSnapshot: snapshotMembership(person) };
   return { result: { id: requestId, chargeId }, commit: () => {
@@ -166,9 +169,9 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     const changed = charge.kind !== "daily_session" && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person!));
     if (body.decision === "approve" && changed && body.acknowledgeMembershipChange !== true) throw new ApiError(409, "membership-review-required");
     let reference: Awaited<ReturnType<typeof prepareReferenceClaim>> | null = null;
-    if (body.decision === "approve" && payment.method === "gcash") {
+    if (body.decision === "approve" && payment.method !== "cash") {
       if (!payment.receiptId || !receiptReview?.confirmedReference || receiptReview.confirmedAmountMinor !== payment.amountMinor || payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "receipt-review-required");
-      reference = await prepareReferenceClaim(tx, db, receiptReview.confirmedReference, id, charge.id);
+      reference = await prepareReferenceClaim(tx, db, receiptReview.confirmedReference, id, charge.id, payment.paymentAccountSnapshot);
     }
     const approved = body.decision === "approve";
     const settleVoucher = approved ? await prepareVoucherSettlement(tx, db, charge, "confirmed", actorId, now) : null;

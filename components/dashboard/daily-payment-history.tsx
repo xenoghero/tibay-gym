@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentLabel } from "@/lib/finance/payment-methods";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -30,16 +32,16 @@ export function DailyPaymentHistory({ chargeId, currentPaymentRequestId }: { cha
   return <section aria-label="Payment history">
     <h3>Payment history</h3>
     {loading ? <LoadingSkeleton label="Loading payment history…" /> : error ? <p role="alert">{error} <button onClick={() => { setError(""); setLoading(true); setRetry(value => value + 1); }}>Retry history</button></p> : payments.length ? payments.map(payment => <details key={payment.id}>
-      <summary>{payment.method === "gcash" ? "GCash" : "Cash"} · {peso(payment.amountMinor)} · {paymentDate(payment.submittedAt)} <PaymentStatus status={payment.status} /></summary>
+      <summary>{paymentLabel(payment)} · {peso(payment.amountMinor)} · {paymentDate(payment.submittedAt)} <PaymentStatus status={payment.status} /></summary>
       <dl className={styles.details}>
         <div><dt>Submitted</dt><dd>{new Date(payment.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</dd></div>
         <div><dt>Payment ID</dt><dd>{payment.id}</dd></div>
         {payment.previousRequestId && <div><dt>Replaces payment</dt><dd>{payment.previousRequestId}</dd></div>}
         {payment.reviewedAt && <div><dt>Reviewed</dt><dd>{paymentDate(payment.reviewedAt)}</dd></div>}
-        {payment.gcashReferenceSnapshot && <div><dt>GCash reference</dt><dd>{payment.gcashReferenceSnapshot}</dd></div>}
+        {payment.gcashReferenceSnapshot && <div><dt>Payment reference</dt><dd>{payment.gcashReferenceSnapshot}</dd></div>}
       </dl>
       {payment.rejectionReason && <p>Rejection reason: {payment.rejectionReason}</p>}
-      {payment.receiptId && payment.id !== currentPaymentRequestId && <ReceiptReview receiptId={payment.receiptId} expectedAmountMinor={payment.amountMinor} />}
+      {payment.receiptId && payment.id !== currentPaymentRequestId && <ReceiptReview receiptId={payment.receiptId} paymentAccount={payment.paymentAccountSnapshot} expectedAmountMinor={payment.amountMinor} />}
     </details>) : <p>No payment submitted yet.</p>}
   </section>;
 }

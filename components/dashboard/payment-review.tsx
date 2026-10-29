@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentLabel } from "@/lib/finance/payment-methods";
+
 import { useContentTransition } from "@/lib/use-content-transition";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
@@ -100,7 +102,7 @@ export function PaymentReview() {
   }
   const visibleRows = rows.filter(row => {
     const query = search.trim().toLowerCase();
-    return (status === "all" || row.payment.status === status) && (method === "all" || row.payment.method === method)
+    return (status === "all" || row.payment.status === status) && (method === "all" || (method === "electronic" ? row.payment.method !== "cash" : row.payment.method === method))
       && (!query || [row.customer.name, row.customer.id, row.charge?.tibayTransactionNumber, row.gcashReference, row.payment.gcashReferenceSnapshot].some(value => value?.toLowerCase().includes(query)));
   });
   async function refresh() { setRefreshKey(value => value + 1); await list().catch(e => setMessage(e.message)); }
@@ -114,7 +116,7 @@ export function PaymentReview() {
     <div className={styles.toolbar}>
       <label className={styles.search}>Search this page<input type="search" placeholder="Name, customer ID or reference" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option>{kind === "daily_session" && <option value="awaiting">Awaiting payment</option>}<option value="pending">{kind === "daily_session" ? "Pending review" : "Pending"}</option><option value="approved">{kind === "daily_session" ? "Collected" : "Approved"}</option><option value="rejected">{kind === "daily_session" ? "Payment rejected" : "Rejected"}</option></select></label>
-      <label>Method<select value={method} onChange={e => setMethod(e.target.value)}><option value="all">All methods</option><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
+      <label>Method<select value={method} onChange={e => setMethod(e.target.value)}><option value="all">All methods</option><option value="cash">Cash</option><option value="gcash">Legacy GCash</option><option value="electronic">Electronic payments</option></select></label>
       <button disabled={busy || loading} onClick={() => void refresh()} aria-label="Refresh requests">↻ Refresh</button>
       <details className={styles.maintenance}><summary>Maintenance</summary><div className={styles.maintenanceMenu}><p>Remove eligible receipt evidence and photos. Protected records are kept.</p><button disabled={busy} onClick={() => void cleanupEvidence()}>Run retention cleanup</button></div></details>
     </div>
@@ -128,7 +130,7 @@ export function PaymentReview() {
           <table className={styles.table}><thead><tr>{["Customer", "Payment", "Coverage", "Submitted", "Status", "Action"].map(s => <th scope="col" key={s}>{s}</th>)}</tr></thead>
             <tbody>{visibleRows.map(row => <tr key={row.payment.id}>
               <td><strong>{row.customer.name}</strong><small className={styles.method}>{row.charge?.categorySnapshot ?? "—"}</small></td>
-              <td><strong className={styles.amount}>{peso(row.payment.amountMinor)}</strong><small>{row.payment.method === "gcash" ? "GCash" : "Cash"}</small></td>
+              <td><strong className={styles.amount}>{peso(row.payment.amountMinor)}</strong><small>{paymentLabel(row.payment)}</small></td>
               <td><span className={styles.mobileLabel}>Coverage</span>{(row.payment.appliedCoverage ?? row.charge?.requestedCoverage)?.expiryDate ? `Until ${paymentDate((row.payment.appliedCoverage ?? row.charge?.requestedCoverage)!.expiryDate)}` : "Daily session"}</td>
               <td><span className={styles.mobileLabel}>Submitted</span>{paymentDate(row.payment.submittedAt)}<small>{new Date(row.payment.submittedAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })}</small></td>
               <td><PaymentStatus status={row.payment.status} /></td>
@@ -144,15 +146,16 @@ export function PaymentReview() {
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
       {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}
       <dl className={styles.details}>
-        <div><dt>Payment method</dt><dd>{selected.payment.method === "gcash" ? "GCash" : "Cash"}</dd></div>
+        <div><dt>Payment method</dt><dd>{paymentLabel(selected.payment)}</dd></div>
+        {selected.payment.paymentAccountSnapshot && <><div><dt>Account holder</dt><dd>{selected.payment.paymentAccountSnapshot.accountHolder}</dd></div><div><dt>Account number</dt><dd>{selected.payment.paymentAccountSnapshot.accountNumber}</dd></div></>}
         <div><dt>Category</dt><dd className={styles.method}>{selected.charge.categorySnapshot}</dd></div>
         <div><dt>Tibay number</dt><dd>{selected.charge.tibayTransactionNumber}</dd></div>
         <div><dt>Submitted</dt><dd>{paymentDate(selected.payment.submittedAt)}</dd></div>
         <div><dt>Payment type</dt><dd className={styles.method}>{selected.charge.kind.replaceAll("_", " ")}</dd></div>
-        <div><dt>GCash reference</dt><dd>{selected.payment.gcashReferenceSnapshot ?? "See receipt review"}</dd></div>
+        <div><dt>Payment reference</dt><dd>{selected.payment.gcashReferenceSnapshot ?? "See receipt review"}</dd></div>
       </dl>
       {selected.coverage && <p className={styles.message}>Final coverage if approved now: {selected.coverage.startDate} to {selected.coverage.expiryDate}</p>}
-      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
+      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} paymentAccount={selected.payment.paymentAccountSnapshot} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
       {selected.charge.kind === "daily_session" && <DailyPaymentHistory key={selected.charge.id} chargeId={selected.charge.id} currentPaymentRequestId={selected.payment.id} />}
       {selected.charge.abandonedAt ? <p className={styles.message}>Closed {paymentDate(selected.charge.abandonedAt)}. {selected.charge.abandonmentReason} This purchase cannot be approved or corrected.</p> : selected.payment.status === "pending" ? <>
         <h3>Review checklist</h3>

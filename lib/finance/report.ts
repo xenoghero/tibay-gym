@@ -1,3 +1,4 @@
+import { isPaymentMethod, paymentLabel, type PaymentMethod } from "./payment-methods";
 import type { Charge, ChargeKind, PaymentRequest } from "./contracts";
 import { collectionTotals, mondayStart, philippineDate } from "./rules";
 
@@ -22,12 +23,12 @@ export function reportRange(params: URLSearchParams, now = Date.now()): ReportRa
 }
 export interface FinanceLedgerRow {
   id: string; personId: string; kind: ChargeKind; category: string; transactionNumber: string; amountMinor: number;
-  purchaseDate: string; confirmedAt: number | null; method: "cash" | "gcash" | null;
+  purchaseDate: string; confirmedAt: number | null; method: PaymentMethod | null; paymentMethodLabel?: string;
   status: "pending" | "approved" | "rejected" | "no-submission"; expectedInPeriod: boolean; confirmedInPeriod: boolean; activityAt: number;
 }
 export interface FinanceReport {
   range: ReportRange;
-  totals: ReturnType<typeof collectionTotals> & { expectedCount: number; pendingCount: number; pendingCashMinor: number; pendingGcashMinor: number };
+  totals: ReturnType<typeof collectionTotals> & { expectedCount: number; pendingCount: number; pendingCashMinor: number; pendingGcashMinor: number; pendingOtherElectronicMinor: number };
   outstanding: { dailyMinor: number; renewalMinor: number; newMembershipMinor: number; count: number };
   breakdown: Array<{ kind: ChargeKind; expectedMinor: number; expectedCount: number; confirmedMinor: number; confirmedCount: number }>;
   trend: Array<{ date: string; expectedMinor: number; confirmedMinor: number; confirmedCount: number }>;
@@ -45,7 +46,7 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
   const days = new Map(trend.map(day => [day.date, day]));
   const approved = new Map<string, PaymentRequest>(), pending = new Map<string, PaymentRequest>(), latest = new Map<string, PaymentRequest>();
   const outstanding = { dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, count: 0 };
-  let pendingCashMinor = 0, pendingGcashMinor = 0, expectedCount = 0, pendingCount = 0;
+  let pendingCashMinor = 0, pendingGcashMinor = 0, pendingOtherElectronicMinor = 0, expectedCount = 0, pendingCount = 0;
   for (const charge of charges) {
     if (!Number.isSafeInteger(charge.amountMinor) || charge.amountMinor <= 0 || !kinds.has(charge.kind)) throw new Error("financial-data-conflict");
     validFinancialDate(charge.chargeDate);
@@ -57,7 +58,7 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
   }
   for (const request of requests) {
     const charge = byId.get(request.chargeId);
-    if (!charge || request.personId !== charge.personId || request.amountMinor !== charge.amountMinor || !["cash", "gcash"].includes(request.method)) throw new Error("financial-data-conflict");
+    if (!charge || request.personId !== charge.personId || request.amountMinor !== charge.amountMinor || !isPaymentMethod(request.method)) throw new Error("financial-data-conflict");
     if (!latest.has(charge.id) || latest.get(charge.id)!.submittedAt < request.submittedAt || charge.activePaymentRequestId === request.id) latest.set(charge.id, request);
     if (request.status === "approved") {
       if (request.confirmedAt === null || !Number.isFinite(request.confirmedAt) || approved.has(charge.id) || (charge.confirmedPaymentRequestId && charge.confirmedPaymentRequestId !== request.id)) throw new Error("financial-data-conflict");
@@ -70,7 +71,7 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
       if (pending.has(charge.id) || (charge.activePaymentRequestId && charge.activePaymentRequestId !== request.id)) throw new Error("financial-data-conflict");
       pending.set(charge.id, request); outstanding.count++;
       outstanding[charge.kind === "daily_session" ? "dailyMinor" : charge.kind === "renewal" ? "renewalMinor" : "newMembershipMinor"] += request.amountMinor;
-      if (between(charge.chargeDate)) { pendingCount++; if (request.method === "cash") pendingCashMinor += request.amountMinor; else pendingGcashMinor += request.amountMinor; }
+      if (between(charge.chargeDate)) { pendingCount++; if (request.method === "cash") pendingCashMinor += request.amountMinor; else if (request.method === "gcash" || request.paymentAccountSnapshot?.kind === "gcash") pendingGcashMinor += request.amountMinor; else pendingOtherElectronicMinor += request.amountMinor; }
     } else if (request.status !== "rejected") throw new Error("financial-data-conflict");
   }
   for (const id of pending.keys()) if (approved.has(id)) throw new Error("financial-data-conflict");
@@ -80,8 +81,8 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
     if (!expectedInPeriod && !confirmedInPeriod && !between(charge.chargeDate)) return [];
     return [{ id: charge.id, personId: charge.personId, kind: charge.kind, category: charge.categorySnapshot, transactionNumber: charge.tibayTransactionNumber,
       amountMinor: charge.amountMinor, purchaseDate: date ?? charge.chargeDate, confirmedAt: payment?.confirmedAt ?? null,
-      method: payment?.method ?? null, status: payment?.status ?? "no-submission", expectedInPeriod, confirmedInPeriod,
+      method: payment?.method ?? null, paymentMethodLabel: payment ? paymentLabel(payment) : undefined, status: payment?.status ?? "no-submission", expectedInPeriod, confirmedInPeriod,
       activityAt: confirmedInPeriod ? payment!.confirmedAt! : expectedInPeriod ? charge.recognizedPurchaseAt ?? charge.createdAt : charge.createdAt }];
   }).sort((a, b) => b.activityAt - a.activityAt || a.id.localeCompare(b.id));
-  return { range, totals: { ...collectionTotals(charges, requests, range.from, range.through), expectedCount, pendingCount, pendingCashMinor, pendingGcashMinor }, outstanding, breakdown, trend, ledger };
+  return { range, totals: { ...collectionTotals(charges, requests, range.from, range.through), expectedCount, pendingCount, pendingCashMinor, pendingGcashMinor, pendingOtherElectronicMinor }, outstanding, breakdown, trend, ledger };
 }

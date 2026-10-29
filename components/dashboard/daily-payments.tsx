@@ -1,5 +1,7 @@
 "use client";
 
+import { paymentLabel, type PaymentAccountSnapshot } from "@/lib/finance/payment-methods";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState } from "react";
@@ -8,7 +10,7 @@ import type { Charge } from "@/lib/finance/contracts";
 import { DailyPaymentHistory } from "./daily-payment-history";
 import { PriceBreakdown } from "@/components/people/voucher-entry";
 import { PaymentDrawer, PaymentStatus, paymentDate, peso, styles } from "./payment-ui";
-type DailyCharge = Charge & { customerName?: string; receiptId?: string | null; paymentMethod?: string | null; paymentStatus?: string | null; gcashReference?: string | null };
+type DailyCharge = Charge & { customerName?: string; paymentAccountSnapshot?: PaymentAccountSnapshot | null; receiptId?: string | null; paymentMethod?: string | null; paymentStatus?: string | null; gcashReference?: string | null };
 const collectionStatus = (row: DailyCharge) => row.confirmedPaymentRequestId ? "approved" : row.paymentStatus === "rejected" ? "rejected" : row.activePaymentRequestId ? "pending" : "awaiting";
 const collectionLabel = (row: DailyCharge) => ({ approved: "Collected", rejected: "Payment rejected", pending: "Pending review", awaiting: "Awaiting payment" })[collectionStatus(row)];
 const needsCashConfirmation = (row: DailyCharge) => !row.confirmedPaymentRequestId && row.paymentStatus !== "rejected" && (!row.activePaymentRequestId || row.activePaymentRequestId === `${row.id}-cash`);
@@ -52,7 +54,7 @@ export function DailyPayments({ refreshKey = 0, search = "", status = "all", met
     finally { setBusy(false); }
   }
   const visibleRows = rows.filter(row => (status === "all" || collectionStatus(row) === status)
-    && (method === "all" || (row.paymentMethod ?? "cash") === method)
+    && (method === "all" || (method === "electronic" ? (row.paymentMethod ?? "cash") !== "cash" : (row.paymentMethod ?? "cash") === method))
     && (!search.trim() || [row.customerName, row.personId, row.tibayTransactionNumber, row.gcashReference].some(value => value?.toLowerCase().includes(search.trim().toLowerCase()))));
   return <section className={styles.section} aria-label="Daily payments" aria-busy={loading}>
     <div className={styles.sectionHead}><h2>Daily payments</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
@@ -62,7 +64,7 @@ export function DailyPayments({ refreshKey = 0, search = "", status = "all", met
       <table className={styles.table}><thead><tr>{["Customer", "Payment", "Visit date", "Status", "Action"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
         <tbody>{visibleRows.map(row => <tr key={row.id}>
           <td><strong>{row.customerName ?? row.personId}</strong><small className={styles.method}>{row.categorySnapshot}</small></td>
-          <td><strong className={styles.amount}>{peso(row.amountMinor)}</strong><small>{row.paymentMethod === "gcash" ? "GCash" : "Cash"}</small></td>
+          <td><strong className={styles.amount}>{peso(row.amountMinor)}</strong><small>{paymentLabel({ method: row.paymentMethod ?? "cash", paymentAccountSnapshot: row.paymentAccountSnapshot })}</small></td>
           <td><span className={styles.mobileLabel}>Visit date</span>{paymentDate(row.chargeDate)}</td>
           <td><PaymentStatus status={collectionStatus(row)} label={collectionLabel(row)} />{row.paymentStatus === "rejected" && !row.confirmedPaymentRequestId && <small>Linked replacement required</small>}</td>
           <td>{needsCashConfirmation(row) ? <button className={styles.primary} disabled={busy || disabled} onClick={() => { setSelected(row); setReviewed(false); setMessage(""); }} aria-label={`Confirm cash for ${row.customerName ?? row.personId}`}>Confirm cash</button> : !row.confirmedPaymentRequestId && row.paymentStatus !== "rejected" && onReviewRequest ? <button className={styles.primary} disabled={busy || disabled} onClick={() => onReviewRequest(row.activePaymentRequestId!)}>Review payment</button> : <button disabled={busy || disabled} onClick={() => { setSelected(row); setMessage(""); }}>View details</button>}</td>

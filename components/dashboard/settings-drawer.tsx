@@ -3,8 +3,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import styles from "./settings.module.css";
 
-export function SettingsDrawer({ title, closing, busy, onClose, onExited, children }: {
-  title: string; closing: boolean; busy: boolean; onClose(): void; onExited(): void; children: ReactNode;
+export function SettingsDrawer({ title, closing, busy, onClose, onExited, children, closeLabel = "Close voucher drawer" }: {
+  title: string; closeLabel?: string; closing: boolean; busy: boolean; onClose(): void; onExited(): void; children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -40,7 +40,7 @@ export function SettingsDrawer({ title, closing, busy, onClose, onExited, childr
     <div className={styles.drawerInner} inert={closing}>
       <header className={styles.drawerHeader}>
         <h2 ref={titleRef} tabIndex={-1} id={id}>{title}</h2>
-        <button type="button" aria-label="Close voucher drawer" disabled={busy || closing} onClick={onClose}>
+        <button type="button" aria-label={closeLabel} disabled={busy || closing} onClick={onClose}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
         </button>
       </header>

@@ -6,12 +6,12 @@ import { RECEIPT_TABLE } from "./receipt-store";
 import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { operationId } from "@/lib/finance/rules";
-import { normalizeGcashReference } from "@/lib/finance/references";
+import { normalizePaymentReference } from "@/lib/finance/references";
 import { appendAudit } from "./audit";
 export async function correctReceipt(actorId: string, body: Record<string, unknown>) {
   const id = documentId(body.receiptId);
-  let operation: string, reference: string;
-  try { operation = operationId(body.operationId); reference = normalizeGcashReference(body.reference); } catch { throw new ApiError(400, "invalid-reference"); }
+  let operation: string;
+  try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-reference"); }
   if (typeof body.amountMinor !== "number" || !Number.isSafeInteger(body.amountMinor) || body.amountMinor <= 0 || body.amountMinor > 100_000_000) throw new ApiError(400, "invalid-amount");
   if (typeof body.reason !== "string" || !body.reason.trim() || body.reason.length > 500) throw new ApiError(400, "review-reason-required");
   const reason = body.reason.trim();
@@ -27,6 +27,8 @@ export async function correctReceipt(actorId: string, body: Record<string, unkno
     if (!intent?.linked) throw new ApiError(409, "receipt-not-linked");
     const payment = (await tx.get(db.doc(`paymentRequests/${intent.paymentRequestId}`))).data();
     if (!payment || payment.status !== "pending") throw new ApiError(409, "payment-not-pending");
+    let reference: string;
+    try { reference = normalizePaymentReference(body.reference, payment.paymentAccountSnapshot); } catch { throw new ApiError(400, "invalid-reference"); }
     if (body.expectedRevision !== (previous?.reviewRevision ?? 0)) throw new ApiError(409, "receipt-review-changed");
     const next = (previous?.reviewRevision ?? 0) + 1, now = Date.now();
     tx.set(ref, { ...previous, personId: intent.personId, chargeId: intent.chargeId, paymentRequestId: intent.paymentRequestId,

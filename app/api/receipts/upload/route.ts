@@ -1,3 +1,4 @@
+import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import { requireCustomer, sameOrigin } from "@/lib/server/customer-session";
 import { uploadDailyReceipt } from "@/lib/server/receipt-store";
@@ -11,6 +12,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   return handleApi(async () => {
     sameOrigin(request); publicRateLimiter.consume(publicCaller(request), "image");
+    const paymentMethod = request.headers.get("x-payment-method") ?? "gcash";
+    if (!isPaymentMethod(paymentMethod) || paymentMethod === "cash") throw new ApiError(400, "invalid-payment-method");
     const operation = eventId(request.headers.get("x-operation-id"));
     const expectedAmountMinor = Number(request.headers.get("x-expected-amount"));
     if (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0) throw new ApiError(400, "invalid-amount");
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
     } else {
       const customer = await requireCustomer(request); personId = customer.session.personId; category = customer.person.rateCategory;
     }
-    return json(await uploadDailyReceipt({ personId, category, operationId: operation, expectedAmountMinor, registration,
+    return json(await uploadDailyReceipt({ paymentMethod, paymentRevision: Number(request.headers.get("x-payment-revision")), personId, category, operationId: operation, expectedAmountMinor, registration,
       kind: rawKind, previousRequestId, voucherCode: request.headers.get("x-voucher-code") ?? undefined, bytes: await readPrivateImage(request) }));
   });
 }
