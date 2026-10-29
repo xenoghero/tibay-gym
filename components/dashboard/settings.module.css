@@ -1,7 +1,8 @@
-.layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 36px; min-width: 0; align-items: start; }
-.navigation { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 24px; }
-.navigation a { text-decoration: none; color: var(--rs-muted); padding: 13px 14px; min-height: 46px; font-size: 14px; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
-.navigation a[aria-current] { color: var(--rs-fg); background: var(--rs-panel); border-left-color: var(--rs-accent); font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; min-width: 0; align-items: start; }
+.navigation { display: flex; gap: 30px; border-bottom: 1px solid var(--rs-line); min-width: 0; }
+.navigation a { position: relative; display: inline-flex; align-items: center; flex: none; text-decoration: none; white-space: nowrap; color: var(--rs-muted); padding: 10px 0 14px; min-height: 44px; font-size: 13px; line-height: 1.4; font-weight: 500; }
+.navigation a[aria-current] { color: var(--rs-fg); font-weight: 600; box-shadow: 0 2px var(--rs-accent); }
+.navigation a:hover { color: var(--rs-fg); }
 .content { min-width: 0; }
 .account { max-width: 620px; }
 .account > section { margin-bottom: 24px; }
@@ -69,13 +70,11 @@
 .confirm::backdrop { background: #0006; }
 .confirm h2 { font-size: 22px; margin: 0 0 16px; }
 .confirm p { font-size: 14px; line-height: 1.7; }
-@media (min-width: 700px) and (max-width: 1099px) { .layout { grid-template-columns: 1fr; gap: 24px; } .navigation { position: static; flex-direction: row; flex-wrap: wrap; } .navigation a { border-left: 0; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0; } .navigation a[aria-current] { border-bottom-color: var(--rs-accent); } }
 @media (max-width: 699px) {
   .page h1 { font-size: 42px !important; }
   .layout { grid-template-columns: 1fr; gap: 24px; }
-  .navigation { flex-direction: row; position: static; gap: 0; flex-wrap: wrap; border-bottom: 1px solid var(--rs-line); }
-  .navigation a { padding: 12px 10px; font-size: 12px; border-left: 0; border-bottom: 2px solid transparent; border-radius: 0; }
-  .navigation a[aria-current] { border-bottom-color: var(--rs-accent); }
+  .navigation { gap: 0; justify-content: space-between; overflow-x: auto; padding-bottom: 2px; }
+  .navigation a { padding: 10px 5px 12px; }
   .head { flex-wrap: wrap; margin-bottom: 20px; }
   .head h2 { font-size: 22px; }
   .fields, .ruleList { grid-template-columns: 1fr; }

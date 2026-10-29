@@ -26,7 +26,7 @@
 .table th { color: var(--rs-muted); font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; padding: 12px 10px; border-block: 1px solid var(--rs-line); }
 .table td { padding: 18px 10px; border-bottom: 1px solid var(--rs-line); vertical-align: middle; overflow-wrap: anywhere; }
 .table th:first-child { width: 24%; }
-.table th:last-child { width: 100px; }
+.table th:last-child { width: 128px; }
 .table tr:hover td { background: var(--rs-panel); }
 .table strong { font-weight: 500; }
 .table small { display: block; color: var(--rs-muted); font-size: 11px; line-height: 1.6; margin-top: 5px; }
@@ -34,7 +34,7 @@
 .method { text-transform: capitalize; }
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px; background: var(--rs-panel); color: var(--rs-muted); font-size: 11px; font-weight: 500; }
 .status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
-.status[data-status="pending"], .status[data-status="uncollected"] { background: var(--rs-accent-soft); color: var(--rs-accent-text); }
+.status[data-status="pending"], .status[data-status="uncollected"], .status[data-status="awaiting"] { background: var(--rs-accent-soft); color: var(--rs-accent-text); }
 .status[data-status="approved"], .status[data-status="confirmed"] { color: #348660; background: rgba(52,134,96,.12); }
 .status[data-status="rejected"] { color: #d36d65; background: rgba(211,109,101,.12); }
 .page .primary, .drawer .primary { background: var(--rs-accent); color: var(--rs-on-accent); border-color: var(--rs-accent); }

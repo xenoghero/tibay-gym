@@ -14,10 +14,15 @@ it("uses linked method/status rather than guessing cash from a request ID", asyn
     { ...chargeFixture("scanner"), activePaymentRequestId: null },
   ];
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ charges, nextCursor: null })));
-  await act(async () => { render(<DailyPayments />); });
-  expect(screen.getByText(/cash — review the linked request below/)).toBeTruthy();
-  expect(screen.getByText("Rejected — linked replacement required")).toBeTruthy();
-  expect(screen.getAllByRole("button", { name: "Review cash received" })).toHaveLength(1);
+  const onReviewRequest = vi.fn();
+  await act(async () => { render(<DailyPayments onReviewRequest={onReviewRequest} />); });
+  fireEvent.click(screen.getByRole("button", { name: "Review payment" }));
+  expect(onReviewRequest).toHaveBeenCalledWith("pay-new-id");
+  expect(screen.getByText("Linked replacement required")).toBeTruthy();
+  expect(screen.getByText("Payment rejected")).toBeTruthy();
+  expect(screen.getByText("Awaiting payment")).toBeTruthy();
+  expect(screen.getByText("Pending review")).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: /^Confirm cash for/ })).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Review GCash receipt" })).toBeNull();
 });
 
@@ -26,10 +31,10 @@ it("requires a checked cash amount and sends the expected charge when confirming
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   const charge = { ...chargeFixture("cash"), customerName: "Renier Luna" };
   const onConfirmed = vi.fn();
-  const fetcher = vi.fn(async (_url: string, init?: RequestInit) => Response.json(init?.method === "POST" ? { ok: true } : { charges: [charge], nextCursor: null }));
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => Response.json(init?.method === "POST" ? { ok: true } : url.includes("chargeId=") ? { payments: [] } : { charges: [charge], nextCursor: null }));
   vi.stubGlobal("fetch", fetcher);
   await act(async () => { render(<DailyPayments onConfirmed={onConfirmed} />); });
-  fireEvent.click(screen.getByRole("button", { name: "Review cash received" }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Confirm cash for Renier Luna" })); });
   const confirm = screen.getByRole("button", { name: "Confirm cash received" });
   expect((confirm as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByLabelText("I received and checked this cash amount."));

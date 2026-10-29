@@ -7,8 +7,8 @@ export { styles };
 export const peso = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(minor / 100);
 export const paymentDate = (value: number | string) => new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" }).format(new Date(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00+08:00` : value));
 
-export function PaymentStatus({ status }: { status: string }) {
-  return <span className={styles.status} data-status={status}>{status === "approved" ? "Approved" : status === "confirmed" ? "Collected" : status === "pending" ? "Pending" : status === "rejected" ? "Rejected" : "Awaiting collection"}</span>;
+export function PaymentStatus({ status, label }: { status: string; label?: string }) {
+  return <span className={styles.status} data-status={status}>{label ?? (status === "approved" ? "Approved" : status === "confirmed" ? "Collected" : status === "pending" ? "Pending" : status === "rejected" ? "Rejected" : "Awaiting collection")}</span>;
 }
 
 export function PaymentDrawer({ title, onClose, busy = false, children }: { title: string; onClose: () => void; busy?: boolean; children: ReactNode }) {

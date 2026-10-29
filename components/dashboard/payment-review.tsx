@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import type { Charge, PaymentRequest, Coverage } from "@/lib/finance/contracts";
 import { ReceiptReview } from "./receipt-review";
 import { DailyPayments } from "./daily-payments";
+import { DailyPaymentHistory } from "./daily-payment-history";
 import { PaymentDrawer, PaymentStatus, paymentDate, peso, styles } from "./payment-ui";
 import { PriceBreakdown } from "@/components/people/voucher-entry";
 import { SettingsConfirm } from "./settings-confirm";
@@ -22,6 +23,7 @@ export function PaymentReview() {
   const requestSequence = useRef(0);
   async function headers() { return { Authorization: `Bearer ${await user?.getIdToken()}` }; }
   async function list(next?: string) {
+    if (kind === "daily_session") return;
     const sequence = ++requestSequence.current; setLoading(true);
     try {
       const response = await fetch(`/api/finance/review?kind=${kind}${next ? `&cursor=${encodeURIComponent(next)}` : ""}`, { headers: await headers(), signal: AbortSignal.timeout(30_000) });
@@ -46,7 +48,7 @@ export function PaymentReview() {
   useEffect(() => {
     let active = true;
     const sequence = ++requestSequence.current;
-    if (user) user.getIdToken().then(token => fetch(`/api/finance/review?kind=${kind}`, { headers: { Authorization: `Bearer ${token}` } }))
+    if (user && kind !== "daily_session") user.getIdToken().then(token => fetch(`/api/finance/review?kind=${kind}`, { headers: { Authorization: `Bearer ${token}` } }))
       .then(async response => { if (!response.ok) throw new Error("Could not load payment requests. Try again."); const result = await response.json(); if (active && sequence === requestSequence.current) { setRows(result.records); setCursor(result.nextCursor); setMessage(""); } })
       .catch(e => { if (active && sequence === requestSequence.current) setMessage(e.message); })
       .finally(() => { if (active && sequence === requestSequence.current) setLoading(false); });
@@ -60,7 +62,7 @@ export function PaymentReview() {
       const response = await fetch("/api/finance/review", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
         body: JSON.stringify({ paymentRequestId: selected.payment.id, decision, reviewed: true, reason, previewToken: selected.previewToken, acknowledgeMembershipChange: ack }) });
       if (!response.ok) { await preview(selected.payment.id); throw new Error("Decision not applied. Review refreshed coverage and receipt values; check any reference conflict or amount mismatch before trying again."); }
-      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
+      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? kind === "daily_session" ? "Daily payment collected." : "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not confirm the decision. Refresh before retrying."); }
     finally { setBusy(false); }
   }
@@ -100,21 +102,20 @@ export function PaymentReview() {
       <div><div className={styles.kicker}>Payments & collections</div><h1 className={styles.title}>Payment review</h1></div>
     </header>
     <div className={styles.tabs} role="group" aria-label="Payment type">
-      {[["membership", "Renewal requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(true); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
+      {[["membership", "Renewal requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(value !== "daily_session"); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
     </div>
     <div className={styles.toolbar}>
       <label className={styles.search}>Search this page<input type="search" placeholder="Name, customer ID or reference" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved / collected</option><option value="rejected">Rejected</option></select></label>
+      <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option>{kind === "daily_session" && <option value="awaiting">Awaiting payment</option>}<option value="pending">{kind === "daily_session" ? "Pending review" : "Pending"}</option><option value="approved">{kind === "daily_session" ? "Collected" : "Approved"}</option><option value="rejected">{kind === "daily_session" ? "Payment rejected" : "Rejected"}</option></select></label>
       <label>Method<select value={method} onChange={e => setMethod(e.target.value)}><option value="all">All methods</option><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
       <button disabled={busy || loading} onClick={() => void refresh()} aria-label="Refresh requests">↻ Refresh</button>
       <details className={styles.maintenance}><summary>Maintenance</summary><div className={styles.maintenanceMenu}><p>Remove eligible receipt evidence and photos. Protected records are kept.</p><button disabled={busy} onClick={() => void cleanupEvidence()}>Run retention cleanup</button></div></details>
     </div>
     {message && <p className={styles.message} role="status">{message}</p>}
     <div className={styles.scroll}>
-      {kind === "daily_session" && <DailyPayments key={refreshKey} search={search} status={status} method={method} onConfirmed={() => void list().catch(e => setMessage(e.message))} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
-      <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
-        <div className={styles.sectionHead}><h2>{kind === "membership" ? "Renewal requests" : "Daily payment requests"}</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
-        {kind === "daily_session" && <p className={styles.note}>Review submitted payments here. Confirm walk-in cash in the charge list above.</p>}
+      {kind === "daily_session" && <DailyPayments key={refreshKey} disabled={busy} search={search} status={status} method={method} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
+      {kind !== "daily_session" && <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
+        <div className={styles.sectionHead}><h2>Renewal requests</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
         {loading ? <div className={styles.loading} role="status"><p>Loading payment requests…</p>{[0, 1, 2].map(i => <div className={styles.skeleton} key={i} aria-hidden="true" />)}</div> : <>
           {!visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching requests" : "No requests on this page."}</h3><p>{rows.length ? "Try another search or change the filters." : "Refresh to check for new payment requests."}</p></div> :
           <table className={styles.table}><thead><tr>{["Customer", "Payment", "Coverage", "Submitted", "Status", "Action"].map(s => <th scope="col" key={s}>{s}</th>)}</tr></thead>
@@ -129,7 +130,7 @@ export function PaymentReview() {
           </table>}
         </>}
         <div className={styles.pagination}><span>Search and filters apply to this loaded page.</span>{cursor && <button disabled={busy || loading} onClick={() => list(cursor).catch(e => setMessage(e.message))}>Next 50 requests →</button>}</div>
-      </section>
+      </section>}
     </div>
     {reviewLoading && !selected && <p className={styles.message} role="status">Opening payment details…</p>}
     {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
@@ -145,6 +146,7 @@ export function PaymentReview() {
       </dl>
       {selected.coverage && <p className={styles.message}>Final coverage if approved now: {selected.coverage.startDate} to {selected.coverage.expiryDate}</p>}
       {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
+      {selected.charge.kind === "daily_session" && <DailyPaymentHistory key={selected.charge.id} chargeId={selected.charge.id} currentPaymentRequestId={selected.payment.id} />}
       {selected.charge.abandonedAt ? <p className={styles.message}>Closed {paymentDate(selected.charge.abandonedAt)}. {selected.charge.abandonmentReason} This purchase cannot be approved or corrected.</p> : selected.payment.status === "pending" ? <>
         <h3>Review checklist</h3>
         {selected.membershipChanged && <label><input type="checkbox" checked={ack} disabled={busy} onChange={e => setAck(e.target.checked)} /> Membership changed since submission. I reviewed and accept the refreshed coverage.</label>}
