@@ -26,6 +26,7 @@ function personProfileHref(personId: string | null): string {
 }
 
 export function OverviewView() {
+  const [mobilePanel, setMobilePanel] = useState<"check-ins" | "collections">("check-ins");
   const [todaysLogs, setTodaysLogs] = useState<AttendanceLog[]>([]);
   const [openSessions, setOpenSessions] = useState<AttendanceLog[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -192,7 +193,7 @@ export function OverviewView() {
         <div><div className="rs-ov-kicker">{todayLabel}</div><h1 className="rs-ov-title">Overview</h1></div>
         <span className="rs-ov-live">{listenerError ? "Live updates interrupted" : loading ? "Connecting attendance…" : "Attendance live"}</span>
       </header>
-      <div className="rs-ov-scroll" role="region" aria-label="Overview content" tabIndex={0}>
+      <div className="rs-ov-content">
         {(listenerError || alertError) && <div className="rs-ov-error">
           <span role="alert">{alertError ?? "Live updates dropped out."}</span>
           <button type="button" onClick={retryLiveUpdates}>Retry</button>
@@ -214,8 +215,16 @@ export function OverviewView() {
           <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{loading ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
         </section>
         <div className="rs-ov-workspace">
-          <CheckInFeed rows={feedRows} loading={loading} />
-          <FinanceStatistics compact />
+          <div className="rs-ov-panel-selector" role="group" aria-label="Overview panel">
+            <button type="button" aria-pressed={mobilePanel === "check-ins"} aria-controls="overview-check-ins" onClick={() => setMobilePanel("check-ins")}>Recent check-ins</button>
+            <button type="button" aria-pressed={mobilePanel === "collections"} aria-controls="overview-collections" onClick={() => setMobilePanel("collections")}>Today’s collections</button>
+          </div>
+          <div id="overview-check-ins" className="rs-ov-panel" data-selected={mobilePanel === "check-ins"}>
+            <CheckInFeed rows={feedRows} loading={loading} />
+          </div>
+          <div id="overview-collections" className="rs-ov-panel" data-selected={mobilePanel === "collections"}>
+            <FinanceStatistics compact />
+          </div>
         </div>
       </div>
     </main>

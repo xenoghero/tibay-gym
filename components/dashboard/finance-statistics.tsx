@@ -85,6 +85,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   const totals = report?.totals;
   if (compact) return <section className="rs-finance rs-finance-compact" aria-label="Today's collections" aria-busy={loading}>
     <div className="rs-finance-heading"><h2>Today’s collections</h2><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
+    <div className="rs-ov-collections-scroll" role="region" aria-label="Today's collection details" tabIndex={0}>
     {loading && <p role="status">{report ? "Updating collections…" : "Loading collections…"}</p>}
     {error && <p role="alert">{error}</p>}
     {!error && report && totals && <>
@@ -102,6 +103,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
       </details>
       {!report.financialCutoverAt && <p>Financial cutover has not been set in Settings. Historical attendance is not backfilled as payments.</p>}
     </>}
+    </div>
   </section>;
   const filters = <>
     <label>Period<select value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></select></label>

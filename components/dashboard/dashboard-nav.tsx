@@ -3,7 +3,7 @@
 import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { IconOverview, IconPeople, IconStatistics, IconAudit, IconPayment, IconMessage, IconQr, IconSettings, IconSignOut, IconPanel, IconMenu, IconClose } from "./nav-icons";
 import styles from "./dashboard-nav.module.css";
@@ -42,17 +42,44 @@ export function DashboardNav() {
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, serverSnapshot);
   const drawer = useRef<HTMLDialogElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const activeIndex = NAV.findIndex(({ href }) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)));
 
-  useEffect(() => { drawer.current?.close(); }, [pathname]);
+  const finishClosing = useCallback(() => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    drawer.current?.close();
+    setDrawerClosing(false);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    if (!drawer.current?.open || closeTimer.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finishClosing();
+      return;
+    }
+    setDrawerClosing(true);
+    // Fallback if the animation is interrupted or its end event is missed.
+    closeTimer.current = setTimeout(finishClosing, 250);
+  }, [finishClosing]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) closeDrawer(); });
+    return () => { active = false; };
+  }, [pathname, closeDrawer]);
+  useEffect(() => () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  }, []);
   useEffect(() => {
     const media = window.matchMedia("(min-width: 861px)");
-    const closeOnDesktop = () => { if (media.matches) drawer.current?.close(); };
+    const closeOnDesktop = () => { if (media.matches) finishClosing(); };
     media.addEventListener("change", closeOnDesktop);
     return () => media.removeEventListener("change", closeOnDesktop);
-  }, []);
+  }, [finishClosing]);
 
   function toggleCollapsed() {
     fallbackCollapsed = !collapsed;
@@ -71,7 +98,7 @@ export function DashboardNav() {
     return <>
       <div className={styles.brandRow}>
         <div className={styles.brandClip}><BrandLogo sidebar /></div>
-        {mobile && <button type="button" className={styles.control} aria-label="Close navigation" onClick={() => drawer.current?.close()}><IconClose /></button>}
+        {mobile && <button type="button" className={styles.control} aria-label="Close navigation" onClick={closeDrawer}><IconClose /></button>}
       </div>
       {!mobile && <button type="button" className={`${styles.collapse} ${styles.tipTarget}`} aria-label={compact ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!compact} onClick={toggleCollapsed}>
         <IconPanel /><span className={styles.label}>Collapse sidebar</span>
@@ -79,7 +106,7 @@ export function DashboardNav() {
       </button>}
       <nav className={styles.nav} aria-label={mobile ? "Mobile navigation" : "Sidebar navigation"}>
         {activeIndex >= 0 && <span aria-hidden="true" className={styles.activeIndicator} style={{ "--active-index": activeIndex } as CSSProperties} />}
-        {NAV.map(({ href, label, Icon }, index) => <Link key={href} href={href} className={`${styles.link} ${styles.tipTarget}`} aria-label={label} aria-current={index === activeIndex ? "page" : undefined} onClick={() => { if (mobile) drawer.current?.close(); }}>
+        {NAV.map(({ href, label, Icon }, index) => <Link key={href} href={href} className={`${styles.link} ${styles.tipTarget}`} aria-label={label} aria-current={index === activeIndex ? "page" : undefined} onClick={() => { if (mobile) closeDrawer(); }}>
           <Icon size={20} /><span className={styles.label}>{label}</span>
           {compact && <span className={styles.tooltip} aria-hidden="true">{label}</span>}
         </Link>)}
@@ -104,7 +131,11 @@ export function DashboardNav() {
       <BrandLogo sidebar />
       <button type="button" className={styles.control} aria-label="Open navigation" aria-haspopup="dialog" aria-controls="dashboard-navigation-drawer" aria-expanded={drawerOpen} onClick={() => { drawer.current?.showModal(); setDrawerOpen(true); }}><IconMenu /></button>
     </header>
-    <dialog id="dashboard-navigation-drawer" ref={drawer} className={styles.drawer} aria-label="Navigation" onClose={() => setDrawerOpen(false)} onClick={event => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) drawer.current?.close(); } }}>
+    <dialog id="dashboard-navigation-drawer" ref={drawer} className={styles.drawer} data-closing={drawerClosing} aria-label="Navigation"
+      onClose={() => { setDrawerOpen(false); setDrawerClosing(false); }}
+      onCancel={event => { event.preventDefault(); closeDrawer(); }}
+      onAnimationEnd={event => { if (drawerClosing && event.target === event.currentTarget) finishClosing(); }}
+      onClick={event => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDrawer(); } }}>
       <div className={styles.drawerContent}>{contents(true)}</div>
     </dialog>
   </>;

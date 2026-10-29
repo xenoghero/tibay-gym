@@ -51,20 +51,20 @@ export function CheckInFeed({ rows, loading }: { rows: CheckInRow[]; loading: bo
           <span className="rs-ov-checkin-status"><span style={statusBadgeStyle(row.badge.kind)}>{row.badge.text}</span><time>{row.time}</time></span>
         </Link>)}
     </div>
-    {!loading && rows.length > 0 && <footer className="rs-ov-feed-footer">
-      <div className="rs-ov-feed-range"><span role="status" aria-live="polite">Showing {start + 1}–{Math.min(start + pageSize, rows.length)} of {rows.length}</span>
-        <label>Per page<select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goTo(1); }}>
+    <footer className="rs-ov-feed-footer">
+      <div className="rs-ov-feed-range"><span role="status" aria-live="polite">{loading ? "Loading…" : `Showing ${rows.length ? start + 1 : 0}–${Math.min(start + pageSize, rows.length)} of ${rows.length}`}</span>
+        <label>Per page<select disabled={loading} value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goTo(1); }}>
           <option value={5}>5</option><option value={10}>10</option><option value={25}>25</option>
         </select></label>
       </div>
       <nav className="rs-ov-pagination" aria-label="Check-in pagination">
-        <button type="button" disabled={currentPage === 1} onClick={() => goTo(currentPage - 1)} aria-label="Previous check-in page">Previous</button>
+        <button type="button" disabled={loading || currentPage === 1} onClick={() => goTo(currentPage - 1)} aria-label="Previous check-in page">Previous</button>
         {pageNumbers.map((n, index) => <span className="rs-ov-page-item" key={n}>
           {index > 0 && n - pageNumbers[index - 1] > 1 && <span className="rs-ov-page-gap" aria-hidden="true">…</span>}
-          <button type="button" aria-label={`Check-in page ${n}`} aria-current={n === currentPage ? "page" : undefined} onClick={() => goTo(n)}>{n}</button>
+          <button type="button" disabled={loading || rows.length === 0} aria-label={`Check-in page ${n}`} aria-current={n === currentPage ? "page" : undefined} onClick={() => goTo(n)}>{n}</button>
         </span>)}
-        <button type="button" disabled={currentPage === pageCount} onClick={() => goTo(currentPage + 1)} aria-label="Next check-in page">Next</button>
+        <button type="button" disabled={loading || currentPage === pageCount} onClick={() => goTo(currentPage + 1)} aria-label="Next check-in page">Next</button>
       </nav>
-    </footer>}
+    </footer>
   </section>;
 }

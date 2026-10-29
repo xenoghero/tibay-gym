@@ -113,8 +113,12 @@
 .drawerContent { min-height: 100%; }
 .drawer[open] { animation: drawer-in 200ms ease-out; }
 .drawer::backdrop { background: rgb(0 0 0 / .55); animation: backdrop-in 150ms ease-out; }
+.drawer[open][data-closing="true"] { animation: drawer-out 200ms ease-in forwards; }
+.drawer[data-closing="true"]::backdrop { animation: backdrop-out 200ms ease-in forwards; }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawer-out { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes backdrop-out { from { opacity: 1; } to { opacity: 0; } }
 @media (max-width: 860px) {
   .sidebar { display: none; }
   .mobileHeader { position: fixed; inset: 0 0 auto; height: 68px; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; background: var(--rs-panel); border-bottom: 1px solid var(--rs-line); }
@@ -127,5 +131,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .brandClip :global(.rs-brand-name), .collapse, .collapse svg, .control, .signOut, .link, .label, .activeIndicator, .tooltip, .identityDetails { transition: none; }
-  .drawer[open], .drawer::backdrop { animation: none; }
+  .drawer[open], .drawer::backdrop, .drawer[open][data-closing="true"], .drawer[data-closing="true"]::backdrop { animation: none; }
 }
