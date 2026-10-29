@@ -1,0 +1,98 @@
+.layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 36px; min-width: 0; align-items: start; }
+.navigation { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 24px; }
+.navigation a { text-decoration: none; color: var(--rs-muted); padding: 13px 14px; min-height: 46px; font-size: 14px; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
+.navigation a[aria-current] { color: var(--rs-fg); background: var(--rs-panel); border-left-color: var(--rs-accent); font-weight: 600; }
+.content { min-width: 0; }
+.account { max-width: 620px; }
+.account > section { margin-bottom: 24px; }
+.section { min-width: 0; font-size: 14px; }
+.head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
+.head h2, .section h2 { font-size: 24px; line-height: 1.2; letter-spacing: -.025em; font-weight: 600; margin: 0 0 8px; }
+.section p { line-height: 1.65; max-width: 65ch; }
+.sub { color: var(--rs-muted); font-size: 13px; margin: 0; }
+.section :is(button, input, select, textarea), .confirm :is(button, textarea) { font: inherit; color: var(--rs-fg); }
+.section button, .confirm button { min-height: 44px; padding: 10px 15px; border-radius: 6px; border: 1px solid var(--rs-line); background: var(--rs-bg); cursor: pointer; font-size: 14px; transition: background .15s; }
+.section button:hover:not(:disabled) { background: var(--rs-panel); }
+.section button.primary, .confirm button.primary { background: var(--rs-accent); border-color: var(--rs-accent); color: var(--rs-on-accent); font-weight: 600; }
+.section button.primary:hover:not(:disabled) { filter: brightness(.96); }
+.section button:disabled, .confirm button:disabled { opacity: .45; cursor: default; }
+.section :is(input:not([type=checkbox]), select, textarea), .confirm textarea { display: block; width: 100%; max-width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; font-size: 16px; border-radius: 6px; border: 1px solid var(--rs-line); background: var(--rs-bg); }
+.section input[type=checkbox] { accent-color: var(--rs-accent-text); width: 18px; height: 18px; flex-shrink: 0; }
+.section :is(button, input, select, textarea, summary):focus-visible, .navigation a:focus-visible, .confirm :is(button, textarea):focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 3px; }
+.section label { display: grid; gap: 7px; font-size: 13px; font-weight: 500; }
+.section small { display: block; color: var(--rs-muted); line-height: 1.65; font-size: 12px; font-weight: 400; margin-top: 5px; }
+.section fieldset { border: 0; padding: 0; margin: 0 0 26px; min-width: 0; }
+.section legend { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.full { grid-column: 1 / -1; }
+.checkGroup { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.checkGroup label { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; font-weight: 400; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--rs-line); margin-top: 24px; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.table th { text-align: left; color: var(--rs-muted); font-size: 11px; font-weight: 500; padding: 12px; border-bottom: 1px solid var(--rs-line); }
+.table td { padding: 18px 12px; border-bottom: 1px solid var(--rs-line); vertical-align: top; }
+.table th:first-child, .table td:first-child { padding-left: 0; }
+.table th:last-child, .table td:last-child { padding-right: 0; }
+.rates td { vertical-align: middle; }
+.rates td:first-child { width: 30%; font-weight: 500; }
+.rates input { text-align: right; font-variant-numeric: tabular-nums; }
+.number { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.code { font-family: var(--font-geist-mono), monospace; font-size: 13px; letter-spacing: .025em; overflow-wrap: anywhere; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: capitalize; background: var(--rs-panel); border: 1px solid var(--rs-line); padding: 4px 7px; border-radius: 4px; }
+.status[data-status=available]::before { content: ''; width: 5px; height: 5px; background: var(--rs-accent-text); border-radius: 50%; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 26px 0; padding-block: 20px; border-block: 1px solid var(--rs-line); }
+.metrics dt { font-size: 12px; color: var(--rs-muted); margin-bottom: 8px; }
+.metrics dd { margin: 0; font-size: clamp(19px, 2.2vw, 28px); font-weight: 500; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.search { flex: 1; min-width: 160px; }
+.empty { padding: 48px 20px; text-align: center; background: var(--rs-panel); border-radius: 8px; }
+.empty h3 { font-size: 20px; font-weight: 500; margin: 0 0 10px; }
+.empty p { margin-inline: auto; color: var(--rs-muted); }
+.message, .preview { padding: 14px 16px; border-left: 3px solid var(--rs-accent); background: var(--rs-panel); margin: 16px 0; font-size: 13px; line-height: 1.7; }
+.danger { color: var(--rs-danger, #b22f2f) !important; }
+.error { color: var(--rs-danger, #b22f2f); font-size: 12px; }
+.error:empty { display: none; }
+.skeleton { height: 80px; margin-block: 8px; background: var(--rs-panel); border-radius: 6px; }
+.editor { max-width: 720px; }
+.back { margin-bottom: 22px; }
+.ruleList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 20px 0; border-block: 1px solid var(--rs-line); margin-block: 24px; }
+.ruleList dt { font-size: 12px; color: var(--rs-muted); margin-bottom: 6px; }
+.ruleList dd { margin: 0; overflow-wrap: anywhere; }
+.capacity { display: block; width: 100%; max-width: 120px; height: 4px; margin-top: 10px; accent-color: var(--rs-accent-text); }
+.menu { position: relative; }
+.menu summary { min-height: 44px; padding: 12px 8px; cursor: pointer; font-size: 12px; }
+.menu[open] { z-index: 2; }
+.menuItems { position: absolute; right: 0; display: grid; min-width: 175px; background: var(--rs-bg); border: 1px solid var(--rs-line); border-radius: 6px; box-shadow: 0 8px 24px #0001; padding: 6px; }
+.menuItems button { text-align: left; border: 0; }
+.confirm { color: var(--rs-fg); background: var(--rs-bg); border: 1px solid var(--rs-line); border-radius: 10px; width: min(460px, calc(100vw - 32px)); padding: 26px; }
+.confirm::backdrop { background: #0006; }
+.confirm h2 { font-size: 22px; margin: 0 0 16px; }
+.confirm p { font-size: 14px; line-height: 1.7; }
+@media (min-width: 700px) and (max-width: 1099px) { .layout { grid-template-columns: 1fr; gap: 24px; } .navigation { position: static; flex-direction: row; flex-wrap: wrap; } .navigation a { border-left: 0; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0; } .navigation a[aria-current] { border-bottom-color: var(--rs-accent); } }
+@media (max-width: 699px) {
+  .page h1 { font-size: 42px !important; }
+  .layout { grid-template-columns: 1fr; gap: 24px; }
+  .navigation { flex-direction: row; position: static; gap: 0; flex-wrap: wrap; border-bottom: 1px solid var(--rs-line); }
+  .navigation a { padding: 12px 10px; font-size: 12px; border-left: 0; border-bottom: 2px solid transparent; border-radius: 0; }
+  .navigation a[aria-current] { border-bottom-color: var(--rs-accent); }
+  .head { flex-wrap: wrap; margin-bottom: 20px; }
+  .head h2 { font-size: 22px; }
+  .fields, .ruleList { grid-template-columns: 1fr; }
+  .metrics { gap: 12px; }
+  .metrics dt { font-size: 11px; }
+  .metrics dd { font-size: 18px; }
+  .table thead { display: none; }
+  .table, .table tbody, .table tr, .table td { display: block; }
+  .table tr { border-bottom: 1px solid var(--rs-line); padding-block: 14px; }
+  .table td { border: 0; padding: 7px 0; }
+  .rates td:not(:first-child)::before { content: attr(data-label); display: block; color: var(--rs-muted); font-size: 12px; margin-bottom: 6px; }
+  .table td[data-label]:not(:first-child)::before { content: attr(data-label); color: var(--rs-muted); font-size: 11px; margin-right: 10px; }
+  .rates td:first-child { width: auto; font-size: 16px; padding-block: 8px; }
+  .table .actions { display: flex; }
+  .footer { align-items: stretch; }
+  .menuItems { left: 0; right: auto; }
+  .editor .footer .actions { width: 100%; }
+  .editor .footer .primary { flex: 1; }
+}
+.page { flex-shrink: 0; }

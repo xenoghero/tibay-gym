@@ -10,12 +10,21 @@ vi.mock("./supabase", () => ({ supabaseAdmin: () => ({ rpc: mocks.ready, storage
 }) }) }));
 import { uploadDailyReceipt, receiptsAvailable } from "./receipt-store";
 import { DEFAULT_SETTINGS } from "@/lib/finance/rules";
+import { voucherFixture } from "@/tests/voucher-fixture";
 beforeEach(() => { mocks.store = memoryFirestore(); mocks.row = null; vi.stubEnv("SUPABASE_SECRET_KEY", "synthetic-private-test-secret");
   mocks.ready.mockResolvedValue({ data: true, error: null }); mocks.upload.mockReset().mockResolvedValue({ error: null });
   mocks.store.data.set("persons/p1", { rateCategory: "student" }); mocks.store.data.set("gymSettings/finance", { ...DEFAULT_SETTINGS, financialCutoverAt: Date.now() - 1000 });
 });
 afterEach(() => vi.unstubAllEnvs());
 const input = () => ({ personId: "p1", category: "student", operationId: "receipt-upload-operation-0001", expectedAmountMinor: 6000, bytes: Buffer.from("encoded-image") });
+it("prepares receipt proof for the discounted total without consuming a voucher use", async () => {
+  mocks.store!.data.set("vouchers/voucher-1", { ...voucherFixture() });
+  mocks.store!.data.set("voucherCodeClaims/TRAIN10", { voucherId: "voucher-1" });
+  const proof = await uploadDailyReceipt({ ...input(), voucherCode: "TRAIN10", expectedAmountMinor: 5400 });
+  expect(mocks.store!.data.get(`receiptIntents/${proof.receiptId}`)!.amountMinor).toBe(5400);
+  expect(mocks.store!.data.get("vouchers/voucher-1")!.heldCount).toBe(0);
+  expect([...mocks.store!.data.keys()].some(path => path.startsWith("voucherUses/"))).toBe(false);
+});
 it("never recreates removed evidence through an old upload retry", async () => {
   const proof = await uploadDailyReceipt(input());
   mocks.store!.data.get(`receiptIntents/${proof.receiptId}`)!.linked = true;

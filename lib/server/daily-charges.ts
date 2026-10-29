@@ -9,6 +9,7 @@ import { adminDb } from "./firebase-admin";
 import { documentId } from "./rfid/validation";
 import { readyReceipt } from "./receipt-proof";
 import { prepareTransactionNumber } from "./transaction-numbers";
+import { prepareVoucher, prepareVoucherSettlement } from "./vouchers";
 
 export function dailyChargeId(personId: string, at: number) {
   return `daily-${createHash("sha256").update(dailyChargeKey(personId, at)).digest("hex")}`;
@@ -17,6 +18,7 @@ export function dailyChargeId(personId: string, at: number) {
 export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: {
   personId: string; category: unknown; at: number; logId: string; source: "qr" | "rfid";
   paymentMethod?: "cash" | "gcash"; eventId: string; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string;
+  voucherCode?: unknown; voucherRevision?: unknown; voucherRateRevision?: unknown;
 }) {
   const settings = (await tx.get(db.doc("gymSettings/finance"))).data() as GymSettings | undefined;
   if (!settings?.financialCutoverAt || input.at < settings.financialCutoverAt) return () => {};
@@ -33,6 +35,10 @@ export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: 
   try { price = snapshotRate(settings, input.category, "daily_session"); }
   catch { throw new ApiError(409, "category-required"); }
   if (input.source === "qr" && input.paymentMethod !== "cash" && input.paymentMethod !== "gcash") throw new ApiError(409, "daily-payment-required");
+  const voucher = input.source === "qr" && input.voucherCode ? await prepareVoucher(tx, db, { code: input.voucherCode, personId: input.personId,
+    kind: "daily_session", category: price.categorySnapshot, baseAmountMinor: price.amountMinor, at: input.at }) : null;
+  if (voucher && (voucher.voucherSnapshot?.revision !== input.voucherRevision || price.rateRevision !== input.voucherRateRevision)) throw new ApiError(409, "voucher-changed");
+  if (voucher) price = { ...price, baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot };
   if (input.source === "qr" && input.expectedAmountMinor !== price.amountMinor) throw new ApiError(409, "daily-price-changed");
   const proof = input.paymentMethod === "gcash" ? await readyReceipt(tx, db, { ...input, chargeId: id, amountMinor: price.amountMinor }) : null;
   const number = await prepareTransactionNumber(tx, db);
@@ -44,7 +50,7 @@ export async function prepareDailyCharge(tx: Transaction, db: Firestore, input: 
     receiptId: proof?.receiptId ?? null, submittedAt: input.at, previousRequestId: null, reviewedBy: null, reviewedAt: null, rejectionReason: null,
     confirmedAt: null, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: input.eventId };
   return () => {
-    number.commit(); proof?.commit();
+    number.commit(); proof?.commit(); voucher?.commit(id, number.number);
     tx.set(ref, { ...charge, activePaymentRequestId: input.paymentMethod ? requestId : null });
     // The scanner has no payment selector: retain the expected charge for reviewed admin collection.
     if (input.paymentMethod) tx.set(db.doc(`paymentRequests/${requestId}`), payment);
@@ -67,10 +73,11 @@ export async function confirmDailyCash(actorId: string, chargeId: string, expect
     }
     if (previous && previous.status !== "pending") throw new ApiError(409, "payment-not-pending");
     const now = Date.now();
+    const settleVoucher = await prepareVoucherSettlement(tx, db, charge, "confirmed", actorId, now);
     const payment: PaymentRequest = { id, chargeId, personId: charge.personId, method: "cash", status: "approved", amountMinor: charge.amountMinor,
       receiptId: null, submittedAt: previous?.submittedAt ?? now, previousRequestId: null, reviewedBy: actorId, reviewedAt: now, rejectionReason: null,
       confirmedAt: now, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: `confirm-${id}` };
-    tx.set(paymentRef, payment); tx.update(ref, { confirmedPaymentRequestId: id });
+    settleVoucher(); tx.set(paymentRef, payment); tx.update(ref, { confirmedPaymentRequestId: id });
     appendAudit(tx, db, { actorId, action: "daily-cash-confirmed", entityType: "paymentRequest", entityId: id,
       personId: charge.personId, operationId: `confirm-${id}`, before: { status: previous?.status ?? null }, after: { status: "approved", amountMinor: charge.amountMinor, method: "cash" }, reason: "Cash received and reviewed" });
     return { ok: true };

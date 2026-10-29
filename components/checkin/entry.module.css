@@ -93,3 +93,4 @@
   .step { margin-bottom: 20px; } .lead { margin-bottom: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { .content button { transition: none; } }
+.page { --rs-fg: #20211d; --rs-bg: #fff; --rs-panel: #faf8f0; --rs-line: #e7e2d2; --rs-muted: #6f6f6d; --rs-accent-text: #806000; --rs-accent: #ffcc00; --rs-danger: #a92d2d; }

@@ -5,6 +5,8 @@ import type { Charge, PaymentRequest, Coverage } from "@/lib/finance/contracts";
 import { ReceiptReview } from "./receipt-review";
 import { DailyPayments } from "./daily-payments";
 import { PaymentDrawer, PaymentStatus, paymentDate, peso, styles } from "./payment-ui";
+import { PriceBreakdown } from "@/components/people/voucher-entry";
+import { SettingsConfirm } from "./settings-confirm";
 interface Row { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; gcashReference?: string | null }
 interface Preview { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; coverage: Coverage | null; previewToken: string; membershipChanged: boolean }
 export function PaymentReview() {
@@ -16,6 +18,7 @@ export function PaymentReview() {
   const [search, setSearch] = useState(""), [status, setStatus] = useState("all"), [method, setMethod] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
   const requestSequence = useRef(0);
   async function headers() { return { Authorization: `Bearer ${await user?.getIdToken()}` }; }
   async function list(next?: string) {
@@ -75,6 +78,17 @@ export function PaymentReview() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Cleanup could not finish."); }
     finally { setBusy(false); }
   }
+  async function closePurchase() {
+    if (!selected || busy || !closeReason.trim()) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/finance/purchases", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
+        body: JSON.stringify({ action: "abandon", chargeId: selected.charge.id, paymentRequestId: selected.payment.id, reason: closeReason, confirmed: true }) });
+      if (!response.ok) throw new Error("Could not close this purchase. Refresh to check whether payment was already approved.");
+      setClosing(false); setSelected(null); setCloseReason(""); await list(); setMessage("Membership request closed. Its voucher reservation was released; history is preserved.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not close this purchase."); }
+    finally { setBusy(false); }
+  }
   const visibleRows = rows.filter(row => {
     const query = search.trim().toLowerCase();
     return (status === "all" || row.payment.status === status) && (method === "all" || row.payment.method === method)
@@ -120,6 +134,7 @@ export function PaymentReview() {
     {reviewLoading && !selected && <p className={styles.message} role="status">Opening payment details…</p>}
     {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
+      {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}
       <dl className={styles.details}>
         <div><dt>Payment method</dt><dd>{selected.payment.method === "gcash" ? "GCash" : "Cash"}</dd></div>
         <div><dt>Category</dt><dd className={styles.method}>{selected.charge.categorySnapshot}</dd></div>
@@ -130,7 +145,7 @@ export function PaymentReview() {
       </dl>
       {selected.coverage && <p className={styles.message}>Final coverage if approved now: {selected.coverage.startDate} to {selected.coverage.expiryDate}</p>}
       {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
-      {selected.payment.status === "pending" ? <>
+      {selected.charge.abandonedAt ? <p className={styles.message}>Closed {paymentDate(selected.charge.abandonedAt)}. {selected.charge.abandonmentReason} This purchase cannot be approved or corrected.</p> : selected.payment.status === "pending" ? <>
         <h3>Review checklist</h3>
         {selected.membershipChanged && <label><input type="checkbox" checked={ack} disabled={busy} onChange={e => setAck(e.target.checked)} /> Membership changed since submission. I reviewed and accept the refreshed coverage.</label>}
         <label><input type="checkbox" checked={reviewed} disabled={busy} onChange={e => setReviewed(e.target.checked)} /> I reviewed the amount, evidence and final coverage.</label>
@@ -138,6 +153,8 @@ export function PaymentReview() {
         {message && <p className={styles.message} role="status">{message}</p>}
         <div className={styles.actions}><button className={styles.primary} disabled={busy || !reviewed || (selected.membershipChanged && !ack)} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve — payment received"}</button><button className={styles.danger} disabled={busy || !reviewed} onClick={() => void decide("reject")}>Reject request</button></div>
       </> : <p>Final outcome: {selected.payment.status}. {selected.payment.rejectionReason}</p>}
+      {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>Close abandoned membership request</button>}
+      {closing && <SettingsConfirm title="Close this membership request?" label="Close request" danger busy={busy} confirmDisabled={!closeReason.trim()} onCancel={() => setClosing(false)} onConfirm={() => void closePurchase()}><p>This permanently ends this purchase and releases its voucher reservation. No membership is activated. Payment corrections will no longer be available; a new purchase will use current pricing.</p><label>Reason (required)<textarea maxLength={500} value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label>{message && <p role="status">{message}</p>}</SettingsConfirm>}
     </PaymentDrawer>}
   </main>;
 }

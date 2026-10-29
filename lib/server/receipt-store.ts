@@ -8,6 +8,7 @@ import { operationId, philippineDate, snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
 import { purchaseChargeId, purchaseRequestId } from "./purchases";
 import type { Charge } from "@/lib/finance/contracts";
+import { previewVoucher } from "./vouchers";
 export const RECEIPT_BUCKET = "payment-receipts";
 export const RECEIPT_TABLE = "tibay_receipts";
 export interface ReceiptRecord {
@@ -26,7 +27,7 @@ export async function receiptsAvailable() {
   catch { return false; }
 }
 export async function uploadDailyReceipt(input: { personId: string; category: unknown; operationId: unknown; expectedAmountMinor: number; bytes: Buffer; registration?: boolean;
-  kind?: Charge["kind"]; previousRequestId?: string }) {
+  kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string }) {
   let operation: string;
   try { operation = operationId(input.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
   if (!await receiptsAvailable()) throw new ApiError(503, "receipt-storage-not-ready");
@@ -38,7 +39,7 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
     const request = (await db.doc(`paymentRequests/${input.previousRequestId}`).get()).data();
     if (!request || request.personId !== input.personId || request.status !== "rejected") throw new ApiError(409, "replacement-unavailable");
     previous = (await db.doc(`charges/${request.chargeId}`).get()).data() as Charge;
-    if (!previous || previous.confirmedPaymentRequestId || previous.activePaymentRequestId !== input.previousRequestId) throw new ApiError(409, "replacement-unavailable");
+    if (!previous || previous.abandonedAt || previous.confirmedPaymentRequestId || previous.activePaymentRequestId !== input.previousRequestId) throw new ApiError(409, "replacement-unavailable");
     kind = previous.kind;
   }
   if (kind !== "daily_session") {
@@ -48,6 +49,8 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
   }
   let price;
   try { price = previous ?? snapshotRate(settings, input.category, kind); } catch { throw new ApiError(409, "category-required"); }
+  if (!previous && input.voucherCode) price = { ...price, ...await previewVoucher({ code: input.voucherCode, personId: input.personId,
+    kind, category: price.categorySnapshot, baseAmountMinor: price.amountMinor, at: now }) };
   if (price.amountMinor !== input.expectedAmountMinor) throw new ApiError(409, "daily-price-changed");
   const id = createHash("sha256").update(JSON.stringify([input.personId, operation])).digest("hex");
   const chargeId = previous?.id ?? (kind === "daily_session" ? dailyChargeId(input.personId, now) : purchaseChargeId(input.personId, operation));
@@ -73,7 +76,7 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
     const deleted = (await tx.get(db.doc(`deletedPersonIds/${input.personId}`))).data();
     if (deleted) throw new ApiError(409, "registration-reuse");
     if ((official ?? pending)?.deletingAt || (!input.registration && !official && !pending)) throw new ApiError(409, "person-unavailable");
-    if (previous && (previous.digest !== digest || previous.chargeId !== chargeId || previous.personId !== input.personId)) throw new ApiError(409, "receipt-operation-conflict");
+    if (previous && (previous.digest !== digest || previous.chargeId !== chargeId || previous.personId !== input.personId || previous.amountMinor !== price.amountMinor)) throw new ApiError(409, "receipt-operation-conflict");
     if (previous?.linked) return;
     tx.set(ref, { personId: input.personId, chargeId, paymentRequestId, amountMinor: price.amountMinor, chargeDate: philippineDate(now),
       digest, path, tokenHash: createHash("sha256").update(token).digest("hex"), state: "ready", linked: false, reconciled: false,

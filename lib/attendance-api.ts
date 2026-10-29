@@ -1,7 +1,9 @@
 import { AttendanceApiError } from "@/lib/attendance-error";
+import { voucherMessages } from "@/lib/finance/vouchers";
 export { AttendanceApiError } from "@/lib/attendance-error";
 
 const attendanceMessages: Record<string, string> = {
+  ...voucherMessages,
   "category-required": "Ask the administrator to set your Student / Regular category before a paid daily visit.",
   "daily-price-changed": "The daily rate changed. Look up your phone again and review the refreshed amount.",
   "daily-payment-required": "Choose a payment method for this daily session, then try again.",
@@ -45,7 +47,7 @@ export async function attendanceApi<T>(path: string, body: unknown, admin = fals
   return data as T;
 }
 
-export interface QrRequest { eventId: string; requestedAt: number; personId?: string; guest?: { phone: string; name: string; address: string } & Partial<import("./registration").RegistrationFields>; intent?: "attendance" | "checkout"; expectedLogId?: string; paymentMethod?: "cash" | "gcash"; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string }
+export interface QrRequest { eventId: string; requestedAt: number; personId?: string; guest?: { phone: string; name: string; address: string } & Partial<import("./registration").RegistrationFields>; intent?: "attendance" | "checkout"; expectedLogId?: string; paymentMethod?: "cash" | "gcash"; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number }
 export interface QrLookupPerson { id: string; name: string; type: "member" | "guest"; status: "active" | "expired" | null; membershipExpiryMs: number | null; visitCount: number; unverified?: boolean }
 export interface DailyRates { studentDailyMinor: number; regularDailyMinor: number; gcashAvailable?: boolean }
 export interface DailyPaymentDue { amountMinor: number | null; expiredMember: boolean; gcashAvailable: boolean }

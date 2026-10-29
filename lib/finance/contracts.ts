@@ -26,6 +26,11 @@ export interface RateSnapshot {
   amountMinor: number;
 }
 export interface Charge extends RateSnapshot {
+  baseAmountMinor?: number;
+  discountAmountMinor?: number;
+  voucherSnapshot?: import("./vouchers").VoucherSnapshot | null;
+  abandonedAt?: number | null;
+  abandonmentReason?: string | null;
   confirmedPaymentRequestId?: string | null;
   activePaymentRequestId?: string | null;
   id: string;

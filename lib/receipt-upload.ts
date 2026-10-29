@@ -11,6 +11,7 @@ export function dailyReceiptUpload(file: File, phone: string, key: string): Rece
       }
       const response = await fetch("/api/receipts/upload", { method: "POST", headers: { "Content-Type": file.type,
         "x-operation-id": request.eventId, "x-expected-amount": String(request.expectedAmountMinor),
+        ...(request.voucherCode ? { "x-voucher-code": request.voucherCode } : {}),
         ...(request.guest ? { "x-registration": encodeURIComponent(JSON.stringify(request.guest)) } : {}) }, body: file, signal: AbortSignal.timeout(60_000) });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));

@@ -16,6 +16,8 @@ import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
 import { dailyReceiptUpload } from "@/lib/receipt-upload";
 import { AttendanceApiError } from "@/lib/attendance-error";
 import { CHECKIN_PHONE_ERROR, isCheckinPhone } from "@/lib/checkin-phone";
+import { VoucherEntry, PriceBreakdown, voucherError } from "@/components/people/voucher-entry";
+import type { DiscountQuote } from "@/lib/finance/vouchers";
 
 // Attendance requests go through the backend, with no page-load cleanup.
 const C = {
@@ -52,6 +54,8 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [registrationError, setRegistrationError] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"" | "cash" | "gcash">("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null), [receiptKey, setReceiptKey] = useState("");
+  const [voucher, setVoucher] = useState<(DiscountQuote & { rateRevision: number }) | null>(null);
+  const [voucherBusy, setVoucherBusy] = useState(false);
   const [waitSeconds, setWaitSeconds] = useState(0);
   const [registrationBusy, setRegistrationBusy] = useState(false);
   const [registered, setRegistered] = useState(false);
@@ -62,7 +66,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [registrationRetryAt, setRegistrationRetryAt] = useState<number | null>(null);
   const locked = state.busy || !!state.pending || registrationBusy || registrationPending;
   const expired = state.status === "unconfirmed-expired";
-  const disabled = state.busy || registrationBusy || expired || waitSeconds > 0;
+  const disabled = state.busy || registrationBusy || voucherBusy || expired || waitSeconds > 0;
   const registering = state.stage === "name" || (registrationIntent && !checkinRequested && state.stage === "phone");
   const retryAt = Math.max(registrationRetryAt ?? 0, state.retryAt ?? 0) || null;
 
@@ -89,6 +93,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     setCategory(""); setSource(""); setOther(""); setRegistrationError("");
     setPaymentMethod("");
     setReceiptFile(null); setReceiptKey("");
+    setVoucher(null);
     setRegistered(false); setCheckinRequested(false); setRegistrationPending(false); registrationRequest.current = null;
   }
   async function createAccount() {
@@ -121,15 +126,28 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   }
   function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (voucherBusy) return;
     if (state.pending) { void attempt.retry(); return; }
     if (state.stage === "payment") {
-      if (paymentMethod) void attempt.submitDailyPayment(paymentMethod, paymentMethod === "gcash" && receiptFile ? dailyReceiptUpload(receiptFile, state.phone, receiptKey) : undefined);
+      if (paymentMethod) void attempt.submitDailyPayment(paymentMethod, paymentMethod === "gcash" && receiptFile ? dailyReceiptUpload(receiptFile, state.phone, receiptKey) : undefined,
+        voucher?.voucherSnapshot ? { voucherCode: voucher.voucherSnapshot.code, voucherRevision: voucher.voucherSnapshot.revision, voucherRateRevision: voucher.rateRevision, amountMinor: voucher.amountMinor } : undefined);
       return;
     }
     if (registering) {
       void createAccount();
     }
-    else void attempt.submitPhone(phone, "attendance");
+    else { setVoucher(null); void attempt.submitPhone(phone, "attendance"); }
+  }
+  async function applyVoucher(code: string) {
+    setVoucherBusy(true);
+    try {
+      if (!code) { setVoucher(null); setReceiptFile(null); setReceiptKey(""); return; }
+      const response = await fetch("/api/attendance/voucher", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: state.phone, category, voucherCode: code }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(voucherError(result.error));
+      setVoucher(result); setReceiptFile(null); setReceiptKey("");
+    } finally { setVoucherBusy(false); }
   }
   const progress = registrationBusy ? "Creating your account…" : state.status === "lookup-pending" ? "Looking up your phone number…"
     : state.status === "upload-pending" ? "Saving your private receipt…"
@@ -140,12 +158,12 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     name: state.displayName, type: person?.type ?? "guest",
     status: person ? effectiveMemberStatusAt({ ...person, membershipExpiry }, state.confirmedAt!) : null,
     membershipExpiry, visitCount: state.result.visitCount, unverified: state.result.unverified,
-    paymentMethod: paymentMethod || undefined, paymentAmount: state.paymentDue?.amountMinor,
+    paymentMethod: paymentMethod || undefined, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
   } : null;
 
   return (
     <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : state.stage === "payment" ? "payment" : "phone"}
-      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={state.paymentDue?.amountMinor}>
+      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}>
         {!registered && state.status !== "confirmed" && (
           <form onSubmit={submit} aria-busy={state.busy || registrationBusy}>
             <h1 style={headingStyle}>{registering ? "Create account" : state.stage === "payment" ? "Confirm your visit" : "Check in"}</h1>
@@ -154,8 +172,9 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
               <div className={styles.session}><h2>Daily session</h2>
               {state.paymentDue?.expiredMember && <p>Your membership has expired. This daily session records a visit and does not renew membership.</p>}
               {state.paymentDue?.amountMinor === null ? <p>Ask the administrator to set your Student / Regular category before a paid daily session.</p> :
-                <><strong className={styles.amount}>₱{((state.paymentDue?.amountMinor ?? 0) / 100).toFixed(2)}</strong><p>Payment remains pending until the administrator confirms it.</p></>}
+                <><PriceBreakdown quote={voucher ?? { amountMinor: state.paymentDue?.amountMinor ?? 0 }} /><p>Payment remains pending until the administrator confirms it.</p></>}
               </div>
+              {state.paymentDue?.amountMinor != null && <VoucherEntry quote={voucher} disabled={locked || voucherBusy} onApply={applyVoucher} />}
               <PaymentChoice value={paymentMethod} onChange={method => { setPaymentMethod(method); setReceiptFile(null); setReceiptKey(""); }} disabled={locked} gcashAvailable={state.paymentDue?.gcashAvailable ?? false} />
             </> : !registering ? (
               <>

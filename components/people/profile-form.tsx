@@ -197,7 +197,7 @@ export function ProfileForm({
 
       if (mode === "create") {
         if (isMember && (!purchaseQuote || purchaseQuote.categorySnapshot !== category)) throw new Error("Review a configured monthly price before creating a membership request.");
-        const id = await createPersonWithProfileDetails(input, privateDetails, isMember && purchaseQuote ? { quoteToken: purchaseQuote.quoteToken } : undefined);
+        const id = await createPersonWithProfileDetails(input, privateDetails, isMember && purchaseQuote ? { quoteToken: purchaseQuote.quoteToken, ...(purchaseQuote.voucherSnapshot ? { voucherCode: purchaseQuote.voucherSnapshot.code } : {}) } : undefined);
         router.push(isMember ? "/dashboard/payments" : `/dashboard/people/${id}/edit?created=1`);
         return;
       }
@@ -331,7 +331,7 @@ export function ProfileForm({
 
         <p style={hintStyle}>RFID is optional. Manage cards from the person’s profile after saving.</p>
 
-        {isMember && mode === "create" && <NewProfilePurchaseQuote category={category} onQuote={setPurchaseQuote} />}
+        {isMember && mode === "create" && <NewProfilePurchaseQuote key={category} category={category} onQuote={setPurchaseQuote} disabled={submitting} />}
         {isMember && mode === "edit" && (
           <>
             <Field

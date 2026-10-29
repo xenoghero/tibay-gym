@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     const caller = publicCaller(request);
     publicRateLimiter.consume(caller, "scan");
     const body = await readBody(request, 4096);
-    onlyFields(body, ["eventId", "requestedAt", "personId", "guest", "intent", "expectedLogId", "paymentMethod", "expectedAmountMinor", "receiptId", "receiptToken"]);
+    onlyFields(body, ["eventId", "requestedAt", "personId", "guest", "intent", "expectedLogId", "paymentMethod", "expectedAmountMinor", "receiptId", "receiptToken", "voucherCode", "voucherRevision", "voucherRateRevision"]);
+    if (body.voucherCode !== undefined && (typeof body.voucherCode !== "string" || body.voucherCode.length > 24 || !Number.isSafeInteger(body.voucherRevision) || !Number.isSafeInteger(body.voucherRateRevision))) throw new ApiError(400, "voucher-invalid");
     if (body.paymentMethod !== undefined && body.paymentMethod !== "cash" && body.paymentMethod !== "gcash") throw new ApiError(400, "invalid-payment-method");
     if (body.expectedAmountMinor !== undefined && (typeof body.expectedAmountMinor !== "number" || !Number.isSafeInteger(body.expectedAmountMinor) || body.expectedAmountMinor <= 0)) throw new ApiError(400, "invalid-amount");
     if ((body.receiptId !== undefined || body.receiptToken !== undefined) && body.paymentMethod !== "gcash") throw new ApiError(400, "invalid-receipt");
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     const result = await scanAttendance({ source: "qr", personId, guest: capture, eventId: id,
       ...(body.paymentMethod ? { paymentMethod: body.paymentMethod } : {}),
       ...(typeof body.expectedAmountMinor === "number" ? { expectedAmountMinor: body.expectedAmountMinor } : {}),
+      ...(typeof body.voucherCode === "string" ? { voucherCode: body.voucherCode, voucherRevision: body.voucherRevision as number, voucherRateRevision: body.voucherRateRevision as number } : {}),
       ...(body.receiptId ? { receiptId: documentId(body.receiptId), receiptToken: body.receiptToken as string } : {}),
       requestedAt: body.requestedAt, ...(intent === "checkout" ? { intent, expectedLogId } : {}) });
     if (!result.action || !result.logId) throw new ApiError(409, result.resultCode);

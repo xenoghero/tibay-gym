@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:sms:offline": "vitest run lib/sms lib/server/sms app/api/sms components/dashboard/sms tests/sms-gateway.integration.test.ts --maxWorkers=2",
     "supabase:check": "node --experimental-strip-types --conditions=react-server scripts/supabase-check.mjs",
     "receipts:setup": "node scripts/receipts-setup.mjs",
     "test:abuse": "node scripts/test-abuse.mjs",

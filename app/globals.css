@@ -113,6 +113,7 @@
   --rs-line: #e7e2d2;
   --rs-accent: #ffcc00;
   --rs-accent-text: #806000;
+  --rs-danger: #a92d2d;
   --rs-accent-soft: rgba(255, 204, 0, 0.14);
   --rs-on-accent: #171400;
   /* "inverse" tokens: text sitting on the dark (--rs-fg) login panel */
@@ -152,6 +153,7 @@
     --rs-line: #343022;
     --rs-accent: #ffcc00;
     --rs-accent-text: #ffda47;
+    --rs-danger: #ef9990;
     --rs-accent-soft: rgba(255, 204, 0, 0.12);
     --rs-on-accent: #171400;
     --rs-inv-muted: rgba(12, 12, 12, 0.66);

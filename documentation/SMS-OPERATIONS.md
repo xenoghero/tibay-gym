@@ -27,6 +27,8 @@ An admin asks whether the customer agrees to receive Tibay Gym reminders and gym
 
 ## Queue and recovery
 
+For phone-free verification, run `npm run test:sms:offline`. It exercises the queue/worker and actual HTTP adapter against a synthetic loopback gateway without contacting the configured phone or changing live settings. See `sms-offline-verification.md` for results and the distinction between simulated delivery and real handset receipt.
+
 The admin API requires the existing verified admin identity; the worker POST endpoint `/api/sms/worker` supports that identity or the existing private maintenance credential. It is ready for later scheduling; no host or schedule was created. Use **Process queued messages** locally. Each run rotates through at most ten history rows, including provider-status reconciliation. Larger histories require more runs; a short run does not imply the whole queue is drained.
 
 Messages use stable SHA-256 IDs and one recipient per gateway submission. Claims use Firestore transactions with 60-second leases; requests time out after 12 seconds and do not follow redirects. The worker stores only response codes, allowlisted state names and fixed outcome codes, not raw provider bodies. Safe explicit HTTP 429 rejections retry with exponential backoff (2 then 4 minutes) up to the configured maximum. Validation/auth rejections are terminal; HTTP 5xx, conflicts, malformed responses, transport errors and expired in-flight claims remain uncertain and are looked up by the same ID. Even a lookup returning 404 never triggers a blind resend. Check the Android gateway/outbound log and recipient when a message remains indeterminate; the application intentionally has no force-resend action.

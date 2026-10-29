@@ -39,6 +39,7 @@ const expiredMessage = "Attendance is still unconfirmed and the recovery window 
 // rejection must never erase an earlier uncertain outcome (even for these codes).
 // person-unavailable is deliberately excluded: post-commit projection can fail.
 const definiteRejections = new Set(["guest-conflict", "rate-limited", "attendance-cooldown", "attendance-not-initialized", "no-open-session", "checkout-session-changed", "category-required", "daily-payment-required", "gcash-unavailable", "registration-fields-required", "daily-price-changed", "valid-receipt-required", "daily-payment-already-submitted", "registration-reuse"]);
+for (const code of ["voucher-invalid", "voucher-unavailable", "voucher-not-started", "voucher-expired", "voucher-scope", "voucher-minimum", "voucher-limit", "voucher-customer-limit", "voucher-payable", "voucher-no-discount", "voucher-changed"]) definiteRejections.add(code);
 
 /** In-memory attendance lifecycle with stable request identity for retries. */
 export class CheckinAttempt {
@@ -129,11 +130,12 @@ export class CheckinAttempt {
     } catch (error) { this.fail(error, !!this.state.pending); }
     finally { this.update({ busy: false }); }
   }
-  async submitDailyPayment(paymentMethod: "cash" | "gcash", receipt?: ReceiptPreparation) {
+  async submitDailyPayment(paymentMethod: "cash" | "gcash", receipt?: ReceiptPreparation, voucher?: { voucherCode: string; voucherRevision: number; voucherRateRevision: number; amountMinor: number }) {
     if (this.state.busy || this.state.pending || this.state.stage !== "payment" || (!this.state.person && !this.guestDraft) || (this.state.retryAt ?? 0) > this.deps.now()) return;
     if (this.state.paymentDue?.amountMinor === null) { this.update({ error: "Ask the administrator to classify your rate category first." }); return; }
     this.update({ busy: true, error: null });
-    try { await this.send({ ...(this.guestDraft ? { guest: this.guestDraft } : { personId: this.state.person!.id }), intent: "attendance", paymentMethod, expectedAmountMinor: this.state.paymentDue!.amountMinor! }, false, receipt); }
+    try { await this.send({ ...(this.guestDraft ? { guest: this.guestDraft } : { personId: this.state.person!.id }), intent: "attendance", paymentMethod,
+      expectedAmountMinor: voucher?.amountMinor ?? this.state.paymentDue!.amountMinor!, ...(voucher ? { voucherCode: voucher.voucherCode, voucherRevision: voucher.voucherRevision, voucherRateRevision: voucher.voucherRateRevision } : {}) }, false, receipt); }
     catch (error) { this.fail(error, !!this.state.pending); }
     finally { this.update({ busy: false }); }
   }

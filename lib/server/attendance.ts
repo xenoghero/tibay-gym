@@ -17,7 +17,7 @@ export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
 export const STALE_SESSION_MS = 4 * 60 * 60 * 1_000;
 type ScanRequest = { eventId: string; requestedAt: number } & (
-  { source: "qr"; personId: string; guest?: { phone: string; name: string; address: string } & Partial<RegistrationFields>; intent?: "checkout"; expectedLogId?: string; paymentMethod?: "cash" | "gcash"; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string } |
+  { source: "qr"; personId: string; guest?: { phone: string; name: string; address: string } & Partial<RegistrationFields>; intent?: "checkout"; expectedLogId?: string; paymentMethod?: "cash" | "gcash"; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number } |
   { source: "rfid"; uid: string; request: Request }
 );
 interface PersonData {
@@ -48,6 +48,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     ...(input.source === "qr" && input.guest ? [input.guest] : []),
     ...(input.source === "qr" && input.paymentMethod ? [input.paymentMethod] : []),
     ...(input.source === "qr" && input.expectedAmountMinor !== undefined ? [input.expectedAmountMinor] : []),
+    ...(input.source === "qr" && input.voucherCode ? [input.voucherCode, input.voucherRevision, input.voucherRateRevision] : []),
     ...(input.source === "qr" && input.receiptId ? [input.receiptId, input.receiptToken] : []),
     ...(checkoutOnly ? ["checkout-only-v1", expectedLogId] : [])]);
   const db = adminDb();
@@ -158,6 +159,8 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
         at: now, logId: newLog.id, source: input.source, eventId: input.eventId,
         paymentMethod: input.source === "qr" ? input.paymentMethod : undefined,
         expectedAmountMinor: input.source === "qr" ? input.expectedAmountMinor : undefined,
+        voucherCode: input.source === "qr" ? input.voucherCode : undefined, voucherRevision: input.source === "qr" ? input.voucherRevision : undefined,
+        voucherRateRevision: input.source === "qr" ? input.voucherRateRevision : undefined,
         receiptId: input.source === "qr" ? input.receiptId : undefined, receiptToken: input.source === "qr" ? input.receiptToken : undefined }) : () => {};
     const stamp = Timestamp.fromMillis(now);
     if (guest) {
