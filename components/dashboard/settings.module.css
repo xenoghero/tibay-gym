@@ -95,3 +95,32 @@
   .editor .footer .primary { flex: 1; }
 }
 .page { flex-shrink: 0; }
+
+.drawer { --drawer-offset: translateX(100%); position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0; width: min(760px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; overflow: hidden; border: 0; border-left: 1px solid var(--rs-line); background: var(--rs-bg); color: var(--rs-fg); font-family: var(--font-geist-sans), system-ui, sans-serif; animation: drawer-in 280ms cubic-bezier(.22, 1, .36, 1) both; }
+.drawer[data-closing=true] { animation: drawer-out 220ms ease-in both; }
+.drawer::backdrop { background: rgb(0 0 0 / .6); animation: backdrop-in 280ms ease both; }
+.drawer[data-closing=true]::backdrop { animation: backdrop-out 220ms ease both; }
+.drawerInner { height: 100%; display: flex; flex-direction: column; }
+.drawerHeader { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 28px; border-bottom: 1px solid var(--rs-line); }
+.drawerHeader h2 { margin: 0; font-size: 28px; overflow-wrap: anywhere; }
+.drawerHeader button { display: grid; place-items: center; flex: none; width: 44px; padding: 0; }
+.drawerBody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 28px; scrollbar-gutter: stable; }
+.drawerBody .editor { max-width: none; }
+.drawerBody .table { table-layout: fixed; }
+.drawerBody .table td { overflow-wrap: anywhere; }
+.drawerBody .footer { position: sticky; bottom: -28px; background: var(--rs-bg); padding-block: 16px; z-index: 1; }
+@keyframes drawer-in { from { transform: var(--drawer-offset); } to { transform: translate(0); } }
+@keyframes drawer-out { from { transform: translate(0); } to { transform: var(--drawer-offset); } }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@media (max-width: 699px) {
+  .drawer { --drawer-offset: translateY(100%); inset: auto 0 0; width: 100%; height: 92dvh; max-height: 100dvh; border-left: 0; border-top: 1px solid var(--rs-line); border-radius: 18px 18px 0 0; }
+  .drawerHeader { padding: 18px 20px; }
+  .drawerHeader h2 { font-size: 24px; }
+  .drawerBody { padding: 24px 20px max(24px, env(safe-area-inset-bottom)); }
+  .drawerBody .table { table-layout: auto; }
+  .drawerBody .footer { bottom: -24px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .drawer[data-closing=true], .drawer::backdrop, .drawer[data-closing=true]::backdrop { animation-duration: 1ms; }
+}

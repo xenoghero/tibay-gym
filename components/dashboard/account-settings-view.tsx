@@ -383,7 +383,6 @@ const pageStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
   width: "100%",
-  maxWidth: 1280,
   padding: "34px 40px 60px",
   display: "flex",
   flexDirection: "column",
