@@ -81,7 +81,7 @@ export function RfidCardControls({ personId, personName }: { personId: string; p
           {status.active.lastErrorCode && <p role="alert">{cardError(status.active.lastErrorCode)} The request remains pending.</p>}
           <button style={button} disabled={busy} onClick={() => void act("cancel")}>{busy ? "Working…" : `Cancel enrollment for ${status.active.personName}`}</button>
         </div> : <p style={hint}>Attendance mode — the scanner is available for normal check-in and check-out when online.</p>}
-        {latest && latest.status !== "pending" && <p role="status" style={feedback}>{latest.status === "completed" ? `Last enrollment completed for ${personName} with card ${latest.capturedUid ?? ""}.` : `Enrollment for ${personName} ${latest.status}. The request did not change their card.`}</p>}
+        {latest && latest.status !== "pending" && <p role="status" style={feedback}>{latest.status === "completed" ? `Last enrollment completed for ${personName} with card ${latest.capturedUid ?? ""}.` : latest.lastErrorCode === "card-owned" ? cardError("card-owned") : `Enrollment for ${personName} ${latest.status}. The request did not change their card.`}</p>}
       </>}
       {notice && <p role="status" style={feedback}>{notice}</p>}
       {confirmation && <div role="group" aria-label="Confirm card action" style={feedback}>

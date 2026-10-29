@@ -5,7 +5,7 @@ const messages: Record<string, string> = {
   "device-not-provisioned": "Scanner is not ready. Ask the system manager to set it up.",
   "enrollment-active": "Another enrollment is active. Review the shared request below before trying again.",
   "binding-changed": "This person’s card changed in another tab. Review the current card and try again.",
-  "card-owned": "This card belongs to another person. Tap a different card, or remove it from its owner’s profile first.",
+  "card-owned": "This card belongs to another person. Enrollment ended. Start Assign Card or Replace Card again to try an available card, or remove this card from its owner’s profile first.",
   "registry-conflict": "Card records need attention. Ask the system manager to check this binding.",
   "person-unavailable": "This profile is being removed or is no longer available.",
   "invalid-uid": "The scanner sent an unsupported card UID. Tap a supported card.",

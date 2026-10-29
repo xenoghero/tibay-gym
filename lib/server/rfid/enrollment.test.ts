@@ -120,16 +120,34 @@ it("serializes overlapping tabs and claims a guest card atomically without atten
   expect(store.data.get("rfidCards/09:70:65:20")?.personId).toBe("p1");
   expect(person().visitCount).toBe(4); expect(attendance()).toHaveLength(0); expect(audits()).toHaveLength(1);
   expect(device().activeAssignmentId).toBeNull();
+  vi.setSystemTime(now + 60_000);
+  expect(await pollCommand(request)).toMatchObject({ mode: "attendance" });
+  expect(await capture(id, "69:1A:71:9E", "enroll-event-000002")).toMatchObject({ resultCode: "assignment-completed" });
+  expect(person().rfidTagId).toBe("09:70:65:20");
 });
-it("keeps invalid and conflicting captures pending so another card can succeed", async () => {
+it("keeps invalid captures pending but ends enrollment when the card belongs to another profile", async () => {
   store.data.set("rfidCards/09:70:65:20", { personId: "p2" });
   person("p2").rfidTagId = "09:70:65:20";
   const id = (await begin()).assignmentId!;
   expect((await capture(id, "bad"))).toMatchObject({ resultCode: "invalid-uid" });
   expect(store.data.get(`rfidAssignments/${id}`)).toMatchObject({ status: "pending", lastErrorCode: "invalid-uid" });
   expect((await capture(id, "09:70:65:20", "enroll-event-000002"))).toMatchObject({ resultCode: "card-owned" });
-  expect(person().rfidTagId).toBeNull(); expect(device().activeAssignmentId).toBe(id);
-  expect(await capture(id, "69:1A:71:9E", "enroll-event-000003")).toMatchObject({ resultCode: "rfid-assigned" });
+  expect(person().rfidTagId).toBeNull(); expect(device().activeAssignmentId).toBeNull();
+  expect(store.data.get(`rfidAssignments/${id}`)).toMatchObject({ status: "cancelled", lastErrorCode: "card-owned" });
+  vi.setSystemTime(now + 60_000);
+  expect(await pollCommand(request)).toMatchObject({ mode: "attendance" });
+  const status = await adminStatus(new Request("https://example.com/api/rfid/admin/assignments?personId=p1"));
+  expect(await status.json()).toMatchObject({ active: null, latest: { id, status: "cancelled", lastErrorCode: "card-owned" } });
+  expect(await capture(id, "69:1A:71:9E", "enroll-event-000003")).toMatchObject({ resultCode: "assignment-cancelled" });
+  expect(person().rfidTagId).toBeNull();
+  // Retrying a lost response must recover the original rejection without rearming.
+  expect(await capture(id, "09:70:65:20", "enroll-event-000002", now)).toMatchObject({ resultCode: "card-owned" });
+  expect(device().activeAssignmentId).toBeNull();
+  const next = (await begin()).assignmentId!;
+  expect(await capture(id, "09:70:65:20", "enroll-event-000002", now)).toMatchObject({ resultCode: "card-owned" });
+  expect(device().activeAssignmentId).toBe(next);
+  expect(await capture(next, "69:1A:71:9E", "enroll-event-000004")).toMatchObject({ resultCode: "rfid-assigned" });
+  expect(await pollCommand(request)).toMatchObject({ mode: "attendance" });
   expect(person("p2").rfidTagId).toBe("09:70:65:20");
 });
 it("recovers lost committed results after the command deadline and rejects event reuse", async () => {
@@ -155,8 +173,10 @@ it("replacement preserves the original on conflict and releases it only on succe
   store.data.set("rfidCards/69:1A:71:9E", { personId: "p2" });
   expect(await capture(id, "69:1A:71:9E", "enroll-event-000002")).toMatchObject({ resultCode: "card-owned" });
   expect(person().rfidTagId).toBe("09:70:65:20"); expect(store.data.has("rfidCards/09:70:65:20")).toBe(true);
+  expect(device().activeAssignmentId).toBeNull();
   store.data.delete("rfidCards/69:1A:71:9E");
-  expect(await capture(id, "69:1A:71:9E", "enroll-event-000003")).toMatchObject({ resultCode: "rfid-assigned" });
+  const next = (await begin("p1", "replace", "09:70:65:20")).assignmentId!;
+  expect(await capture(next, "69:1A:71:9E", "enroll-event-000003")).toMatchObject({ resultCode: "rfid-assigned" });
   expect(store.data.has("rfidCards/09:70:65:20")).toBe(false); expect(person().rfidTagId).toBe("69:1A:71:9E");
   expect((await scanAttendance({ source: "rfid", uid: "09:70:65:20", eventId: "old-card-scan-0001",
     requestedAt: Date.now(), request })).resultCode).toBe("unknown-card");

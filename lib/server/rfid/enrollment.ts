@@ -158,7 +158,9 @@ export async function captureAssignment(request: Request, body: Record<string, u
     else if (previous && (!old || old.personId !== assignment.personId)) code = "registry-conflict";
     else if (assignment.operation === "assign" && previous && uid !== previous) code = "replace-required";
     else if (assignment.operation === "replace" && !previous) code = "no-card-assigned";
-    const terminal = code === "rfid-assigned" || expired || code === "person-unavailable";
+    // An owned-card rejection ends this attempt. Only an explicit admin action
+    // may arm another enrollment; the scanner's cooldown cannot end it itself.
+    const terminal = code === "rfid-assigned" || code === "card-owned" || expired || code === "person-unavailable";
     if (pending && (owned || expired)) {
       tx.update(assignmentRef, { lastErrorCode: code === "rfid-assigned" ? null : code,
         ...(terminal ? { status: code === "rfid-assigned" ? "completed" : expired ? "expired" : "cancelled" } : {}),
