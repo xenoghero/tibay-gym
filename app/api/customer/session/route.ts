@@ -24,7 +24,7 @@ export async function DELETE(request: Request) {
 export async function GET(request: Request) {
   return handleApi(async () => {
     const { person, official, session } = await requireCustomer(request);
-    return json({ rateCategory: person.rateCategory ?? null, type: person.type,
+    return json({ name: person.name, rateCategory: person.rateCategory ?? null, type: person.type,
       status: effectiveMemberStatusAt({ type: person.type, status: person.status, membershipExpiry: person.membershipExpiry ?? null }, Date.now()),
       membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, verified: official, expiresAt: session.expiresAt });
   });

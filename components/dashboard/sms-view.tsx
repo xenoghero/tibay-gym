@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { useContentTransition } from "@/lib/use-content-transition";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
@@ -214,8 +216,8 @@ export function SmsView() {
                 <label className={styles.checkbox}><input type="checkbox" checked={settings.policyConfirmed} onChange={e => setSettings({ ...settings, policyConfirmed: e.target.checked })} /><span>I confirmed the sending SIM, funding, templates, permission collection and opt-out process before activation.</span></label>
               </section>
               <section className={styles.panel}><div className={styles.kicker}>02 / Schedule</div><h2>Timing & retries</h2><div className={styles.fieldGrid}>
-                <label>Daily sending time (Asia/Manila)<input type="time" required value={settings.sendTime} onChange={e => setSettings({ ...settings, sendTime: e.target.value })} /></label>
-                <label>Maximum attempts<input type="number" aria-label="Maximum attempts" min={1} max={3} required value={settings.maxAttempts} onChange={e => setSettings({ ...settings, maxAttempts: Number(e.target.value) })} /><small>Only explicit rate-limit rejections retry. Maximum 3 attempts.</small></label>
+                <label>Daily sending time (Asia/Manila)<FormInput type="time" required value={settings.sendTime} onChange={e => setSettings({ ...settings, sendTime: e.target.value })} /></label>
+                <label>Maximum attempts<select aria-label="Maximum attempts" required value={settings.maxAttempts} onChange={e => setSettings({ ...settings, maxAttempts: Number(e.target.value) })}>{[1, 2, 3].map(count => <option key={count} value={count}>{count}</option>)}</select><small>Only explicit rate-limit rejections retry. Maximum 3 attempts.</small></label>
               </div></section>
               <section className={`${styles.panel} ${styles.wide}`}><div className={styles.kicker}>03 / Message templates</div><h2>Reminder messages</h2><p>Keep messages clear and include the opt-out instructions.</p><div className={styles.fieldGrid}>
                 <label>Expiry template<textarea aria-label="Expiry template" required maxLength={480} value={settings.expiryTemplate} onChange={e => setSettings({ ...settings, expiryTemplate: e.target.value })} /><small>Available tokens: {"{expiry}"}, {"{days}"} · {settings.expiryTemplate.length}/480 characters</small></label>

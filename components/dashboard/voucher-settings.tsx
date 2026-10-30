@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -172,17 +174,17 @@ export function VoucherSettings() {
         </div></fieldset>
         <fieldset disabled={busy}><legend>Discount</legend><div className={styles.fields}>
           <label>Discount type<select value={editor.draft.discountKind} onChange={e => change({ discountKind: e.target.value as Draft["discountKind"] })}><option value="fixed">Fixed amount (PHP)</option><option value="percent">Percentage (%)</option></select></label>
-          <label>{editor.draft.discountKind === "fixed" ? "Amount off (PHP)" : "Percentage off (%)"}<input required inputMode="decimal" value={editor.draft.amount} onChange={e => change({ amount: e.target.value })} /></label>
-          {editor.draft.discountKind === "percent" && <label>Maximum discount (PHP, optional)<input inputMode="decimal" value={editor.draft.maxDiscount} onChange={e => change({ maxDiscount: e.target.value })} /></label>}
-          <label>Minimum purchase (PHP)<input inputMode="decimal" value={editor.draft.minimum} onChange={e => change({ minimum: e.target.value })} /></label>
+          <label>{editor.draft.discountKind === "fixed" ? "Amount off (PHP)" : "Percentage off (%)"}<FormInput required inputMode="decimal" value={editor.draft.amount} onChange={e => change({ amount: e.target.value })} /></label>
+          {editor.draft.discountKind === "percent" && <label>Maximum discount (PHP, optional)<FormInput inputMode="decimal" value={editor.draft.maxDiscount} onChange={e => change({ maxDiscount: e.target.value })} /></label>}
+          <label>Minimum purchase (PHP)<FormInput inputMode="decimal" value={editor.draft.minimum} onChange={e => change({ minimum: e.target.value })} /></label>
         </div><small>At least PHP 1 must remain payable. One voucher per purchase; percentage discounts round down to the nearest centavo.</small></fieldset>
         <fieldset disabled={busy}><legend>Eligible purchases</legend><div className={styles.checkGroup}>{(Object.keys(kindNames) as ChargeKind[]).map(k => <label key={k}><input type="checkbox" checked={editor.draft.kinds.includes(k)} onChange={e => change({ kinds: e.target.checked ? [...editor.draft.kinds, k] : editor.draft.kinds.filter(x => x !== k) })} />{kindNames[k]}</label>)}</div></fieldset>
         <fieldset disabled={busy}><legend>Rate categories</legend><div className={styles.checkGroup}>{(["student", "regular"] as const).map(c => <label key={c}><input type="checkbox" checked={editor.draft.categories.includes(c)} onChange={e => change({ categories: e.target.checked ? [...editor.draft.categories, c] : editor.draft.categories.filter(x => x !== c) })} />{c === "student" ? "Student" : "Regular"}</label>)}</div></fieldset>
         <fieldset disabled={busy}><legend>Schedule & limits</legend><div className={styles.fields}>
-          <label>Starts (optional)<input type="datetime-local" value={editor.draft.starts} onChange={e => change({ starts: e.target.value })} /><small>Philippine time · Asia/Manila</small></label>
-          <label>Ends (optional)<input type="datetime-local" value={editor.draft.ends} onChange={e => change({ ends: e.target.value })} /><small>Unavailable from this exact time.</small></label>
-          <label>Total uses (optional)<input aria-label="Total uses (optional)" inputMode="numeric" value={editor.draft.total} onChange={e => change({ total: e.target.value })} /><small>Held and confirmed uses consume capacity.</small></label>
-          <label>Uses per customer (optional)<input aria-label="Uses per customer (optional)" inputMode="numeric" value={editor.draft.customer} onChange={e => change({ customer: e.target.value })} /><small>Clear to allow unlimited uses per profile.</small></label>
+          <label>Starts (optional)<FormInput type="datetime-local" value={editor.draft.starts} onChange={e => change({ starts: e.target.value })} /><small>Philippine time · Asia/Manila</small></label>
+          <label>Ends (optional)<FormInput type="datetime-local" value={editor.draft.ends} onChange={e => change({ ends: e.target.value })} /><small>Unavailable from this exact time.</small></label>
+          <label>Total uses (optional)<FormInput aria-label="Total uses (optional)" inputMode="numeric" value={editor.draft.total} onChange={e => change({ total: e.target.value })} /><small>Held and confirmed uses consume capacity.</small></label>
+          <label>Uses per customer (optional)<FormInput aria-label="Uses per customer (optional)" inputMode="numeric" value={editor.draft.customer} onChange={e => change({ customer: e.target.value })} /><small>Clear to allow unlimited uses per profile.</small></label>
         </div></fieldset>
         <div className={styles.preview}><strong>Rule preview</strong><p>{preview}</p></div>
         {message && <p role="status" className={styles.message}>{message}</p>}

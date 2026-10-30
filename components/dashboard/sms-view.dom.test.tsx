@@ -12,6 +12,10 @@ it("keeps activation unavailable without server configuration and never sends on
   vi.stubGlobal("fetch", fetcher);
   await act(async () => { render(<SmsView />); });
   fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  const attempts = screen.getByRole("combobox", { name: "Maximum attempts" }) as HTMLSelectElement;
+  expect(Array.from(attempts.options, option => option.value)).toEqual(["1", "2", "3"]);
+  fireEvent.change(attempts, { target: { value: "2" } });
+  expect(attempts.value).toBe("2");
   expect((screen.getByLabelText("Enable sending") as HTMLInputElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("tab", { name: "Messages" }));
   expect(screen.getByText("What would you like to do?")).toBeTruthy();

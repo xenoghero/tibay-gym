@@ -1,5 +1,6 @@
 "use client";
 
+import { PaymentMethodSelect } from "@/components/payments/payment-method-select";
 import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
 import type { PaymentAccount } from "@/lib/finance/payment-methods";
 
@@ -87,7 +88,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
       {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
-      <label htmlFor="customer-payment-method">Payment method</label><select id="customer-payment-method" value={method} disabled={busy || refreshing} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }}><option value="cash">Cash — confirm with the gym</option>{quote.paymentAccounts ? quote.paymentAccounts.map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</select>
+      <PaymentMethodSelect value={method} accounts={quote.paymentAccounts} available={quote.gcashAvailable} disabled={busy || refreshing} onChange={value => { setMethod(value); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} />
       {method === "cash" && <p className={styles.hint}>Pay at the gym. Your request stays pending until staff confirm receipt.</p>}
       {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
       {method !== "cash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">{method === "gcash" ? "GCash receipt" : "Payment receipt"}</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s selected payment account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}

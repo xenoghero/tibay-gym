@@ -25,7 +25,8 @@ it("uploads a bank renewal receipt with the selected account and settings revisi
     return Response.json({ ...plain, paymentRevision: 3, paymentAccounts: [account] });
   }));
   await act(async () => { render(<PurchaseForm portal />); });
-  fireEvent.change(screen.getByLabelText("Payment method"), { target: { value: account.id } });
+  fireEvent.click(screen.getByRole("combobox", { name: "Payment method" }));
+  fireEvent.click(screen.getByRole("option", { name: /BPI savings/ }));
   expect(screen.getByText(account.accountNumber)).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Payment receipt"), { target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] } });
   await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
@@ -62,7 +63,8 @@ it("locks the existing discount on rejected-payment corrections", async () => {
 });
 it("clears selected receipt evidence when the payable quote changes", async () => {
   await act(async () => { render(<PurchaseForm portal />); });
-  fireEvent.change(screen.getByLabelText("Payment method"), { target: { value: "gcash" } });
+  fireEvent.click(screen.getByRole("combobox", { name: "Payment method" }));
+  fireEvent.click(screen.getByRole("option", { name: /GCash/ }));
   const input = screen.getByLabelText("GCash receipt") as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] } });
   await apply("TRAIN10");

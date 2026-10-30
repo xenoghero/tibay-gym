@@ -28,3 +28,20 @@ it("adds a bank account in the existing settings drawer and preserves leading ze
   expect(screen.getByText("BPI savings")).toBeTruthy();
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+it("uses a numeric mobile keyboard for wallets while allowing bank account text", async () => {
+  await act(async () => { render(<PaymentMethodSettings />); });
+  fireEvent.click(screen.getByRole("button", { name: "Add payment account" }));
+  const kind = screen.getByLabelText("Account type");
+  const account = screen.getByLabelText("Account / mobile number") as HTMLInputElement;
+  for (const value of ["gcash", "maya"]) {
+    fireEvent.change(kind, { target: { value } });
+    expect(account.type).toBe("tel");
+    expect(account.inputMode).toBe("numeric");
+    fireEvent.change(account, { target: { value: "09171234567" } });
+    expect(account.value).toBe("09171234567");
+  }
+  fireEvent.change(kind, { target: { value: "bank" } });
+  expect(account.type).toBe("text");
+  expect(account.inputMode).toBe("text");
+});

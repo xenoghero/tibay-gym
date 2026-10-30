@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState } from "react";
@@ -107,7 +109,7 @@ export function ReceiptReview({ receiptId, expectedAmountMinor, onReviewed, paym
       {data.receipt.extracted_amount_minor !== null && data.receipt.extracted_amount_minor !== expectedAmountMinor && <p role="alert">The extracted amount differs from the expected charge. Check the actual receipt and funds received.</p>}
       <div style={{ display: "grid", gap: 12 }}>
         <label>{paymentAccount ? "Payment reference" : "GCash reference"}<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} value={reference} maxLength={80} disabled={busy || scanning || !data?.canExtract} onChange={e => setReference(e.target.value)} /></label>
-        <label>Reviewed amount (PHP)<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} inputMode="decimal" value={amount} disabled={busy || scanning || !data?.canExtract} onChange={e => setAmount(e.target.value)} /></label>
+        <label>Reviewed amount (PHP)<FormInput style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} inputMode="decimal" value={amount} disabled={busy || scanning || !data?.canExtract} onChange={e => setAmount(e.target.value)} /></label>
         <label>Review reason<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} value={reason} maxLength={500} disabled={busy || scanning || !data?.canExtract} onChange={e => setReason(e.target.value)} /></label>
         <button disabled={busy || scanning || !data?.canExtract} onClick={() => void save()}>Save reviewed reference and amount</button>
       </div>

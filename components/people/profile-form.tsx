@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import {
   useMemo,
   useEffect,
@@ -288,7 +290,8 @@ export function ProfileForm({
           value={phone}
           onChange={setPhone}
           error={fieldErrors.phone}
-          inputMode="tel"
+          type="tel"
+          inputMode="numeric"
           autoComplete="tel"
           hint="Used as the unique key for check-in lookup."
         />
@@ -452,7 +455,7 @@ function Field({
       <label htmlFor={id} style={labelStyle}>
         {label}
       </label>
-      <input
+      <FormInput
         id={id}
         type={type}
         inputMode={inputMode}
@@ -460,6 +463,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? `${id}-help` : undefined}
         style={{
           height: 44,
           padding: "0 12px",
@@ -472,9 +476,9 @@ function Field({
           fontSize: 14,
         }}
       />
-      {hint && !error && <p style={hintStyle}>{hint}</p>}
+      {hint && !error && <p id={`${id}-help`} style={hintStyle}>{hint}</p>}
       {error && (
-        <p role="alert" style={{ ...hintStyle, color: "var(--rs-accent-text)" }}>
+        <p id={`${id}-help`} role="alert" style={{ ...hintStyle, color: "var(--rs-accent-text)" }}>
           {error}
         </p>
       )}

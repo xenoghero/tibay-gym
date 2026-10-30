@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -203,7 +205,7 @@ export function AuditView() {
       <form id="audit-filters" className={`${styles.filters} ${filtersOpen ? styles.filtersOpen : ""}`} onSubmit={applyFilters}>
         {(Object.keys(emptyFilters) as Array<keyof Filters>).map(key => <label key={key}>
           <span>{filterLabels[key]}</span>
-          <input type={key === "from" || key === "through" ? "date" : "text"}
+          <FormInput type={key === "from" || key === "through" ? "date" : "text"}
             value={filters[key]} maxLength={128} placeholder={key === "action" ? "e.g. payment-approved" : "Exact ID"}
             max={key === "from" ? filters.through || undefined : undefined}
             min={key === "through" ? filters.from || undefined : undefined}

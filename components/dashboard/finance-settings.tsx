@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -65,7 +67,7 @@ export function FinanceSettings() {
       <table className={`${styles.table} ${styles.rates}`}><thead><tr><th>Category</th><th>Daily · PHP</th><th>Monthly · PHP</th></tr></thead><tbody>
         {(["student", "regular"] as const).map(category => <tr key={category}><td>{category === "student" ? "Student" : "Regular"}<small>{category === "student" ? "Student rate category" : "Standard rate category"}</small></td>
           {(["Daily", "Monthly"] as const).map(term => { const key = `${category}${term}Minor` as keyof Rates; return <td key={term} data-label={`${term} · PHP`}>
-            {editing ? <><input aria-label={`${category === "student" ? "Student" : "Regular"} ${term.toLowerCase()} (PHP)`} inputMode="decimal" value={values[key] ?? ""} disabled={busy} aria-invalid={!!errors[key]} aria-describedby={`${key}-hint`} onChange={e => setValues({ ...values, [key]: e.target.value })} />
+            {editing ? <><FormInput aria-label={`${category === "student" ? "Student" : "Regular"} ${term.toLowerCase()} (PHP)`} inputMode="decimal" value={values[key] ?? ""} disabled={busy} aria-invalid={!!errors[key]} aria-describedby={`${key}-hint`} onChange={e => setValues({ ...values, [key]: e.target.value })} />
               <small id={`${key}-hint`} className={errors[key] ? styles.error : ""}>{errors[key] || (term === "Monthly" ? "Leave empty to disable new purchases." : "Required for paid daily visits.")}</small></> : <><span className={styles.number}>{money(settings[key])}</span>{settings[key] === null && <small>Membership purchases unavailable</small>}</>}
           </td>; })}</tr>)}
       </tbody></table>

@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
@@ -241,7 +243,7 @@ export function WeightProgressionSection({
       <form className="rs-weight-form" style={formStyle} onSubmit={handleAdd} noValidate>
         <label style={fieldStyle}>
           <span style={labelStyle}>Weight (kg)</span>
-          <input
+          <FormInput
             type="number"
             inputMode="decimal"
             min="0.1"
@@ -255,7 +257,7 @@ export function WeightProgressionSection({
         </label>
         <label style={fieldStyle}>
           <span style={labelStyle}>Measurement date</span>
-          <input
+          <FormInput
             type="date"
             max={todayDateInputValue()}
             value={date}
@@ -317,14 +319,14 @@ export function WeightProgressionSection({
         <ModalShell onCancel={() => { if (!busy) { setFormError(null); setPending(null); } }}>
           <h3 style={modalHeadingStyle}>Correct this measurement?</h3>
           <p style={modalCopyStyle}>Update the weight or date below, then confirm the correction. The chart and summaries will be recalculated.</p>
-          <div style={modalFieldsStyle}>
+          <div className="rs-weight-edit-fields" style={modalFieldsStyle}>
             <label style={fieldStyle}>
               <span style={labelStyle}>Weight (kg)</span>
-              <input type="number" inputMode="decimal" min="0.1" step="0.1" value={pending.weight} onChange={(event) => setPending({ ...pending, weight: event.target.value })} disabled={busy} style={inputStyle} />
+              <FormInput type="number" inputMode="decimal" min="0.1" step="0.1" value={pending.weight} onChange={(event) => setPending({ ...pending, weight: event.target.value })} disabled={busy} style={inputStyle} />
             </label>
             <label style={fieldStyle}>
               <span style={labelStyle}>Measurement date</span>
-              <input type="date" max={todayDateInputValue()} value={pending.date} onChange={(event) => setPending({ ...pending, date: event.target.value })} disabled={busy} style={inputStyle} />
+              <FormInput type="date" max={todayDateInputValue()} value={pending.date} onChange={(event) => setPending({ ...pending, date: event.target.value })} disabled={busy} style={inputStyle} />
             </label>
           </div>
           {formError && <p role="alert" style={errorStyle}>{formError}</p>}

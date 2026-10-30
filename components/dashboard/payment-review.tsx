@@ -1,6 +1,7 @@
 "use client";
 
-import { paymentLabel } from "@/lib/finance/payment-methods";
+import { StyledSelect } from "@/components/ui/styled-select";
+import { paymentLabel, type PaymentAccount } from "@/lib/finance/payment-methods";
 
 import { useContentTransition } from "@/lib/use-content-transition";
 
@@ -24,6 +25,8 @@ export function PaymentReview() {
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(""), [status, setStatus] = useState("all"), [method, setMethod] = useState("all");
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+  const [accountError, setAccountError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
@@ -63,6 +66,20 @@ export function PaymentReview() {
       .finally(() => { if (active && sequence === requestSequence.current) setLoading(false); });
     return () => { active = false; };
   }, [user, kind]);
+  useEffect(() => {
+    let active = true;
+    if (user) user.getIdToken().then(token => fetch("/api/finance/payment-methods", { headers: { Authorization: `Bearer ${token}` } }))
+      .then(async response => {
+        if (!response.ok) throw new Error("Could not load payment method filters. Refresh to try again.");
+        const data = await response.json();
+        if (!Array.isArray(data.accounts)) throw new Error("Could not load payment method filters. Refresh to try again.");
+        if (active) {
+          setAccounts(data.accounts); setAccountError("");
+          setMethod(current => current === "all" || current === "cash" || data.accounts.some((account: PaymentAccount) => account.id === current) ? current : "all");
+        }
+      }).catch(error => { if (active) setAccountError(error.message); });
+    return () => { active = false; };
+  }, [user, refreshKey]);
   async function decide(decision: "approve" | "reject") {
     if (!selected || !reviewed || busy) return;
     if (decision === "reject" && !reason.trim()) { setMessage("Enter a rejection reason."); return; }
@@ -102,7 +119,7 @@ export function PaymentReview() {
   }
   const visibleRows = rows.filter(row => {
     const query = search.trim().toLowerCase();
-    return (status === "all" || row.payment.status === status) && (method === "all" || (method === "electronic" ? row.payment.method !== "cash" : row.payment.method === method))
+    return (status === "all" || row.payment.status === status) && (method === "all" || row.payment.method === method)
       && (!query || [row.customer.name, row.customer.id, row.charge?.tibayTransactionNumber, row.gcashReference, row.payment.gcashReferenceSnapshot].some(value => value?.toLowerCase().includes(query)));
   });
   async function refresh() { setRefreshKey(value => value + 1); await list().catch(e => setMessage(e.message)); }
@@ -115,11 +132,21 @@ export function PaymentReview() {
     </div>
     <div className={styles.toolbar}>
       <label className={styles.search}>Search this page<input type="search" placeholder="Name, customer ID or reference" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option>{kind === "daily_session" && <option value="awaiting">Awaiting payment</option>}<option value="pending">{kind === "daily_session" ? "Pending review" : "Pending"}</option><option value="approved">{kind === "daily_session" ? "Collected" : "Approved"}</option><option value="rejected">{kind === "daily_session" ? "Payment rejected" : "Rejected"}</option></select></label>
-      <label>Method<select value={method} onChange={e => setMethod(e.target.value)}><option value="all">All methods</option><option value="cash">Cash</option><option value="gcash">Legacy GCash</option><option value="electronic">Electronic payments</option></select></label>
+      <StyledSelect compact label="Status" value={status} onChange={setStatus} options={[
+        { value: "all", name: "All statuses" },
+        ...(kind === "daily_session" ? [{ value: "awaiting", name: "Awaiting payment" }] : []),
+        { value: "pending", name: kind === "daily_session" ? "Pending review" : "Pending" },
+        { value: "approved", name: kind === "daily_session" ? "Collected" : "Approved" },
+        { value: "rejected", name: kind === "daily_session" ? "Payment rejected" : "Rejected" },
+      ]} />
+      <StyledSelect compact label="Method" value={method} onChange={setMethod} options={[
+        { value: "all", name: "All methods" }, { value: "cash", name: "Cash" },
+        ...accounts.map(account => ({ value: account.id, name: account.name, detail: account.enabled ? undefined : "Disabled for new payments" })),
+      ]} />
       <button disabled={busy || loading} onClick={() => void refresh()} aria-label="Refresh requests">↻ Refresh</button>
       <details className={styles.maintenance}><summary>Maintenance</summary><div className={styles.maintenanceMenu}><p>Remove eligible receipt evidence and photos. Protected records are kept.</p><button disabled={busy} onClick={() => void cleanupEvidence()}>Run retention cleanup</button></div></details>
     </div>
+    {accountError && <p className={styles.message} role="status">{accountError}</p>}
     {message && <p className={styles.message} role="status">{message}</p>}
     <div ref={tabContent} className={styles.scroll}>
       {kind === "daily_session" && <DailyPayments key={refreshKey} disabled={busy} search={search} status={status} method={method} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}

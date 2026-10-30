@@ -135,3 +135,6 @@
   .drawerBody { padding: 24px 20px max(24px, env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .loadingMark { animation: none; } }
+@media (max-width: 480px) {
+  .filters { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { useContentTransition } from "@/lib/use-content-transition";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
@@ -523,7 +525,7 @@ export function StatisticsView() {
         </div>
         <div style={customRowStyle}>
           <span style={{ fontSize: 13, color: "var(--rs-muted)" }}>Custom</span>
-          <input
+          <FormInput
             type="date"
             value={customStart}
             onChange={(e) => applyCustom(e.target.value, customEnd)}
@@ -531,7 +533,7 @@ export function StatisticsView() {
             style={dateInputStyle(preset === null)}
           />
           <span style={{ color: "var(--rs-muted)" }}>–</span>
-          <input
+          <FormInput
             type="date"
             value={customEnd}
             onChange={(e) => applyCustom(customStart, e.target.value)}
@@ -586,22 +588,27 @@ export function StatisticsView() {
 
             <div style={sheetCustomBlock}>
               <div style={sheetSubLabel}>Custom range</div>
-              <div style={sheetCustomRow}>
-                <input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => applyCustom(e.target.value, customEnd)}
-                  aria-label="Custom range start date"
-                  style={{ ...dateInputStyle(preset === null), height: 44, flex: 1, minWidth: 0 }}
-                />
-                <span style={{ color: "var(--rs-muted)" }}>–</span>
-                <input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => applyCustom(customStart, e.target.value)}
-                  aria-label="Custom range end date"
-                  style={{ ...dateInputStyle(preset === null), height: 44, flex: 1, minWidth: 0 }}
-                />
+              <div className="rs-report-range-fields" style={sheetCustomRow}>
+                <label>
+                  <span>From</span>
+                  <FormInput
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => applyCustom(e.target.value, customEnd)}
+                    aria-label="Custom range start date"
+                    style={{ ...dateInputStyle(preset === null), height: 44 }}
+                  />
+                </label>
+                <label>
+                  <span>Through</span>
+                  <FormInput
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => applyCustom(customStart, e.target.value)}
+                    aria-label="Custom range end date"
+                    style={{ ...dateInputStyle(preset === null), height: 44 }}
+                  />
+                </label>
               </div>
             </div>
             {customStart && customEnd && !rangeForCustom(customStart, customEnd) && <p role="alert">Choose a valid start and end date, with the end on or after the start.</p>}

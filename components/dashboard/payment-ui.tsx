@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import styles from "./payment-review.module.css";
 
 export { styles };
@@ -13,15 +13,44 @@ export function PaymentStatus({ status, label }: { status: string; label?: strin
 
 export function PaymentDrawer({ title, onClose, busy = false, children }: { title: string; onClose: () => void; busy?: boolean; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const finished = useRef(false);
+  const [closing, setClosing] = useState(false);
   const id = useId();
   useEffect(() => {
     const dialog = ref.current!;
     const trigger = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
     dialog.showModal();
-    return () => { dialog.close(); trigger?.focus(); };
+    titleRef.current?.focus();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog.close(); document.body.style.overflow = overflow;
+      if (trigger?.isConnected) trigger.focus();
+    };
   }, []);
-  return <dialog ref={ref} className={styles.drawer} aria-labelledby={id} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-    <header className={styles.drawerHead}><div><div className={styles.kicker}>Payment details</div><h2 id={id}>{title}</h2></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close payment details">✕</button></header>
-    <div className={styles.drawerBody}>{children}</div>
+  useEffect(() => {
+    if (!closing) return;
+    // Finish even if the browser suppresses the animation-end event.
+    const timeout = window.setTimeout(() => {
+      if (!finished.current) { finished.current = true; onClose(); }
+    }, 320);
+    return () => window.clearTimeout(timeout);
+  }, [closing, onClose]);
+  function requestClose() { if (!busy && !closing) setClosing(true); }
+  return <dialog ref={ref} className={styles.drawer} aria-labelledby={id} data-closing={closing}
+    onCancel={event => { event.preventDefault(); requestClose(); }}
+    onClick={event => {
+      if (event.target !== event.currentTarget) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) requestClose();
+    }}
+    onAnimationEnd={event => {
+      if (closing && event.target === event.currentTarget && !event.nativeEvent.pseudoElement && !finished.current) {
+        finished.current = true; onClose();
+      }
+    }}>
+    <header className={styles.drawerHead} inert={closing}><div><div className={styles.kicker}>Payment details</div><h2 ref={titleRef} tabIndex={-1} id={id}>{title}</h2></div><button type="button" disabled={busy || closing} onClick={requestClose} aria-label="Close payment details">✕</button></header>
+    <div className={styles.drawerBody} inert={closing}>{children}</div>
   </dialog>;
 }

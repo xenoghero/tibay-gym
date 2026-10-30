@@ -8,3 +8,12 @@
 .details img { display: block; width: 240px; max-width: 100%; height: auto; background: white; border-radius: 4px; }
 .details a { color: inherit; padding: 10px; font-size: 13px; text-underline-offset: 3px; }
 .details a:focus-visible { outline: 2px solid var(--rs-accent-text, #806000); outline-offset: 3px; }
+.details dd { font-variant-numeric: tabular-nums; }
+@media (max-width: 650px) {
+  .details { display: grid; grid-template-columns: minmax(0, 1fr); padding: 18px; gap: 16px; }
+  .details h3 { padding-bottom: 14px; border-bottom: 1px solid var(--rs-line); }
+  .details p { margin: 16px 0 0; font-size: 12px; }
+  .details figure { width: 100%; border-top: 1px solid var(--rs-line); padding-top: 20px; }
+  .details img { width: min(240px, 100%); }
+  .details a { min-height: 44px; display: flex; align-items: center; }
+}

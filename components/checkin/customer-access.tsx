@@ -9,7 +9,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import styles from "./customer-access.module.css";
-interface Summary { rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
+interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
 export function CustomerAccess() {
   const [phone, setPhone] = useState(""), [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
@@ -61,7 +61,7 @@ export function CustomerAccess() {
         </form><p className={styles.privacyNote}>This opens limited membership and payment details for a 30-minute session. The gym reviews all payment requests.</p>
       </section>
     </div> : <>
-      <div className={styles.pageHeading}><div><span className={styles.eyebrow}>Member overview</span><h1>Your membership</h1><p>Your status, your payments, your next step.</p></div><span className={styles.sessionNote}>30-minute access session</span></div>
+      <div className={styles.pageHeading}><div><span className={styles.eyebrow}>Member overview</span><h1>Your membership</h1><p className={styles.profileName}>Profile for <strong>{summary.name}</strong></p></div><span className={styles.sessionNote}>30-minute access session</span></div>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <section className={styles.membership} aria-labelledby="membership-title">
         <div className={styles.membershipMain}><h2 id="membership-title">Membership</h2><strong>{summary.type === "member" ? titleCase(summary.status ?? "Needs review") : "Guest profile"}</strong><p>{summary.type === "member" ? "Check your expiry before your next visit." : "Start a membership when you’re ready to train."}</p></div>

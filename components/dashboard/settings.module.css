@@ -126,3 +126,20 @@
 }
 
 .qrPreview { display: block; width: 240px; max-width: 100%; height: auto; margin-bottom: 12px; background: white; }
+
+.mobileFieldLabel { display: none; }
+@media (max-width: 699px) {
+  .paymentAccounts { margin-top: 24px; }
+  .table.paymentAccounts tbody { display: grid; gap: 14px; }
+  .table.paymentAccounts tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 12px; padding: 18px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); }
+  .table.paymentAccounts td { min-width: 0; padding: 0; overflow-wrap: anywhere; }
+  .paymentAccounts td:first-child { grid-column: 1; grid-row: 1; }
+  .paymentAccounts td:first-child strong { font-size: 16px; font-weight: 600; }
+  .paymentAccounts td:nth-child(3) { grid-column: 2; grid-row: 1; padding-top: 1px; }
+  .paymentAccounts .paymentAccountDetails { grid-column: 1 / -1; grid-row: 2; border-top: 1px solid var(--rs-line); padding-top: 14px; font-size: 14px; }
+  .paymentAccounts .mobileFieldLabel { display: block; color: var(--rs-muted); font-size: 11px; margin-bottom: 4px; }
+  .paymentAccounts .mobileFieldLabel:not(:first-child) { margin-top: 12px; }
+  .paymentAccounts small.code { margin-top: 0; color: var(--rs-fg); font-size: 13px; }
+  .paymentAccounts td:last-child { grid-column: 1 / -1; grid-row: 3; }
+  .paymentAccounts td:last-child button { width: 100%; background: var(--rs-bg); }
+}

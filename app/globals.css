@@ -167,6 +167,48 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Shared form inputs keep native validation and pickers. A small inline height
+   must not shrink the tap target. */
+input[data-form-input] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  scroll-margin-block: 24px;
+}
+
+input:is([type="date"], [type="datetime-local"], [type="time"]) {
+  color-scheme: light dark;
+}
+
+input[data-form-input]:is([type="date"], [type="datetime-local"], [type="time"]):not(:disabled):not([readonly]) {
+  cursor: pointer;
+}
+
+input[data-form-input]:focus-visible {
+  outline: 2px solid var(--rs-accent-text) !important;
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px), (pointer: coarse) {
+  /* 16px prevents focus zoom on iOS, including inputs styled inline. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  input:is([type="date"], [type="datetime-local"], [type="time"]) {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  input:is([type="date"], [type="datetime-local"], [type="time"])::-webkit-date-and-time-value {
+    text-align: start;
+  }
+}
+
 /* Shared back control for nested People routes. It follows the dashboard's
    compact, squared-off action language while remaining visually tertiary. */
 .rs-back-link {
@@ -1993,7 +2035,15 @@ body {
 .rs-report-sheet-grabber { width: 36px; height: 4px; background: var(--rs-muted); opacity: .5; border-radius: 2px; margin: 0 auto; }
 .rs-report-sheet .rs-finance-filters { display: flex; flex-direction: column; align-items: stretch; margin: 0; }
 .rs-report-sheet :is(input,select) { width: 100%; min-width: 0; font-size: 16px; min-height: 44px; color-scheme: light dark; }
+.rs-report-sheet .rs-report-range-fields { flex-direction: column; align-items: stretch; }
+.rs-report-range-fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; color: var(--rs-muted); }
 .rs-report-sheet-done { min-height: 46px; background: var(--rs-accent) !important; color: var(--rs-on-accent) !important; border: 0 !important; border-radius: 8px; cursor: pointer; }
+@media (max-width: 480px) {
+  .rs-weight-form,
+  .rs-weight-edit-fields {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
 @media (max-width: 1100px) {
   .rs-collections-report .rs-finance-totals { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .rs-collection-analysis { grid-template-columns: minmax(0,1.2fr) minmax(240px,1fr); }

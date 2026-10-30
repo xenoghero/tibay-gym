@@ -55,7 +55,17 @@
 .mobileLabel { display: none; }
 .drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(620px, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; border-left: 1px solid var(--rs-line); color: var(--rs-fg); background: var(--rs-bg); font: 13px/1.6 var(--font-geist-sans), system-ui, sans-serif; }
 .drawer[open] { display: flex; flex-direction: column; }
-.drawer::backdrop { background: #0008; }
+.drawer[open] { animation: payment-drawer-in 320ms cubic-bezier(.22, 1, .36, 1) both; }
+.drawer[open][data-closing=true] { animation: payment-drawer-out 240ms cubic-bezier(.4, 0, 1, 1) both; }
+.drawer::backdrop { background: #0008; animation: payment-backdrop-in 280ms ease-out both; }
+.drawer[data-closing=true]::backdrop { animation: payment-backdrop-out 240ms ease-in both; }
+@keyframes payment-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes payment-drawer-out { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes payment-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes payment-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .drawer[open], .drawer[open][data-closing=true], .drawer::backdrop, .drawer[data-closing=true]::backdrop { animation-duration: 1ms; }
+}
 .drawerHead { flex: none; padding: 24px; display: flex; justify-content: space-between; align-items: center; gap: 14px; border-bottom: 1px solid var(--rs-line); }
 .drawerHead h2 { font: 600 30px/1.1 var(--font-barlow-condensed), sans-serif; margin: 8px 0 0; overflow-wrap: anywhere; }
 .drawerBody { padding: 24px; overflow: auto; flex: 1; min-height: 0; }

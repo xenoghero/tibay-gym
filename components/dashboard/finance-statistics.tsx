@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -108,7 +110,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   </section>;
   const filters = <>
     <label>Period<select value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></select></label>
-    {period !== "custom" ? <label>Date<input type="date" required value={date} onChange={event => changed(() => setDate(event.target.value))} /></label> : <><label>From<input type="date" required value={from} onChange={event => changed(() => setFrom(event.target.value))} /></label><label>Through<input type="date" required min={from} value={through} onChange={event => changed(() => setThrough(event.target.value))} /></label></>}
+    {period !== "custom" ? <label>Date<FormInput type="date" required value={date} onChange={event => changed(() => setDate(event.target.value))} /></label> : <><label>From<FormInput type="date" required value={from} onChange={event => changed(() => setFrom(event.target.value))} /></label><label>Through<FormInput type="date" required min={from} value={through} onChange={event => changed(() => setThrough(event.target.value))} /></label></>}
   </>;
   return <section className="rs-finance rs-collections-report" aria-label="Financial statistics" aria-busy={loading}>
     <div className="rs-stat-section-heading"><div><h2>Collections</h2><p>Recorded charges, confirmed payments and pending requests.</p></div>
