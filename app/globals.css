@@ -78,9 +78,20 @@
   text-transform: uppercase;
 }
 .rs-brand-name span { color: #ffcc00; }
-.rs-brand-hero { align-self: center; gap: 20px; padding: 16px; }
-.rs-brand-hero .rs-brand-mark { width: clamp(82px, 10vw, 144px); }
-.rs-brand-hero .rs-brand-name { font-size: clamp(34px, 4vw, 52px); }
+.rs-brand-hero {
+  align-self: center;
+  gap: clamp(12px, 1.5vw, 28px);
+  padding: 10px 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-barlow-condensed), sans-serif;
+  font-size: clamp(42px, 5vw, 96px);
+}
+.rs-brand-hero .rs-brand-mark { width: auto; height: 1cap; }
+.rs-brand-hero .rs-brand-name {
+  font-size: inherit;
+  text-box: trim-both cap alphabetic;
+}
 
 .rs-brand-sidebar {
   justify-content: flex-start;

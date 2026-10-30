@@ -90,17 +90,26 @@ const css = `
     flex-direction: column;
     justify-content: space-between;
   }
+  .rs-login-identity {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
   .rs-login-blurb {
     max-width: 34ch;
     font-size: 15px;
     line-height: 1.6;
     color: ${C.invMuted};
-    margin: 20px 0 0;
+    margin: 24px auto 0;
   }
   .rs-login-stamp {
+    text-align: center;
     font-family: ${monoFont};
     font-size: 11px;
-    color: ${C.invFaint};
+    color: ${C.muted};
     text-transform: uppercase;
     letter-spacing: 0.14em;
   }
@@ -134,25 +143,18 @@ const css = `
       background: ${C.ink};
     }
 
-    /* The brand panel stops hiding and becomes the poster hero. Its rhythm is
-       vh-aware so a short portrait phone (360x640) still lands the CTA above
-       the fold instead of pushing it under. */
+    /* Keep the larger mobile lockup close to the top without an empty hero. */
     .rs-login-brand {
-      padding: clamp(20px, 3.5vh, 28px) 20px clamp(30px, 5.5vh, 46px);
+      padding: 40px 20px 58px;
       gap: 0;
-      justify-content: flex-start;
-      /* Give the hero a defined black area so the logo has room to sit in
-         its vertical centre rather than hugging the top edge. */
-      min-height: 34vh;
+      justify-content: center;
+      min-height: 0;
     }
-    /* Equal auto-margins above the logo and above the stamp split the free
-       space: the logo lands mid-panel, the stamp stays pinned to the bottom. */
-    .rs-login-logo { margin-top: auto; }
-    .rs-login-brand-body { margin-top: 0; }
+    .rs-login-identity { flex: none; }
+    .rs-login-logo { font-size: clamp(44px, 15.5vw, 80px); }
     /* The sheet's own subhead carries the instruction; the blurb would only
        push the form off the first screen. */
     .rs-login-blurb { display: none; }
-    .rs-login-stamp { margin-top: auto; }
 
     /* Sheet rides up over the hero so the seam reads as one composition. */
     .rs-login-pane {
@@ -183,7 +185,7 @@ const css = `
   @media (max-width: 860px) and (max-height: 620px) {
     .rs-login-brand { padding: 18px 20px 30px; gap: 0; min-height: 0; }
     .rs-login-logo { margin-top: 0; }
-    .rs-login-brand-body, .rs-login-stamp { display: none; }
+    .rs-login-brand-body { display: none; }
   }
 `;
 
@@ -248,16 +250,16 @@ export default function LoginPage() {
 
       {/* Brand panel — the poster hero above the sheet on narrow viewports */}
       <div className="rs-login-brand">
-        <BrandLogo hero className="rs-login-logo" />
-
-        <div className="rs-login-brand-body">
-          <p className="rs-login-blurb">
-            Attendance and membership control for the front desk. One admin
-            login, no self-signup.
-          </p>
+        <div className="rs-login-identity">
+          <BrandLogo hero className="rs-login-logo" />
+          <div className="rs-login-brand-body">
+            <p className="rs-login-blurb">
+              Attendance and membership control for the front desk. One admin
+              login, no self-signup.
+            </p>
+          </div>
         </div>
 
-        <div className="rs-login-stamp">Admin access only</div>
       </div>
 
       {/* Sign-in panel — the light sheet riding over the hero on narrow */}
@@ -388,6 +390,7 @@ export default function LoginPage() {
             >
               Forgot password
             </button>
+            <div className="rs-login-stamp">Admin access only</div>
           </div>
         </form>
       </div>
