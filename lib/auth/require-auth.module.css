@@ -1,0 +1,34 @@
+.loading {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.logo {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.logo :global(.rs-brand-sidebar) {
+  font-size: clamp(30px, 4vw, 46px);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(.96); }
+}
+
+@media (max-width: 860px) {
+  .loading {
+    min-height: calc(100dvh - 68px - env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Preserve cycle events without visible motion so the guard still resolves. */
+  .logo { animation-name: rest; }
+}
+
+@keyframes rest {
+  from, to { opacity: 1; }
+}

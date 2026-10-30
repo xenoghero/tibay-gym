@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
+import { BrandLogo } from "@/components/brand-logo";
+import styles from "./require-auth.module.css";
 
 /**
  * Client-side route guard. Renders `children` only for a signed-in admin;
@@ -13,15 +15,26 @@ import { useAuth } from "@/lib/auth/auth-context";
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  // Only guards mounted during restoration wait for a complete logo cycle.
+  // Nested guards mounted after restoration can render immediately.
+  const [finishingAnimation, setFinishingAnimation] = useState(loading);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (!loading && !user && !finishingAnimation) router.replace("/login");
+  }, [loading, user, finishingAnimation, router]);
 
-  if (loading || !user) {
+  if (loading || !user || finishingAnimation) {
     return (
-      <div role="status" style={{ padding: "clamp(24px, 6vw, 80px)", color: "var(--rs-muted)" }}>
-        Checking sign-in…
+      <div role="status" aria-label="Loading your dashboard" className={styles.loading}>
+        <div
+          aria-hidden="true"
+          className={styles.logo}
+          onAnimationIteration={(event) => {
+            if (event.target === event.currentTarget && !loading) setFinishingAnimation(false);
+          }}
+        >
+          <BrandLogo sidebar />
+        </div>
       </div>
     );
   }
