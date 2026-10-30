@@ -24,12 +24,29 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
   const receiptInput = useRef<HTMLInputElement>(null);
   const attempt = useRef<{ key: string; id: string; proof?: { receiptId: string; receiptToken: string } } | null>(null);
   const endpoint = admin ? `/api/finance/purchases?personId=${encodeURIComponent(personId ?? "")}` : `/api/customer/purchase${previousRequestId ? `?previousRequestId=${encodeURIComponent(previousRequestId)}` : ""}`;
+  function quoteEndpoint(code?: string, months = quote?.coverage?.months ?? 1) {
+    const params = new URLSearchParams();
+    if (code) params.set("voucherCode", code);
+    if (portal && !previousRequestId) params.set("months", String(months));
+    return `${endpoint}${params.size ? `${endpoint.includes("?") ? "&" : "?"}${params}` : ""}`;
+  }
+  async function changeDuration(months: number) {
+    if (busy || refreshing || months === quote?.coverage?.months) return;
+    setRefreshing(true); setMessage("");
+    try {
+      const response = await fetch(quoteEndpoint(quote?.voucherSnapshot?.code, months), { headers: await headers() });
+      const result: Quote & { error?: string } = await response.json();
+      if (!response.ok) throw new Error(result.error?.startsWith("voucher-") ? voucherError(result.error) : "Could not update the duration. Try again.");
+      setQuote(result); attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = "";
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not update the duration. Try again."); }
+    finally { setRefreshing(false); }
+  }
   async function headers(): Promise<Record<string, string>> { return admin ? { Authorization: `Bearer ${await user?.getIdToken()}` } : {}; }
   async function refresh() {
     setRefreshing(true);
     try {
     const code = !previousRequestId ? quote?.voucherSnapshot?.code : undefined;
-    const response = await fetch(`${endpoint}${code ? `${endpoint.includes("?") ? "&" : "?"}voucherCode=${encodeURIComponent(code)}` : ""}`, { headers: await headers() });
+    const response = await fetch(quoteEndpoint(code), { headers: await headers() });
     if (!response.ok) { setQuote(null); throw new Error("A purchase quote is unavailable. Ask the admin to verify the profile, rate category, and monthly price, then refresh."); }
     const refreshed: Quote = await response.json();
     if (refreshed.quoteToken !== quote?.quoteToken) { attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = ""; }
@@ -49,7 +66,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
   async function applyVoucher(code: string) {
     setRefreshing(true);
     try {
-      const response = await fetch(`${endpoint}${code ? `${endpoint.includes("?") ? "&" : "?"}voucherCode=${encodeURIComponent(code)}` : ""}`, { headers: await headers() });
+      const response = await fetch(quoteEndpoint(code), { headers: await headers() });
       const result = await response.json();
       if (!response.ok) throw new Error(voucherError(result.error));
       setQuote(result); attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = ""; setMessage("");
@@ -60,14 +77,14 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     setBusy(true); setMessage("");
     try {
       if (method !== "cash" && quote.paymentAccounts && !quote.paymentAccounts.some(account => account.id === method)) throw new Error("This payment account is no longer available. Select another method.");
-      const body = { method, ...(method !== "cash" ? { paymentRevision: quote.paymentRevision } : {}), quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
+      const body = { method, ...(quote.coverage ? { months: quote.coverage.months } : {}), ...(method !== "cash" ? { paymentRevision: quote.paymentRevision } : {}), quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
       const key = JSON.stringify([body, fileKey]);
       if (attempt.current?.key !== key) attempt.current = { key, id: crypto.randomUUID() };
       const current = attempt.current;
       if (method !== "cash" && !current.proof) {
         if (!file || file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Choose a JPG, PNG or WebP receipt up to 5 MB.");
         const uploaded = await fetch("/api/receipts/upload", { method: "POST", headers: { "Content-Type": file.type, "x-payment-revision": String(quote.paymentRevision ?? 0), "x-payment-method": method, "x-operation-id": current.id,
-          "x-expected-amount": String(quote.amountMinor), "x-charge-kind": quote.kind, ...(!previousRequestId && quote.voucherSnapshot ? { "x-voucher-code": quote.voucherSnapshot.code } : {}), ...(previousRequestId ? { "x-previous-request-id": previousRequestId } : {}) }, body: file });
+          "x-expected-amount": String(quote.amountMinor), "x-charge-kind": quote.kind, ...(quote.coverage ? { "x-membership-months": String(quote.coverage.months) } : {}), ...(!previousRequestId && quote.voucherSnapshot ? { "x-voucher-code": quote.voucherSnapshot.code } : {}), ...(previousRequestId ? { "x-previous-request-id": previousRequestId } : {}) }, body: file });
         if (!uploaded.ok) throw new Error("Receipt upload did not complete. Retry the same image or choose cash. No membership was activated.");
         current.proof = await uploaded.json();
       }
@@ -83,7 +100,15 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     <p className={styles.description}>{previousRequestId ? "Review this replacement before sending it for approval." : "Review your price and payment details before submitting."}</p>
     {!quote && !message && <LoadingSkeleton label="Loading your price and membership dates…" variant="form" />}
     {quote && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <div className={styles.quote}><div><span>{quote.kind === "daily_session" ? "Daily session" : "One-month membership"}</span><strong>{new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(quote.amountMinor / 100)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind.replaceAll("_", " ")}</span>
+      {quote.coverage && !previousRequestId && <fieldset className={styles.duration} disabled={busy || refreshing}>
+        <legend>Membership duration</legend>
+        <div className={styles.durationOptions}>{[1, 2, 3, 4, 5, 12].map(months => <label key={months} className={styles.durationOption}>
+          <input type="radio" name="membership-months" value={months} checked={quote.coverage?.months === months} onChange={() => void changeDuration(months)} />
+          <span>{months === 12 ? "1 year" : `${months} ${months === 1 ? "month" : "months"}`}</span>
+        </label>)}</div>
+        <p className={styles.hint}>Priced at your monthly rate × the number of months.</p>
+      </fieldset>}
+      <div className={styles.quote} aria-live="polite" aria-busy={refreshing}><div><span>{quote.kind === "daily_session" ? "Daily session" : `${quote.coverage?.months ?? 1}-month membership`}</span><strong>{new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(quote.amountMinor / 100)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind.replaceAll("_", " ")}</span>
       {quote.coverage && <dl className={styles.coverage}><div><dt>Estimated start</dt><dd>{coverageDate(quote.coverage.startDate)}</dd></div><span aria-hidden="true">→</span><div><dt>Estimated expiry</dt><dd>{coverageDate(quote.coverage.expiryDate)}</dd></div></dl>}</div>
       {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
@@ -97,7 +122,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     {message && <p className={styles.message} role="status">{message}</p>}
   </section>;
   return <section className="rs-financial-ui" style={{ display: "grid", gap: 14, marginBlock: 20 }}><h2>{previousRequestId ? "Replace rejected payment" : "Membership purchase / renewal"}</h2>
-    <p>One month at the configured price. Package and custom-expiry purchase prices await an agreed policy.</p>
+    <p>One month at the configured monthly rate.</p>
     {!quote && !message && <LoadingSkeleton label="Loading configured price and coverage…" variant="form" />}
     {quote && <><p><strong>PHP {(quote.amountMinor / 100).toFixed(2)}</strong> · {quote.categorySnapshot} · {quote.kind.replaceAll("_", " ")}</p>
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}

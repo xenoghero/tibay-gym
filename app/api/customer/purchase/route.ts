@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     if (!official) throw new ApiError(409, "verified-profile-required");
     const params = new URL(request.url).searchParams;
     if (params.get("voucherCode")) publicRateLimiter.consume(publicCaller(request), "lookup");
-    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined), gcashAvailable: await receiptsAvailable(), ...await customerPaymentOptions() });
+    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined, params.has("months") ? Number(params.get("months")) : undefined), gcashAvailable: await receiptsAvailable(), ...await customerPaymentOptions() });
   });
 }
 export async function POST(request: Request) {

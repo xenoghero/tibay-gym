@@ -17,6 +17,13 @@ beforeEach(() => { mocks.store = memoryFirestore(); mocks.row = null; vi.stubEnv
 });
 afterEach(() => vi.unstubAllEnvs());
 const input = () => ({ personId: "p1", category: "student", operationId: "receipt-upload-operation-0001", expectedAmountMinor: 6000, bytes: Buffer.from("encoded-image") });
+it("binds receipt proof to the full selected membership duration", async () => {
+  mocks.store!.data.get("persons/p1")!.type = "member";
+  mocks.store!.data.get("gymSettings/finance")!.studentMonthlyMinor = 60000;
+  await expect(uploadDailyReceipt({ ...input(), kind: "renewal", months: 3, expectedAmountMinor: 60000 })).rejects.toMatchObject({ code: "daily-price-changed" });
+  const proof = await uploadDailyReceipt({ ...input(), kind: "renewal", months: 3, expectedAmountMinor: 180000 });
+  expect(mocks.store!.data.get(`receiptIntents/${proof.receiptId}`)).toMatchObject({ amountMinor: 180000, personId: "p1" });
+});
 it("prepares receipt proof for the discounted total without consuming a voucher use", async () => {
   mocks.store!.data.set("vouchers/voucher-1", { ...voucherFixture() });
   mocks.store!.data.set("voucherCodeClaims/TRAIN10", { voucherId: "voucher-1" });

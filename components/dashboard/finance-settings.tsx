@@ -62,17 +62,22 @@ export function FinanceSettings() {
   }
   const changed = settings && fields.some(([key]) => values[key] !== valuesFor(settings)[key]);
   return <section className={styles.section} aria-labelledby="pricing-title" aria-busy={loading}>
-    <div className={styles.head}><div><h2 id="pricing-title">Gym pricing</h2><p className={styles.sub}>Daily visits and one-month memberships, in Philippine pesos.</p></div>{settings && !editing && <button className={styles.primary} onClick={() => setEditing(true)}>Edit prices</button>}</div>
+    <div className={styles.head}><div><h2 id="pricing-title">Gym pricing</h2><p className={styles.sub}>Daily visits and one-month memberships, in Philippine pesos.</p></div></div>
     {loading ? <LoadingSkeleton label="Loading pricing…" variant="form" count={4} /> : !settings ? <button onClick={() => load().catch(e => setMessage(e.message))}>Retry loading pricing</button> : <form onSubmit={validate}>
-      <table className={`${styles.table} ${styles.rates}`}><thead><tr><th>Category</th><th>Daily · PHP</th><th>Monthly · PHP</th></tr></thead><tbody>
-        {(["student", "regular"] as const).map(category => <tr key={category}><td>{category === "student" ? "Student" : "Regular"}<small>{category === "student" ? "Student rate category" : "Standard rate category"}</small></td>
-          {(["Daily", "Monthly"] as const).map(term => { const key = `${category}${term}Minor` as keyof Rates; return <td key={term} data-label={`${term} · PHP`}>
+      <div className={styles.pricingGrid}>
+        {(["student", "regular"] as const).map(category => <section key={category} className={styles.pricingCard} aria-labelledby={`pricing-${category}`}>
+          <header><h3 id={`pricing-${category}`}>{category === "student" ? "Student" : "Regular"}</h3><p className={styles.sub}>{category === "student" ? "Student rate category" : "Standard rate category"}</p></header>
+          <div className={styles.priceTerms}>
+          {(["Daily", "Monthly"] as const).map(term => { const key = `${category}${term}Minor` as keyof Rates; return <div key={term} className={styles.priceTerm}>
+            <span className={styles.priceLabel}>{term} · PHP</span>
             {editing ? <><FormInput aria-label={`${category === "student" ? "Student" : "Regular"} ${term.toLowerCase()} (PHP)`} inputMode="decimal" value={values[key] ?? ""} disabled={busy} aria-invalid={!!errors[key]} aria-describedby={`${key}-hint`} onChange={e => setValues({ ...values, [key]: e.target.value })} />
-              <small id={`${key}-hint`} className={errors[key] ? styles.error : ""}>{errors[key] || (term === "Monthly" ? "Leave empty to disable new purchases." : "Required for paid daily visits.")}</small></> : <><span className={styles.number}>{money(settings[key])}</span>{settings[key] === null && <small>Membership purchases unavailable</small>}</>}
-          </td>; })}</tr>)}
-      </tbody></table>
+              <small id={`${key}-hint`} className={errors[key] ? styles.error : ""}>{errors[key] || (term === "Monthly" ? "Leave empty to disable new purchases." : "Required for paid daily visits.")}</small></> : <><span className={styles.priceAmount} data-unconfigured={settings[key] === null}>{money(settings[key])}</span>{settings[key] === null && <small>Membership purchases unavailable</small>}</>}
+          </div>; })}</div></section>)}
+      </div>
+      <div className={styles.pricingControls}>
+        {editing ? <><button type="button" disabled={busy} onClick={() => { setValues(valuesFor(settings)); setEditing(false); setErrors({}); setConflict(null); setMessage(""); }}>Cancel</button><button type="submit" className={styles.primary} disabled={busy || !changed || !!conflict}>Save changes</button></> : <button type="button" className={styles.primary} onClick={() => setEditing(true)}>Edit prices</button>}
+      </div>
       <div className={styles.footer}><p className={styles.sub}>{settings.updatedAt ? `Updated ${new Date(settings.updatedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" })} · Philippine time` : "Default daily rates. Save to begin financial reporting."}<small>Revision {settings.rateRevision} · Existing submitted prices are preserved.</small></p>
-        {editing && <div className={styles.actions}><button type="button" disabled={busy} onClick={() => { setValues(valuesFor(settings)); setEditing(false); setErrors({}); setConflict(null); setMessage(""); }}>Cancel</button><button className={styles.primary} disabled={busy || !changed || !!conflict}>Review changes</button></div>}
       </div>
       {!settings.financialCutoverAt && <p className={styles.sub}>Financial reporting starts on the first save. Historical attendance remains unchanged.</p>}
     </form>}

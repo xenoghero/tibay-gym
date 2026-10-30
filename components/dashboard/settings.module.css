@@ -35,9 +35,24 @@
 .table td { padding: 18px 12px; border-bottom: 1px solid var(--rs-line); vertical-align: top; }
 .table th:first-child, .table td:first-child { padding-left: 0; }
 .table th:last-child, .table td:last-child { padding-right: 0; }
-.rates td { vertical-align: middle; }
-.rates td:first-child { width: 30%; font-weight: 500; }
-.rates input { text-align: right; font-variant-numeric: tabular-nums; }
+.pricingGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.pricingCard { min-width: 0; padding: 24px; border: 1px solid var(--rs-line); border-top: 3px solid var(--rs-accent); border-radius: 10px; background: var(--rs-panel); }
+.pricingCard > header { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--rs-line); }
+.pricingCard h3 { margin: 0 0 6px; font-size: 20px; line-height: 1.3; font-weight: 600; }
+.priceTerms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.priceTerm { min-width: 0; }
+.priceLabel { display: block; margin-bottom: 8px; color: var(--rs-muted); font-size: 12px; }
+.priceAmount { display: block; font-size: clamp(22px, 2.2vw, 30px); line-height: 1.25; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.priceAmount[data-unconfigured=true] { font-size: 16px; letter-spacing: normal; color: var(--rs-muted); }
+.priceTerm input { font-variant-numeric: tabular-nums; }
+.pricingControls { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+@media (max-width: 1000px) {
+  .pricingGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
+@media (max-width: 699px) {
+  .pricingCard { padding: 20px; }
+  .priceAmount { font-size: 24px; }
+}
 .number { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .code { font-family: var(--font-geist-mono), monospace; font-size: 13px; letter-spacing: .025em; overflow-wrap: anywhere; }
 .status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: capitalize; background: var(--rs-panel); border: 1px solid var(--rs-line); padding: 4px 7px; border-radius: 4px; }
@@ -70,11 +85,23 @@
 .confirm::backdrop { background: #0006; }
 .confirm h2 { font-size: 22px; margin: 0 0 16px; }
 .confirm p { font-size: 14px; line-height: 1.7; }
+.section .mobileVoucherActions { display: none; }
+.actionsPopup { margin: auto; width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 20px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-bg); color: var(--rs-fg); }
+.actionsPopup::backdrop { background: #0009; }
+.actionsPopupHeader { display: flex; justify-content: space-between; align-items: start; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--rs-line); }
+.actionsPopupHeader > div { min-width: 0; }
+.actionsPopupHeader p { margin: 0 0 6px; color: var(--rs-muted); font-size: 12px; }
+.actionsPopupHeader h2 { margin: 0; font-family: var(--font-geist-mono), monospace; font-size: 16px; overflow-wrap: anywhere; }
+.actionsPopupHeader button { flex: none; width: 44px; padding: 0; font-size: 24px; }
+.actionsPopupItems { display: grid; gap: 8px; padding-top: 16px; }
+.actionsPopupItems button { width: 100%; text-align: left; }
+.actionsPopupItems .danger { margin-top: 8px; border-color: currentColor; }
 @media (max-width: 699px) {
   .page h1 { font-size: 42px !important; }
   .layout { grid-template-columns: 1fr; gap: 24px; }
-  .navigation { gap: 0; justify-content: space-between; overflow-x: auto; padding-bottom: 2px; }
-  .navigation a { padding: 10px 5px 12px; }
+  .navigation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border-bottom: 0; }
+  .navigation a { justify-content: center; min-width: 0; padding: 12px 10px; border: 1px solid var(--rs-line); border-radius: 6px; white-space: normal; text-align: center; }
+  .navigation a[aria-current] { color: var(--rs-accent-text); border-color: var(--rs-accent); background: var(--rs-panel); box-shadow: inset 0 -2px var(--rs-accent); }
   .head { flex-wrap: wrap; margin-bottom: 20px; }
   .head h2 { font-size: 22px; }
   .fields, .ruleList { grid-template-columns: 1fr; }
@@ -85,14 +112,42 @@
   .table, .table tbody, .table tr, .table td { display: block; }
   .table tr { border-bottom: 1px solid var(--rs-line); padding-block: 14px; }
   .table td { border: 0; padding: 7px 0; }
-  .rates td:not(:first-child)::before { content: attr(data-label); display: block; color: var(--rs-muted); font-size: 12px; margin-bottom: 6px; }
   .table td[data-label]:not(:first-child)::before { content: attr(data-label); color: var(--rs-muted); font-size: 11px; margin-right: 10px; }
-  .rates td:first-child { width: auto; font-size: 16px; padding-block: 8px; }
+  .section .desktopVoucherActions { display: none; }
+  .section .mobileVoucherActions { display: inline-flex; justify-content: center; align-items: center; gap: 10px; }
+  .voucherCards .mobileVoucherActions { width: 100%; margin-top: 8px; background: var(--rs-bg); }
   .table .actions { display: flex; }
   .footer { align-items: stretch; }
   .menuItems { left: 0; right: auto; }
   .editor .footer .actions { width: 100%; }
   .editor .footer .primary { flex: 1; }
+}
+
+/* Voucher cards and filters only change on phones; other settings tables retain
+   their existing responsive layouts. */
+@media (max-width: 699px) {
+  .voucherMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
+  .voucherMetrics > div { min-width: 0; }
+  .voucherMetrics > div:last-child { grid-column: 1 / -1; }
+  .voucherMetrics dd { overflow-wrap: anywhere; }
+  .voucherToolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 12px; margin-top: 16px; margin-bottom: 24px; }
+  .voucherToolbar .search { grid-column: 1 / -1; min-width: 0; }
+  .voucherToolbar > label { min-width: 0; }
+  .table.voucherCards tbody { display: grid; gap: 16px; }
+  .table.voucherCards tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 16px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); }
+  .table.voucherCards td { min-width: 0; padding: 0; overflow-wrap: anywhere; }
+  .voucherCards td:first-child { grid-column: 1 / -1; padding-bottom: 14px; border-bottom: 1px solid var(--rs-line); }
+  .voucherCards td:first-child strong { font-size: 14px; }
+  .voucherCards td:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .voucherCards td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .voucherCards td:nth-child(4) { grid-column: 1 / -1; }
+  .voucherCards .number { white-space: normal; }
+  .voucherCards .status { max-width: 100%; }
+  .voucherCards td:last-child { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--rs-line); }
+  .voucherCards .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voucherCards .actions button { min-width: 0; background: var(--rs-bg); }
+  .voucherCards .menu summary { padding-inline: 0; }
+  .voucherCards .menuItems { max-width: 100%; }
 }
 .page { flex-shrink: 0; }
 

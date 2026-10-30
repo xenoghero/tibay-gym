@@ -3,6 +3,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({ customer: vi.fn(), submit: vi.fn(), quote: vi.fn() }));
 vi.mock("@/lib/server/customer-session", () => ({ requireCustomer: mocks.customer }));
 vi.mock("@/lib/server/purchases", () => ({ submitPurchase: mocks.submit, getPurchaseQuote: mocks.quote }));
+vi.mock("@/lib/server/payment-methods", () => ({ customerPaymentOptions: async () => ({ paymentRevision: 1, paymentAccounts: [] }) }));
 vi.mock("@/lib/server/receipt-store", () => ({ receiptsAvailable: async () => false, reconcileReceiptLink: vi.fn() }));
 import { GET, POST } from "./route";
 import { ApiError } from "@/lib/server/rfid/http";
@@ -11,6 +12,11 @@ beforeEach(() => { vi.clearAllMocks(); mocks.customer.mockResolvedValue({ sessio
 it("binds submitted purchases to the server session, ignoring a forged target/actor", async () => {
   expect((await POST(request({ personId: "other", actorId: "admin", method: "cash" }))).status).toBe(200);
   expect(mocks.submit).toHaveBeenCalledWith("customer:self", "self", { personId: "other", actorId: "admin", method: "cash" });
+});
+it("passes the selected duration to the server quote", async () => {
+  mocks.quote.mockResolvedValue({ amountMinor: 300000 });
+  expect((await GET(new Request("https://test/api?months=3"))).status).toBe(200);
+  expect(mocks.quote).toHaveBeenCalledWith("self", undefined, undefined, 3);
 });
 it("requires a verified profile and an authenticated customer session", async () => {
   mocks.customer.mockResolvedValueOnce({ session: { personId: "self" }, official: false });

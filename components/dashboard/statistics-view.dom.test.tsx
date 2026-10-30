@@ -25,7 +25,7 @@ it("shows one report at a time and supports arrow, Home and End tab navigation",
   expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("statistics-tab-attendance");
   expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Attendance" }));
   fireEvent.keyDown(document.activeElement!, { key: "End" });
-  expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("statistics-tab-renewals");
+  expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("statistics-tab-leads");
   fireEvent.keyDown(document.activeElement!, { key: "Home" });
   expect(screen.getByRole("tab", { name: "Collections" }).getAttribute("aria-selected")).toBe("true");
 });

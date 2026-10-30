@@ -31,11 +31,28 @@ it("compares rates before editing and explicitly reviews changes before saving",
   expect(screen.getByText("Membership purchases unavailable")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Edit prices" }));
   fireEvent.change(screen.getByLabelText("Student daily (PHP)"), { target: { value: "65" } });
-  fireEvent.submit(screen.getByRole("button", { name: "Review changes" }).closest("form")!);
+  fireEvent.submit(screen.getByRole("button", { name: "Save changes" }).closest("form")!);
   const dialog = screen.getByRole("dialog"); expect(dialog.textContent).toContain("₱60.00 → ₱65.00"); expect(posts).toHaveLength(0);
   await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" })); });
   expect(posts[0].body).toMatchObject({ studentDailyMinor: 6500, rateRevision: 1 });
   expect(screen.getByRole("status").textContent).toContain("Rates saved");
+});
+
+it("separates pricing categories and replaces the edit control with cancel and save", async () => {
+  await act(async () => { render(<FinanceSettings />); });
+  const student = screen.getByRole("region", { name: "Student" });
+  const regular = screen.getByRole("region", { name: "Regular" });
+  expect(within(student).getByText("₱60.00")).toBeTruthy();
+  expect(within(regular).getByText("₱70.00")).toBeTruthy();
+  const controls = screen.getByRole("button", { name: "Edit prices" }).parentElement!;
+  fireEvent.click(within(controls).getByRole("button", { name: "Edit prices" }));
+  expect(within(controls).queryByRole("button", { name: "Edit prices" })).toBeNull();
+  expect(within(controls).getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(true);
+  fireEvent.change(screen.getByLabelText("Student daily (PHP)"), { target: { value: "75" } });
+  fireEvent.click(within(controls).getByRole("button", { name: "Cancel" }));
+  expect(within(controls).getByRole("button", { name: "Edit prices" })).toBeTruthy();
+  expect(within(student).getByText("₱60.00")).toBeTruthy();
+  expect(posts).toHaveLength(0);
 });
 it("creates a voucher with explicit scopes and integer centavos", async () => {
   await act(async () => { render(<VoucherSettings />); });
@@ -51,11 +68,42 @@ it("creates a voucher with explicit scopes and integer centavos", async () => {
 });
 it("requires a code-specific confirmation before pausing", async () => {
   await act(async () => { render(<VoucherSettings />); });
-  fireEvent.click(screen.getByText("More actions"));
+  fireEvent.click(screen.getByText("More actions", { selector: "summary" }));
   fireEvent.click(screen.getByRole("button", { name: "Pause" }));
   const dialog = screen.getByRole("dialog"); expect(dialog.textContent).toContain("Pause TRAIN10?"); expect(posts).toHaveLength(0);
   await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Confirm" })); });
   expect(posts[0].body).toMatchObject({ id: "voucher-1", revision: 1, action: "pause" });
+});
+
+it("opens mobile voucher actions in a dialog and restores focus on dismissal", async () => {
+  await act(async () => { render(<VoucherSettings />); });
+  const trigger = screen.getByRole("button", { name: "More actions for TRAIN10" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const popup = screen.getByRole("dialog", { name: "TRAIN10" });
+  expect(popup.hasAttribute("open")).toBe(true);
+  expect(within(popup).getByRole("button", { name: "Edit voucher" })).toBeTruthy();
+  expect(within(popup).getByRole("button", { name: "Duplicate" })).toBeTruthy();
+  fireEvent(popup, new window.Event("cancel", { cancelable: true }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  expect(posts).toHaveLength(0);
+});
+
+it("closes mobile actions before requesting confirmation or opening the editor", async () => {
+  await act(async () => { render(<VoucherSettings />); });
+  const trigger = screen.getByRole("button", { name: "More actions for TRAIN10" });
+  fireEvent.click(trigger);
+  fireEvent.click(within(screen.getByRole("dialog", { name: "TRAIN10" })).getByRole("button", { name: "Pause" }));
+  expect(screen.queryByRole("dialog", { name: "TRAIN10" })).toBeNull();
+  const confirmation = screen.getByRole("dialog", { name: "Pause TRAIN10?" });
+  expect(posts).toHaveLength(0);
+  fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+  fireEvent.click(trigger);
+  fireEvent.click(within(screen.getByRole("dialog", { name: "TRAIN10" })).getByRole("button", { name: "Edit voucher" }));
+  expect(screen.getByRole("dialog", { name: "Edit voucher" })).toBeTruthy();
+  expect(screen.queryByRole("dialog", { name: "TRAIN10" })).toBeNull();
+  expect(posts).toHaveLength(0);
 });
 
 it("keeps the list and filters mounted while creating, and waits for the drawer exit before restoring focus", async () => {
@@ -103,7 +151,7 @@ it("opens voucher details in the drawer and switches to editing within it", asyn
   const drawer = screen.getByRole("dialog", { name: "TRAIN10" });
   expect(within(drawer).getByRole("heading", { name: "Usage history" })).toBeTruthy();
   expect(screen.getByRole("searchbox")).toBeTruthy();
-  fireEvent.click(within(drawer).getByText("More actions"));
+  fireEvent.click(within(drawer).getByText("More actions", { selector: "summary" }));
   fireEvent.click(within(drawer).getByRole("button", { name: "Edit voucher" }));
   expect(screen.getByRole("dialog", { name: "Edit voucher" })).toBe(drawer);
   expect(within(drawer).getByLabelText("Code").getAttribute("value")).toBe("TRAIN10");

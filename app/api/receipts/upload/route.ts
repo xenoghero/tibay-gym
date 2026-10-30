@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       const customer = await requireCustomer(request); personId = customer.session.personId; category = customer.person.rateCategory;
     }
     return json(await uploadDailyReceipt({ paymentMethod, paymentRevision: Number(request.headers.get("x-payment-revision")), personId, category, operationId: operation, expectedAmountMinor, registration,
-      kind: rawKind, previousRequestId, voucherCode: request.headers.get("x-voucher-code") ?? undefined, bytes: await readPrivateImage(request) }));
+      kind: rawKind, previousRequestId, voucherCode: request.headers.get("x-voucher-code") ?? undefined,
+      months: request.headers.has("x-membership-months") ? Number(request.headers.get("x-membership-months")) : undefined, bytes: await readPrivateImage(request) }));
   });
 }

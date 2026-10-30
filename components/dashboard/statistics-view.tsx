@@ -8,6 +8,7 @@ import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import Link from "next/link";
 import { FinanceStatistics } from "./finance-statistics";
+import { LeadStatistics } from "./lead-statistics";
 import { ReportDateSheet } from "./report-date-sheet";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Timestamp } from "firebase/firestore";
@@ -289,7 +290,7 @@ function daysUntil(expiry: Timestamp | null): number {
 
 export function StatisticsView() {
   const reportScroller = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<"collections" | "attendance" | "renewals">("collections");
+  const [tab, setTab] = useState<"collections" | "attendance" | "renewals" | "leads">("collections");
   useContentTransition(reportScroller, tab);
   const [attendanceRefresh, setAttendanceRefresh] = useState(0);
   const [renewalsRefresh, setRenewalsRefresh] = useState(0);
@@ -482,7 +483,7 @@ export function StatisticsView() {
         </div>
       </header>
       <div className="rs-stat-tabs" role="tablist" aria-label="Statistics reports">
-        {(["collections", "attendance", "renewals"] as const).map((name, index, tabs) => <button
+        {(["collections", "attendance", "renewals", "leads"] as const).map((name, index, tabs) => <button
           key={name} type="button" role="tab" id={`statistics-tab-${name}`}
           aria-selected={tab === name} aria-controls={`statistics-panel-${name}`}
           tabIndex={tab === name ? 0 : -1}
@@ -500,6 +501,9 @@ export function StatisticsView() {
         >{name[0].toUpperCase() + name.slice(1)}</button>)}
       </div>
       <div ref={reportScroller} className="rs-finance-scroll" role="region" aria-label="Statistics reports">
+      <section role="tabpanel" id="statistics-panel-leads" aria-labelledby="statistics-tab-leads" hidden={tab !== "leads"} tabIndex={0}>
+        <LeadStatistics enabled={tab === "leads"} />
+      </section>
       <section role="tabpanel" id="statistics-panel-collections" aria-labelledby="statistics-tab-collections" hidden={tab !== "collections"} tabIndex={0}>
         <FinanceStatistics />
       </section>

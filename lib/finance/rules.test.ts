@@ -5,7 +5,11 @@ import type { Charge, PaymentRequest } from "./contracts";
 it("preserves unclassified legacy profiles and refuses missing or invented prices", () => {
   expect(() => snapshotRate({ ...DEFAULT_SETTINGS }, undefined, "daily_session")).toThrow("Student / Regular");
   expect(() => snapshotRate({ ...DEFAULT_SETTINGS }, "student", "renewal")).toThrow("monthly rate");
-  expect(() => snapshotRate({ ...DEFAULT_SETTINGS }, "regular", "renewal", 3)).toThrow("Only one");
+  expect(() => snapshotRate({ ...DEFAULT_SETTINGS }, "regular", "daily_session", 3)).toThrow("Only one");
+});
+it("prices whole membership months at the configured unit rate", () => {
+  expect(snapshotRate({ ...DEFAULT_SETTINGS, studentMonthlyMinor: 60000 }, "student", "renewal", 12)).toMatchObject({ unitRateMinor: 60000, quantity: 12, amountMinor: 720000 });
+  for (const quantity of [0, -1, 1.5, 13, NaN, Infinity]) expect(() => snapshotRate({ ...DEFAULT_SETTINGS, studentMonthlyMinor: 60000 }, "student", "renewal", quantity)).toThrow();
 });
 it("snapshots integer money and never reads later settings", () => {
   const settings = { ...DEFAULT_SETTINGS };

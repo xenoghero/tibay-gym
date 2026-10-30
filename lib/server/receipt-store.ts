@@ -29,7 +29,7 @@ export async function receiptsAvailable() {
   catch { return false; }
 }
 export async function uploadDailyReceipt(input: { personId: string; category: unknown; operationId: unknown; expectedAmountMinor: number; bytes: Buffer; registration?: boolean;
-  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string }) {
+  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string; months?: number }) {
   const paymentMethod = input.paymentMethod ?? "gcash";
   if (paymentMethod === "cash") throw new ApiError(400, "invalid-payment-method");
   let operation: string;
@@ -52,7 +52,7 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
     if (!previous && kind !== (person.type === "member" ? "renewal" : "new_membership")) throw new ApiError(409, "purchase-quote-changed");
   }
   let price;
-  try { price = previous ?? snapshotRate(settings, input.category, kind); } catch { throw new ApiError(409, "category-required"); }
+  try { price = previous ?? snapshotRate(settings, input.category, kind, input.months); } catch { throw new ApiError(409, "category-required"); }
   if (!previous && input.voucherCode) price = { ...price, ...await previewVoucher({ code: input.voucherCode, personId: input.personId,
     kind, category: price.categorySnapshot, baseAmountMinor: price.amountMinor, at: now }) };
   if (price.amountMinor !== input.expectedAmountMinor) throw new ApiError(409, "daily-price-changed");

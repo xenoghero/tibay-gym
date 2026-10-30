@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+vi.hoisted(() => {
+  if (!window.AnimationEvent) Object.defineProperty(window, "AnimationEvent", { value: window.Event, configurable: true });
+});
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AuditView } from "./audit-view";
@@ -38,6 +41,10 @@ it("opens a field comparison with full IDs, copies IDs and restores focus after 
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(event.entityId);
   expect(within(dialog).getByText("Copied")).toBeTruthy();
   fireEvent(dialog, new window.Event("cancel", { cancelable: true }));
+  expect(dialog.getAttribute("data-closing")).toBe("true");
+  expect(dialog.hasAttribute("open")).toBe(true);
+  expect(document.activeElement).not.toBe(trigger);
+  fireEvent.animationEnd(dialog);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
@@ -60,6 +67,35 @@ it("uses applied filters for pagination and refresh, appends events, and clears 
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Clear filters" })); });
   expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toBe("/api/admin/audit?");
   expect((screen.getByLabelText("Action") as HTMLInputElement).value).toBe("");
+});
+
+it("keeps the drawer and scroll lock until the close animation finishes", async () => {
+  await act(async () => { render(<AuditView />); });
+  fireEvent.click(screen.getByRole("button", { name: /View details:/ }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.getAttribute("data-closing")).toBe("false");
+  fireEvent.animationEnd(dialog);
+  expect(dialog.hasAttribute("open")).toBe(true);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Close event details" }));
+  expect(dialog.getAttribute("data-closing")).toBe("true");
+  expect(document.body.style.overflow).toBe("hidden");
+  fireEvent.animationEnd(within(dialog).getByRole("heading", { name: "Payment approved" }));
+  expect(dialog.hasAttribute("open")).toBe(true);
+  fireEvent.animationEnd(dialog);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.body.style.overflow).not.toBe("hidden");
+});
+
+it("finishes closing if the browser does not deliver an animation event", async () => {
+  await act(async () => { render(<AuditView />); });
+  fireEvent.click(screen.getByRole("button", { name: /View details:/ }));
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Close event details" }));
+    expect(screen.getByRole("dialog").hasAttribute("open")).toBe(true);
+    act(() => { vi.advanceTimersByTime(320); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { vi.useRealTimers(); }
 });
 
 it("retains results on a failed filter request and retries that exact request", async () => {

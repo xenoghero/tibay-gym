@@ -60,6 +60,35 @@ it("locks the existing discount on rejected-payment corrections", async () => {
   vi.mocked(fetch).mockResolvedValue(Response.json(discounted));
   await act(async () => { render(<PurchaseForm portal previousRequestId="rejected-1" />); });
   expect(screen.queryByLabelText("Voucher code")).toBeNull(); expect(screen.getByText("Voucher TRAIN10")).toBeTruthy();
+  expect(screen.queryByRole("group", { name: "Membership duration" })).toBeNull();
+});
+
+it("requests the selected months, refreshes that duration, and submits its server quote", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return Response.json({ id: "multi-month" }); }
+    const months = Number(new URL(url, "http://localhost").searchParams.get("months") ?? 1);
+    return Response.json({ ...plain, amountMinor: 100000 * months, quoteToken: `months-${months}`, coverage: { ...plain.coverage, months, expiryDate: months === 12 ? "2027-10-29" : "2027-01-29" } });
+  }));
+  await act(async () => { render(<PurchaseForm portal />); });
+  expect((screen.getByRole("radio", { name: "1 month" }) as HTMLInputElement).checked).toBe(true);
+  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "3 months" })); });
+  expect((screen.getByRole("radio", { name: "3 months" }) as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByText("₱3,000.00")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh quote" })); });
+  expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("months=3");
+  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "1 year" })); });
+  expect(screen.getByText("₱12,000.00")).toBeTruthy();
+  await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
+  expect(posts[0]).toMatchObject({ months: 12, quoteToken: "months-12" });
+});
+
+it("keeps the existing duration and quote when changing months fails", async () => {
+  await act(async () => { render(<PurchaseForm portal />); });
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: "unavailable" }, { status: 503 }));
+  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "5 months" })); });
+  expect((screen.getByRole("radio", { name: "1 month" }) as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByText("Could not update the duration. Try again.")).toBeTruthy();
+  expect(screen.getByText("₱1,000.00")).toBeTruthy();
 });
 it("clears selected receipt evidence when the payable quote changes", async () => {
   await act(async () => { render(<PurchaseForm portal />); });

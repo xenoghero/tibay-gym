@@ -4,7 +4,7 @@ import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
 import type { Charge, GymSettings, PaymentRequest } from "@/lib/finance/contracts";
-import { snapshotRate, operationId, philippineDate } from "@/lib/finance/rules";
+import { snapshotRate, operationId, philippineDate, membershipMonths } from "@/lib/finance/rules";
 import { membershipCoverage, snapshotMembership, coverageExpiryMs, type MembershipSnapshot } from "@/lib/finance/coverage";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
@@ -24,18 +24,22 @@ export interface PurchaseQuote {
   kind: Charge["kind"]; amountMinor: number; categorySnapshot: string; rateRevision: number;
   coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null;
 }
-function quoteFor(person: Person, settings: GymSettings, at: number, previous?: { charge: Charge; requestId: string }, discount?: DiscountQuote, quoteOwner = "new-profile"): PurchaseQuote {
+function quoteFor(person: Person, settings: GymSettings, at: number, previous?: { charge: Charge; requestId: string }, discount?: DiscountQuote, quoteOwner = "new-profile", months = 1): PurchaseQuote {
   let snapshot;
-  try { snapshot = previous ? previous.charge : snapshotRate(settings, person.rateCategory, person.type === "member" ? "renewal" : "new_membership"); }
+  try { snapshot = previous ? previous.charge : snapshotRate(settings, person.rateCategory, person.type === "member" ? "renewal" : "new_membership", months); }
   catch { throw new ApiError(409, "monthly-price-or-category-unset"); }
   const kind = previous?.charge.kind ?? (person.type === "member" ? "renewal" : "new_membership");
-  const coverage = kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at);
+  const coverage = kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at, snapshot.quantity);
   const fields = { kind, amountMinor: discount?.amountMinor ?? snapshot.amountMinor, categorySnapshot: snapshot.categorySnapshot,
     ...(previous ? { baseAmountMinor: previous.charge.baseAmountMinor ?? snapshot.amountMinor, discountAmountMinor: previous.charge.discountAmountMinor ?? 0, voucherSnapshot: previous.charge.voucherSnapshot ?? null } : discount ? { baseAmountMinor: discount.baseAmountMinor, discountAmountMinor: discount.discountAmountMinor, voucherSnapshot: discount.voucherSnapshot } : {}),
     rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null };
   return { ...fields, quoteToken: hash([quoteOwner, fields, snapshotMembership(person), philippineDate(at)]) };
 }
-export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string) {
+function purchaseMonths(value: unknown) {
+  try { return membershipMonths(value); } catch { throw new ApiError(400, "invalid-membership-months"); }
+}
+export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number) {
+  const duration = purchaseMonths(months);
   const db = adminDb(), person = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
   if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
   const settings = (await db.doc("gymSettings/finance").get()).data() as GymSettings | undefined;
@@ -49,10 +53,11 @@ export async function getPurchaseQuote(personId: string, previousRequestId?: str
     previous = { charge, requestId: previousRequestId };
   }
   if (previous && voucherCode) throw new ApiError(409, "replacement-voucher-locked");
-  const basic = quoteFor(person, settings, Date.now(), previous, undefined, personId);
+  if (previous && months !== undefined && months !== previous.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
+  const basic = quoteFor(person, settings, Date.now(), previous, undefined, personId, duration);
   const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId, kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: Date.now() }) : undefined;
-  return quoteFor(person, settings, Date.now(), previous, discount, personId);
+  return quoteFor(person, settings, Date.now(), previous, discount, personId, duration);
 }
 export async function newProfileQuote(category: unknown, voucherCode?: string) {
   const settings = (await adminDb().doc("gymSettings/finance").get()).data() as GymSettings | undefined;
@@ -78,11 +83,13 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     if (!charge || charge.personId !== personId || charge.confirmedPaymentRequestId || charge.abandonedAt || charge.activePaymentRequestId !== previousId) throw new ApiError(409, "replacement-unavailable");
     prior = { charge, requestId: previousId };
   }
-  const now = Date.now(), basic = quoteFor(person, settings, now, prior, undefined, newProfile ? "new-profile" : personId);
+  const months = purchaseMonths(body.months);
+  if (prior && body.months !== undefined && months !== prior.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
+  const now = Date.now(), basic = quoteFor(person, settings, now, prior, undefined, newProfile ? "new-profile" : personId, months);
   if (prior && body.voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   const voucher = !prior && body.voucherCode ? await prepareVoucher(tx, db, { code: body.voucherCode, personId, actorId, kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: now }) : null;
-  const quote = quoteFor(person, settings, now, prior, voucher ?? undefined, newProfile ? "new-profile" : personId);
+  const quote = quoteFor(person, settings, now, prior, voucher ?? undefined, newProfile ? "new-profile" : personId, months);
   if (body.quoteToken !== quote.quoteToken) throw new ApiError(409, "purchase-quote-changed");
   const stateRef = db.doc(`membershipPurchaseState/${personId}`), state = (await tx.get(stateRef)).data();
   if (quote.kind !== "daily_session" && state?.activeRequestId) {
@@ -100,7 +107,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     receiptId: typeof body.receiptId === "string" ? body.receiptId : undefined, receiptToken: typeof body.receiptToken === "string" ? body.receiptToken : undefined }) : null;
   if (proof && proof.paymentRequestId !== requestId) throw new ApiError(409, "valid-receipt-required");
   const number = prior ? null : await prepareTransactionNumber(tx, db);
-  const price = prior?.charge ?? snapshotRate(settings, person.rateCategory, quote.kind);
+  const price = prior?.charge ?? snapshotRate(settings, person.rateCategory, quote.kind, months);
   const charge: Charge = prior?.charge ?? { id: chargeId, ...price,
     ...(voucher ? { baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot } : {}),
     tibayTransactionNumber: number!.number, personId, kind: quote.kind, chargeDate: philippineDate(now),
@@ -132,7 +139,7 @@ export async function submitPurchase(actorId: string, personId: string, body: Re
   });
 }
 function approvalPreview(payment: PaymentRequest, charge: Charge, person: Person, review: Record<string, unknown> | undefined, at: number) {
-  const coverage = payment.status === "approved" ? payment.appliedCoverage : charge.kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at);
+  const coverage = payment.status === "approved" ? payment.appliedCoverage : charge.kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at, charge.quantity);
   return { coverage, previewToken: hash([payment.id, charge.amountMinor, payment.method, snapshotMembership(person), coverage, review?.reviewRevision ?? 0, philippineDate(at)]) };
 }
 export async function paymentReviewPreview(id: string) {
