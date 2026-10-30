@@ -1,7 +1,5 @@
 "use client";
 
-import { LoadingSkeleton } from "@/components/ui/skeleton";
-
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -22,9 +20,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div style={{ minHeight: "100vh", padding: "clamp(24px, 6vw, 80px)", background: "var(--rs-bg)" }}>
-        <LoadingSkeleton label="Loading your workspace…" variant="cards" count={4} />
-        <LoadingSkeleton label="Checking sign-in…" count={5} />
+      <div role="status" style={{ padding: "clamp(24px, 6vw, 80px)", color: "var(--rs-muted)" }}>
+        Checking sign-in…
       </div>
     );
   }
