@@ -4,7 +4,7 @@ import { FormSelect } from "@/components/ui/form-select";
 import { FormInput } from "@/components/ui/form-input";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ReportDateSheet } from "./report-date-sheet";
 import { auth } from "@/lib/firebase";
@@ -42,6 +42,16 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   const [pageLoading, setPageLoading] = useState(false), [pageError, setPageError] = useState("");
   const generation = useRef(0);
   const query = new URLSearchParams(compact ? { period: "day", date } : { period, date, from, through }).toString();
+  const refreshReport = useCallback(() => {
+    if (compact) {
+      const nextDate = philippineDate(Date.now());
+      if (nextDate !== date) {
+        setReport(null); setError(""); setPageError("");
+        setDate(nextDate);
+      }
+    }
+    setLoading(true); setRefresh(value => value + 1);
+  }, [compact, date]);
   useEffect(() => {
     const user = auth.currentUser;
     const snapshot = compact && user ? compactReports.get(user) : undefined;
@@ -63,14 +73,23 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
     if (!compact) return;
     const reload = () => {
       if (document.visibilityState === "hidden") return;
-      const nextDate = philippineDate(Date.now());
-      if (nextDate !== date) setReport(null);
-      setDate(nextDate);
-      setLoading(true); setRefresh(value => value + 1);
+      refreshReport();
+    };
+    // Suspended/background tabs may miss midnight. Reconcile the date as soon
+    // as the user returns, without refetching on ordinary same-day focus.
+    const resume = () => {
+      if (philippineDate(Date.now()) !== date) reload();
     };
     const timer = window.setInterval(reload, refreshInterval);
-    return () => { window.clearInterval(timer); };
-  }, [compact, date]);
+    const midnight = window.setTimeout(reload, Date.parse(`${date}T00:00:00+08:00`) + 86_400_000 - Date.now());
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
+    return () => {
+      window.clearInterval(timer); window.clearTimeout(midnight);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
+    };
+  }, [compact, date, refreshReport]);
   function changed(update: () => void) { update(); setReport(null); setError(""); setPageError(""); setLoading(true); }
   async function more() {
     const selectedQuery = query, selectedReport = report, selectedGeneration = generation.current;
@@ -88,7 +107,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   }
   const totals = report?.totals;
   if (compact) return <section className="rs-finance rs-finance-compact" aria-label="Today's collections" aria-busy={loading}>
-    <div className="rs-finance-heading"><h2>Today’s collections</h2><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
+    <div className="rs-finance-heading"><h2>Today’s collections</h2><button type="button" disabled={loading} onClick={refreshReport}>Refresh collections</button></div>
     <div className="rs-ov-collections-scroll" role="region" aria-label="Today's collection details" tabIndex={0}>
     {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}
     {error && <p role="alert">{error}</p>}
@@ -120,7 +139,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
     <div className="rs-collection-toolbar">
       <div className="rs-finance-filters rs-collection-desktop-filters">{filters}</div>
       <button className="rs-collection-date-trigger" type="button" aria-haspopup="dialog" aria-expanded={dateSheetOpen} onClick={() => setDateSheetOpen(true)}><span>Date range</span><strong>{period === "custom" ? `${from} – ${through}` : `${period === "day" ? "Day" : period === "week" ? "Week of" : "Month of"} · ${date}`}</strong><span aria-hidden="true">⌄</span></button>
-      <div className="rs-collection-refresh"><small>{!error && report ? `Updated ${new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}` : "Philippine time"}</small><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
+      <div className="rs-collection-refresh"><small>{!error && report ? `Updated ${new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}` : "Philippine time"}</small><button type="button" disabled={loading} onClick={refreshReport}>Refresh collections</button></div>
     </div>
     <ReportDateSheet open={dateSheetOpen} onClose={() => setDateSheetOpen(false)}><div className="rs-finance-filters">{filters}</div></ReportDateSheet>
     {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}

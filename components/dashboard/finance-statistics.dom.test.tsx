@@ -109,7 +109,57 @@ it("switches to the next Philippine date without showing yesterday's totals", as
   vi.setSystemTime(new Date("2026-10-28T15:59:30Z"));
   await act(async () => { render(<FinanceStatistics compact />); });
   vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
-  await act(async () => { vi.advanceTimersByTime(60_000); });
+  await act(async () => { vi.advanceTimersByTime(30_000); });
   expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("date=2026-10-29");
   expect(screen.queryByText("Confirmed collections")).toBeNull();
 });
+
+it("hides yesterday's totals immediately while the resumed day's report is loading", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-29T15:59:30Z"));
+  await act(async () => { render(<FinanceStatistics compact />); });
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+  vi.setSystemTime(new Date("2026-10-30T09:00:00Z"));
+  await act(async () => { fireEvent(document, new Event("visibilitychange")); });
+  expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("date=2026-10-30");
+  expect(screen.queryByText("Confirmed collections")).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("Loading collections");
+});
+
+it("preserves the selected date in Statistics when manually refreshing on a later day", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-29T09:00:00Z"));
+  await act(async () => { render(<FinanceStatistics />); });
+  vi.setSystemTime(new Date("2026-10-30T09:00:00Z"));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh collections" })); });
+  expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("date=2026-10-29");
+});
+
+for (const trigger of ["manual refresh", "return to tab", "window focus"] as const) {
+  it(`drops yesterday's membership collections on ${trigger} after midnight`, async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-29T15:59:30Z"));
+    const recordedAt = Date.parse("2026-10-29T09:00:00Z");
+    const charge = chargeFixture("yesterday-membership", {
+      kind: "new_membership", amountMinor: 60000, chargeDate: "2026-10-29",
+      recognizedPurchaseAt: recordedAt, confirmedPaymentRequestId: "membership-payment",
+    });
+    const payment = paymentFixture("membership-payment", charge, { status: "approved", confirmedAt: recordedAt });
+    vi.mocked(fetch).mockImplementation(async input => Response.json({
+      ...buildFinanceReport([charge], [payment], reportRange(new URL(String(input), "http://localhost").searchParams)),
+      revision: "membership-snapshot", nextCursor: null, generatedAt: Date.now(), financialCutoverAt: AT,
+    }));
+    await act(async () => { render(<FinanceStatistics compact />); });
+    expect(screen.getByText(/1 confirmed transactions/)).toBeTruthy();
+    // Simulate a suspended browser: wall time changes without running the interval.
+    vi.setSystemTime(new Date("2026-10-30T09:00:00Z"));
+    await act(async () => {
+      if (trigger === "manual refresh") fireEvent.click(screen.getByRole("button", { name: "Refresh collections" }));
+      else if (trigger === "return to tab") fireEvent(document, new Event("visibilitychange"));
+      else fireEvent.focus(window);
+    });
+    expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("date=2026-10-30");
+    expect(screen.getByText(/0 confirmed transactions/)).toBeTruthy();
+    expect(screen.queryByText(/1 confirmed transactions/)).toBeNull();
+  });
+}
