@@ -2,6 +2,19 @@ import { expect, it } from "vitest";
 import { AT, chargeFixture, paymentFixture } from "@/tests/finance-fixtures";
 import { buildFinanceReport, reportRange } from "./report";
 const day = (date = "2026-10-26") => reportRange(new URLSearchParams({ date }));
+it("excludes yesterday's approved membership from today's purchases and confirmed collections", () => {
+  const recordedAt = Date.parse("2026-10-29T09:00:00Z");
+  const charge = chargeFixture("membership", {
+    kind: "new_membership", amountMinor: 60000, chargeDate: "2026-10-29",
+    recognizedPurchaseAt: recordedAt, confirmedPaymentRequestId: "paid",
+  });
+  const payment = paymentFixture("paid", charge, { status: "approved", confirmedAt: recordedAt });
+  expect(buildFinanceReport([charge], [payment], day("2026-10-29")).totals)
+    .toMatchObject({ expectedMinor: 60000, confirmedMinor: 60000, confirmedCount: 1 });
+  const today = buildFinanceReport([charge], [payment], day("2026-10-30"));
+  expect(today.totals).toMatchObject({ expectedMinor: 0, confirmedMinor: 0, confirmedCount: 0 });
+  expect(today.ledger).toEqual([]);
+});
 it("keeps bank collections out of the GCash subtotal and shows the submitted account name", () => {
   const charge = chargeFixture("bank", { confirmedPaymentRequestId: "bank-pay" });
   const payment = paymentFixture("bank-pay", charge, { method: "account_bank0001", status: "approved", confirmedAt: AT,
