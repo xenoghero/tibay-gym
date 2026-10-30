@@ -12,6 +12,8 @@ export interface PosterOptions {
   gymName: string;
   /** Instructional caption; defaults to "Scan to check in". */
   caption?: string;
+  /** Instructions below the code; explicit newlines are preserved. */
+  instructions?: string;
 }
 
 /** Poster canvas size — portrait, ~A4 proportions at print-friendly density. */
@@ -20,7 +22,6 @@ export const POSTER_HEIGHT = 1754;
 
 const INK = "#0d0d0d";
 const MUTED = "#6f6f6d";
-const LINE = "#e4e4e2";
 const ACCENT = "#ffcc00";
 const QR_SIZE = 780;
 
@@ -34,7 +35,7 @@ export async function buildPosterCanvas(
   const qrCanvas = document.createElement("canvas");
   await QRCode.toCanvas(qrCanvas, opts.url, {
     width: QR_SIZE,
-    margin: 1,
+    margin: 4,
     errorCorrectionLevel: "M",
     color: { dark: INK, light: "#ffffff" },
   });
@@ -45,64 +46,99 @@ export async function buildPosterCanvas(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context unavailable");
 
-  // Wait for the webfonts (Barlow Condensed / Geist, loaded via next/font) so
-  // the poster text isn't painted in a fallback face on first render.
-  try {
-    await document.fonts.ready;
-  } catch {
-    /* Font Loading API unsupported — fall through to system fallback stacks. */
-  }
+  // next/font exposes generated family names through CSS custom properties.
+  const style = getComputedStyle(document.documentElement);
+  const display = style.getPropertyValue("--font-barlow-condensed").trim() || "sans-serif";
+  const body = style.getPropertyValue("--font-geist-sans").trim() || "sans-serif";
+  const mono = style.getPropertyValue("--font-geist-mono").trim() || "monospace";
+  await Promise.all([
+    document.fonts.load(`700 108px ${display}`),
+    document.fonts.load(`700 112px ${display}`),
+    document.fonts.load(`400 32px ${body}`),
+    document.fonts.load(`500 26px ${mono}`),
+  ]);
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT);
 
-  // Brand rules top and bottom, framing the content block on the page.
+  // Match the check-in header: yellow band, dark circular logo badge and
+  // bold dark wordmark, with the entire lockup centered as a single unit.
+  const headerHeight = 280;
   ctx.fillStyle = ACCENT;
-  ctx.fillRect(0, 0, POSTER_WIDTH, 16);
-  ctx.fillRect(0, POSTER_HEIGHT - 16, POSTER_WIDTH, 16);
+  ctx.fillRect(0, 0, POSTER_WIDTH, headerHeight);
+
+  const logo = new Image();
+  logo.src = "/tibay-gym-mark-transparent.svg";
+  await logo.decode();
+  const badgeSize = 144;
+  const logoW = 108;
+  const logoH = logoW * 429 / 628;
+  const gap = 36;
+  ctx.font = `700 112px ${display}`;
+  const name = opts.gymName.toUpperCase();
+  const brandW = badgeSize + gap + ctx.measureText(name).width;
+  const brandX = (POSTER_WIDTH - brandW) / 2;
+  const brandY = headerHeight / 2;
+  ctx.fillStyle = "#000000";
+  ctx.beginPath();
+  ctx.arc(brandX + badgeSize / 2, brandY, badgeSize / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(logo, brandX + (badgeSize - logoW) / 2, brandY - logoH / 2, logoW, logoH);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#20211d";
+  ctx.fillText(name, brandX + badgeSize + gap, brandY);
 
   const cx = POSTER_WIDTH / 2;
-  const logo = new Image();
-  logo.src = "/tibay-gym-logo.svg";
-  await logo.decode();
-  ctx.drawImage(logo, cx - 100, 58, 200, 140);
   ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-
   ctx.fillStyle = INK;
-  ctx.font = "600 60px 'Barlow Condensed', system-ui, sans-serif";
-  ctx.fillText(opts.gymName.toUpperCase(), cx, 250);
+  const titleLines = caption.toUpperCase().split("\n");
+  // Fit long labels without distorting their letterforms.
+  let titleSize = 108;
+  ctx.font = `700 ${titleSize}px ${display}`;
+  while (titleLines.some(line => ctx.measureText(line).width > POSTER_WIDTH - 180) && titleSize > 48) {
+    ctx.font = `700 ${--titleSize}px ${display}`;
+  }
+  const titleStep = titleSize * 1.05;
+  titleLines.forEach((line, index) => {
+    ctx.fillText(line, cx, 405 + (index - (titleLines.length - 1) / 2) * titleStep);
+  });
 
-  ctx.font = "700 116px 'Barlow Condensed', system-ui, sans-serif";
-  ctx.fillText(caption.toUpperCase(), cx, 392);
-
-  const qrX = cx - QR_SIZE / 2;
-  const qrY = 520;
-  ctx.strokeStyle = LINE;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(qrX - 28, qrY - 28, QR_SIZE + 56, QR_SIZE + 56);
-  ctx.drawImage(qrCanvas, qrX, qrY, QR_SIZE, QR_SIZE);
+  // Four clear modules around the QR; no decorative frame or logo overlay.
+  const qrY = 545;
+  ctx.drawImage(qrCanvas, cx - QR_SIZE / 2, qrY, QR_SIZE, QR_SIZE);
 
   ctx.fillStyle = MUTED;
-  ctx.font = "400 32px 'Geist', system-ui, sans-serif";
-  ctx.fillText(
-    "Open your phone camera, scan, then enter your phone number.",
-    cx,
-    qrY + QR_SIZE + 110,
-  );
+  ctx.font = `400 32px ${body}`;
+  const instructionLines = (opts.instructions ??
+    "Open your phone camera and scan.\nEnter your phone number to check in.").split("\n");
+  instructionLines.forEach((line, index) => {
+    drawFittedText(ctx, line, cx, 1400 + index * 50, POSTER_WIDTH - 160, 32, body, "400");
+  });
 
   ctx.fillStyle = INK;
-  ctx.font = "500 28px 'Geist Mono', ui-monospace, monospace";
-  ctx.fillText(opts.url, cx, qrY + QR_SIZE + 172);
+  drawFittedText(ctx, opts.url, cx, 1590, POSTER_WIDTH - 180, 26, mono, "500");
 
   return canvas;
 }
 
 /** `body-fitness-gym` → filename stem for the downloads. */
-export function posterFileStem(gymName: string): string {
+export function posterFileStem(gymName: string, destination = "check-in"): string {
   const slug = gymName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `${slug || "gym"}-check-in-qr`;
+  return `${slug || "gym"}-${destination}-qr`;
+}
+
+/** Keep long production URLs inside the printable margins. */
+function drawFittedText(
+  ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
+  maxWidth: number, size: number, family: string, weight: string,
+) {
+  ctx.font = `${weight} ${size}px ${family}`;
+  while (ctx.measureText(text).width > maxWidth && size > 12) {
+    ctx.font = `${weight} ${--size}px ${family}`;
+  }
+  ctx.fillText(text, x, y);
 }

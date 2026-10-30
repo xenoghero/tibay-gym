@@ -119,6 +119,21 @@ it("GCash reveals a required receipt and selecting cash removes that requirement
   expect(screen.queryByLabelText("GCash receipt")).toBeNull();
   expect(document.querySelector("form")!.checkValidity()).toBe(true);
 });
+it("shows configured bank details and QR only for the selected daily payment account", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "p1", name: "Alex", type: "guest", visitCount: 2 },
+    paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: true, paymentRevision: 3, paymentAccounts: [
+      { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: "data:image/png;base64,AAAA", enabled: true },
+    ] } }));
+  mount(); await submit();
+  expect(screen.queryByRole("radio", { name: /GCash/ })).toBeNull();
+  fireEvent.click(screen.getByRole("radio", { name: /BPI savings/ }));
+  expect(screen.getByText("0012345678")).toBeTruthy();
+  expect(screen.getByRole("img", { name: "BPI savings payment QR code" })).toBeTruthy();
+  expect(screen.getByLabelText<HTMLInputElement>("Payment receipt").required).toBe(true);
+  fireEvent.click(screen.getByRole("radio", { name: /Cash Pay/ }));
+  expect(screen.queryByRole("img", { name: "BPI savings payment QR code" })).toBeNull();
+  expect(screen.queryByLabelText("Payment receipt")).toBeNull();
+});
 it("an incomplete phone cannot submit attendance", async () => {
   render(<CheckInFlow />);
   const input = screen.getByLabelText<HTMLInputElement>("Phone number");

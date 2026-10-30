@@ -1,5 +1,8 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { AuditEvent } from "@/lib/server/audit";
@@ -62,6 +65,7 @@ function CopyValue({ label, value }: { label: string; value: string }) {
 
 function EventDrawer({ event, onClose }: { event: Event; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [closing, setClosing] = useState(false);
   const date = dateParts(event.occurredAt);
   const before = event.relevantBefore ?? {};
   const after = event.relevantAfter ?? {};
@@ -81,13 +85,27 @@ function EventDrawer({ event, onClose }: { event: Event; onClose: () => void }) 
     };
   }, []);
 
+  useEffect(() => {
+    if (!closing) return;
+    // Finish even if animations are disabled or animationend is missed.
+    const timeout = window.setTimeout(onClose, 320);
+    return () => window.clearTimeout(timeout);
+  }, [closing, onClose]);
+
   return <dialog ref={dialogRef} className={styles.drawer} aria-labelledby="audit-detail-title"
-    onCancel={e => { e.preventDefault(); onClose(); }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className={styles.drawerInner}>
+    data-closing={closing}
+    onCancel={e => { e.preventDefault(); setClosing(true); }}
+    onClick={e => {
+      if (e.target !== e.currentTarget || closing) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) setClosing(true);
+    }}
+    onAnimationEnd={e => { if (closing && e.target === e.currentTarget && !e.pseudoElement) onClose(); }}>
+    <div className={styles.drawerInner} inert={closing}>
       <header className={styles.drawerHeader}>
         <div><p className={styles.kicker}>Event details</p><h2 id="audit-detail-title">{readable(event.action)}</h2>
           <p className={styles.muted}>{date.date} · {date.time} PHT</p></div>
-        <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close event details">✕</button>
+        <button type="button" className={styles.closeButton} disabled={closing} onClick={() => setClosing(true)} aria-label="Close event details">✕</button>
       </header>
       <div className={styles.drawerBody}>
         <section className={styles.detailSection} aria-labelledby="audit-context-title">
@@ -202,7 +220,7 @@ export function AuditView() {
       <form id="audit-filters" className={`${styles.filters} ${filtersOpen ? styles.filtersOpen : ""}`} onSubmit={applyFilters}>
         {(Object.keys(emptyFilters) as Array<keyof Filters>).map(key => <label key={key}>
           <span>{filterLabels[key]}</span>
-          <input type={key === "from" || key === "through" ? "date" : "text"}
+          <FormInput type={key === "from" || key === "through" ? "date" : "text"}
             value={filters[key]} maxLength={128} placeholder={key === "action" ? "e.g. payment-approved" : "Exact ID"}
             max={key === "from" ? filters.through || undefined : undefined}
             min={key === "through" ? filters.from || undefined : undefined}
@@ -224,7 +242,7 @@ export function AuditView() {
     {error && <div className={styles.error} role="alert"><span>{error}{loaded && " Previously loaded activity remains below."}</span>
       <button className={styles.textButton} disabled={busy} onClick={() => void load(lastRequest.current.filters, lastRequest.current.cursor)}>Retry</button></div>}
     <section className={styles.results} aria-label="Audit history events" aria-busy={busy}>
-      {busy && !loaded ? <div className={styles.empty} role="status"><span className={styles.loadingMark} aria-hidden="true" />Loading audit history…</div>
+      {busy && !loaded ? <LoadingSkeleton label="Loading audit history…" count={6} />
         : !page.events.length ? <div className={styles.empty}><h3>{error ? "Activity unavailable" : "No events found"}</h3>
           <p>{error ? "Retry to load the audit history." : activeCount ? "Try a wider date range or clear your filters." : "Administrative changes will appear here as they happen."}</p>
           {!error && activeCount > 0 && <button className={styles.button} disabled={busy} onClick={clearFilters}>Clear filters</button>}</div>

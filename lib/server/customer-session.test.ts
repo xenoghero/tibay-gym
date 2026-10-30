@@ -6,7 +6,7 @@ vi.mock("./firebase-admin", () => ({ adminDb: () => mocks.store!.db }));
 vi.mock("./public-rate-limit", () => ({ publicCaller: () => "test", publicRateLimiter: { consume: mocks.limit } }));
 import { createCustomerSession, requireCustomer, sessionCookie } from "./customer-session";
 import { POST, GET, DELETE } from "@/app/api/customer/session/route";
-beforeEach(() => { mocks.store = memoryFirestore(); mocks.limit.mockReset(); mocks.store.data.set("persons/p1", { phone: "09123456789", type: "guest", status: null, name: "Private", address: "Private", rfidTagId: "Private" }); });
+beforeEach(() => { mocks.store = memoryFirestore(); mocks.limit.mockReset(); mocks.store.data.set("persons/p1", { phone: "09123456789", type: "guest", status: null, name: "Mara Santos", address: "Private", rfidTagId: "Private" }); });
 const request = (token: string, origin?: string) => new Request("https://test/api", { headers: { cookie: `tibay_customer=${token}`, ...(origin ? { origin } : {}) } });
 it("stores only a session hash, binds it to the looked-up customer and expires it", async () => {
   const result = await createCustomerSession("09123456789");
@@ -46,14 +46,14 @@ it("keeps sessions working when pending approval preserves the customer ID", asy
   mocks.store!.data.delete("unverifiedPersons/p1"); mocks.store!.data.set("persons/p1", person);
   expect((await requireCustomer(request(token))).official).toBe(true);
 });
-it("returns a minimal status projection with a private cookie, never a raw session or private profile", async () => {
+it("returns the selected customer's name and minimal status with a private cookie", async () => {
   const response = await POST(new Request("https://test/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "09123456789", personId: "someone-else" }) }));
   expect(response.status).toBe(200);
   const cookie = response.headers.get("set-cookie")!;
   expect(cookie).toMatch(/HttpOnly; SameSite=Strict/); expect(cookie).toMatch(/Max-Age=1800/);
   expect(Object.keys(await response.json())).toEqual(["expiresAt"]);
   const status = await (await GET(new Request("https://test/api", { headers: { cookie } }))).json();
-  expect(status).toMatchObject({ type: "guest", verified: true, rateCategory: null });
+  expect(status).toMatchObject({ name: "Mara Santos", type: "guest", verified: true, rateCategory: null });
   expect(JSON.stringify(status)).not.toMatch(/Private|phone|rfidTagId|personId/);
   expect(sessionCookie("token")).toContain("Path=/api");
 });

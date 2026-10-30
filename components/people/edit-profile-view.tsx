@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -69,7 +70,7 @@ export function EditProfileView({ personId }: EditProfileViewProps) {
         backHref={profileHref}
         backLabel="Back to profile"
       >
-        <p style={mutedText}>Loading…</p>
+        <LoadingSkeleton label="Loading profile…" variant="form" count={5} />
       </PeopleFormShell>
     );
   }

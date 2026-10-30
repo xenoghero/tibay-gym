@@ -1,10 +1,15 @@
 "use client";
+
+import { paymentLabel } from "@/lib/finance/payment-methods";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import styles from "./customer-access.module.css";
-interface Summary { rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
+interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
 export function CustomerAccess() {
   const [phone, setPhone] = useState(""), [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
@@ -56,12 +61,13 @@ export function CustomerAccess() {
         </form><p className={styles.privacyNote}>This opens limited membership and payment details for a 30-minute session. The gym reviews all payment requests.</p>
       </section>
     </div> : <>
-      <div className={styles.pageHeading}><div><span className={styles.eyebrow}>Member overview</span><h1>Your membership</h1><p>Your status, your payments, your next step.</p></div><span className={styles.sessionNote}>30-minute access session</span></div>
+      <div className={styles.pageHeading}><div><span className={styles.eyebrow}>Member overview</span><h1>Your membership</h1><p className={styles.profileName}>Profile for <strong>{summary.name}</strong></p></div><span className={styles.sessionNote}>30-minute access session</span></div>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <section className={styles.membership} aria-labelledby="membership-title">
         <div className={styles.membershipMain}><h2 id="membership-title">Membership</h2><strong>{summary.type === "member" ? titleCase(summary.status ?? "Needs review") : "Guest profile"}</strong><p>{summary.type === "member" ? "Check your expiry before your next visit." : "Start a membership when you’re ready to train."}</p></div>
         <dl className={styles.membershipDetails}><div><dt>Rate category</dt><dd>{titleCase(summary.rateCategory ?? "Needs admin review")}</dd></div><div><dt>Membership expiry</dt><dd>{summary.membershipExpiryMs ? formatDate(summary.membershipExpiryMs) : "No active membership"}</dd></div><div><dt>Profile verification</dt><dd><span className={styles.badge} data-status={summary.verified ? "approved" : "pending"}>{summary.verified ? "Verified profile" : "Awaiting verification"}</span></dd></div></dl>
       </section>
+      {(summary.type !== "member" || summary.status !== "active") && <div className={styles.notice}><div><strong>Training for the day?</strong><p>Choose a daily session at check-in and apply an eligible voucher before payment.</p></div><Link className={styles.secondaryButton} href="/checkin">Daily check-in →</Link></div>}
       {!summary.verified && <div className={styles.notice}><strong>Profile verification needed</strong><p>Ask the gym administrator to verify your profile before requesting a membership. You can still check your payments below.</p></div>}
       <CustomerPurchases allowPurchases={summary.verified} onRefreshMembership={refreshMembership} />
       <footer className={styles.footer}><Link href="/checkin">← Back to check-in</Link><p>Membership updates after the gym approves your payment.</p></footer>
@@ -71,7 +77,7 @@ export function CustomerAccess() {
 const titleCase = (value: string) => value.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
 const formatDate = (value: number) => new Date(value).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
-interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; submittedAt: number; rejectionReason: string | null }
+interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; paymentAccountSnapshot?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
 function CustomerPurchases({ allowPurchases, onRefreshMembership }: { allowPurchases: boolean; onRefreshMembership(): Promise<void> }) {
   const [payments, setPayments] = useState<CustomerPayment[]>([]), [cursor, setCursor] = useState<string | null>(null), [error, setError] = useState("");
   const [previous, setPrevious] = useState<string | undefined>();
@@ -100,15 +106,15 @@ function CustomerPurchases({ allowPurchases, onRefreshMembership }: { allowPurch
     document.getElementById("customer-purchase")?.focus({ preventScroll: true });
   }
   function paymentRow(payment: CustomerPayment) {
-    return <article className={styles.paymentRow} key={payment.id}><div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong><span className={styles.badge} data-status={payment.status}>{payment.status}</span></div><p>{payment.method === "gcash" ? "GCash" : titleCase(payment.method)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>{payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}{allowPurchases && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}</article>;
+    return <article className={styles.paymentRow} key={payment.id}><div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong><span className={styles.badge} data-status={payment.status}>{payment.closed ? "closed" : payment.status}</span></div><p>{paymentLabel(payment)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>{payment.voucherCode && <p>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}{payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}{allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}</article>;
   }
   return <>
-    {!browsingOlder && latest?.status === "rejected" && <div className={styles.notice} data-tone="rejected"><div><strong>Your latest payment needs attention</strong><p>{latest.rejectionReason ? `Reason: ${latest.rejectionReason}` : "The gym rejected this submission. Review the details before sending a replacement."}</p></div>{allowPurchases && <button className={styles.secondaryButton} onClick={() => replace(latest.id)}>Correct submission →</button>}</div>}
+    {!browsingOlder && !latest?.closed && latest?.status === "rejected" && <div className={styles.notice} data-tone="rejected"><div><strong>Your latest payment needs attention</strong><p>{latest.rejectionReason ? `Reason: ${latest.rejectionReason}` : "The gym rejected this submission. Review the details before sending a replacement."}</p></div>{allowPurchases && <button className={styles.secondaryButton} onClick={() => replace(latest.id)}>Correct submission →</button>}</div>}
     <div className={styles.contentGrid}>
       {allowPurchases && <div id="customer-purchase" className={styles.purchasePanel} tabIndex={-1}><PurchaseForm portal key={previous ?? "new"} previousRequestId={previous} onSubmitted={() => { setPrevious(undefined); void load().catch(e => setError(e.message)); }} />{previous && <button className={styles.textButton} onClick={() => setPrevious(undefined)}>Cancel replacement</button>}</div>}
       <section className={styles.paymentsPanel} aria-labelledby="payments-title"><div className={styles.sectionHeading}><h2 id="payments-title">Payment status</h2><button className={styles.textButton} disabled={refreshing || loading} onClick={() => load().catch(e => setError(e.message))}>{refreshing ? "Refreshing…" : "Refresh payment status"}</button></div>
         {updatedAt && <p className={styles.updated} role="status">Updated at {new Date(updatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>}
-        {loading && <div className={styles.skeleton} role="status">Loading payment status…</div>}
+        {loading && <LoadingSkeleton label="Loading payment status…" />}
         {error && <p className={styles.error} role="alert">{error}</p>}
         {!loading && !error && !payments.length && <div className={styles.empty}><span aria-hidden="true">↗</span><h3>No payment requests yet</h3><p>Your submitted payments and their review status will appear here.</p></div>}
         {browsingOlder ? <><span className={styles.eyebrow}>Earlier requests</span>{payments.map(paymentRow)}<button className={styles.textButton} disabled={refreshing} onClick={() => load().catch(e => setError(e.message))}>Back to latest requests</button></> : latest && <><span className={styles.eyebrow}>Latest request</span>{paymentRow(latest)}{latest.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your membership updates once payment is approved.</p>}{payments.length > 1 && <details className={styles.history}><summary>View payment history <span>{payments.length - 1} earlier on this page</span></summary>{payments.slice(1).map(paymentRow)}</details>}</>}

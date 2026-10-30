@@ -220,7 +220,7 @@ export async function createPerson(input: PersonInput): Promise<string> {
 export async function createPersonWithProfileDetails(
   input: PersonInput,
   profileDetails: ProfileDetailsInput,
-  financial?: { quoteToken: string },
+  financial?: { quoteToken: string; voucherCode?: string },
 ): Promise<string> {
   return (await adminMutation<{ id: string }>("profile-create", { input, details: profileDetails, ...(financial ? { financial } : {}) })).id;
 }

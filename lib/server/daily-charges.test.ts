@@ -20,6 +20,22 @@ beforeEach(() => {
   state.store.data.set("persons/p1", { phone: "09123456789", type: "guest", status: null, rateCategory: "student", membershipExpiry: null, visitCount: 0, lastVisitAt: null });
 });
 afterEach(() => vi.useRealTimers());
+it("records a configured bank daily payment and rejects receipts bound to a different method", async () => {
+  const bank = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", enabled: true, qrImage: null };
+  state.store!.data.set("gymSettings/payments", { revision: 1, accounts: [bank] });
+  const receiptId = "a".repeat(64), receiptToken = "b".repeat(43), chargeId = dailyChargeId("p1", NOW);
+  const receipt = { state: "ready", personId: "p1", chargeId, amountMinor: 6000, paymentRequestId: "bank-request-00001", paymentRevision: 1, paymentMethod: "gcash",
+    tokenHash: createHash("sha256").update(receiptToken).digest("hex"), expiresAt: NOW + 10000, linked: false };
+  state.store!.data.set(`receiptIntents/${receiptId}`, receipt);
+  const input = qr({ paymentMethod: bank.id, paymentRevision: 1, receiptId, receiptToken });
+  await expect(scanAttendance(input)).rejects.toMatchObject({ code: "valid-receipt-required" });
+  expect(rows("attendanceLogs")).toHaveLength(0);
+  state.store!.data.set(`receiptIntents/${receiptId}`, { ...receipt, paymentMethod: bank.id, paymentRevision: 0 });
+  await expect(scanAttendance(input)).rejects.toMatchObject({ code: "valid-receipt-required" });
+  state.store!.data.set(`receiptIntents/${receiptId}`, { ...receipt, paymentMethod: bank.id });
+  await scanAttendance(input);
+  expect(rows("paymentRequests")[0][1]).toMatchObject({ method: bank.id, status: "pending", receiptId, paymentAccountSnapshot: { name: bank.name } });
+});
 it("creates one pending daily charge atomically and never duplicates it on retries, checkout or return", async () => {
   const first = qr(), result = await scanAttendance(first);
   expect((await scanAttendance(first)).logId).toBe(result.logId);

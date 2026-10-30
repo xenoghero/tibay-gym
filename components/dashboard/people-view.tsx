@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import Link from "next/link";
 import {
   useEffect,
@@ -395,13 +397,7 @@ export function PeopleView() {
         </div>
 
         {loading ? (
-          [0, 1, 2, 3, 4, 5].map((n) => (
-            <div key={n} className="rs-ppl-skel" style={skeletonRowStyle}>
-              {[0, 1, 2, 3, 4, 5].map((c) => (
-                <div key={c} style={skelBar} />
-              ))}
-            </div>
-          ))
+          <LoadingSkeleton label="Loading profiles…" count={6} />
         ) : noneAtAll ? (
           <div className="rs-ppl-empty" style={emptyStyle}>
             <div style={emptyHeadingStyle}>No profiles yet</div>
@@ -624,21 +620,6 @@ const rowStyle: CSSProperties = {
   borderTop: "1px solid var(--rs-line)",
   textDecoration: "none",
   color: "var(--rs-fg)",
-};
-
-const skeletonRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: GRID_COLUMNS,
-  gap: 16,
-  padding: "16px 20px",
-  borderTop: "1px solid var(--rs-line)",
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
-
-const skelBar: CSSProperties = {
-  height: 11,
-  background: "var(--rs-line)",
-  borderRadius: 3,
 };
 
 const nameCellStyle: CSSProperties = {

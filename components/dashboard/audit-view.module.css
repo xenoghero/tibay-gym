@@ -64,7 +64,14 @@
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .drawer { position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0; width: min(640px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-left: 1px solid var(--rs-line); background: var(--rs-bg); color: var(--rs-fg); font-family: var(--font-geist-sans), system-ui, sans-serif; }
-.drawer::backdrop { background: rgb(0 0 0 / .6); }
+.drawer[open] { overflow: hidden; animation: drawer-in 280ms cubic-bezier(.22, 1, .36, 1) both; }
+.drawer[open][data-closing=true] { animation: drawer-out 220ms ease-in both; }
+.drawer::backdrop { background: rgb(0 0 0 / .6); animation: backdrop-in 280ms ease both; }
+.drawer[data-closing=true]::backdrop { animation: backdrop-out 220ms ease both; }
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawer-out { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes backdrop-out { from { opacity: 1; } to { opacity: 0; } }
 .drawerInner { height: 100%; display: flex; flex-direction: column; }
 .drawerHeader { flex: none; display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--rs-line); padding: 28px; }
 .drawerHeader h2 { font: 600 32px/1.1 var(--font-barlow-condensed), sans-serif; margin: 10px 0; overflow-wrap: anywhere; }
@@ -134,4 +141,10 @@
   .drawerHeader { padding: max(20px, env(safe-area-inset-top)) 20px 20px; }
   .drawerBody { padding: 24px 20px max(24px, env(safe-area-inset-bottom)); }
 }
-@media (prefers-reduced-motion: reduce) { .loadingMark { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .loadingMark { animation: none; }
+  .drawer[open], .drawer[open][data-closing=true], .drawer::backdrop, .drawer[data-closing=true]::backdrop { animation-duration: 1ms; }
+}
+@media (max-width: 480px) {
+  .filters { grid-template-columns: minmax(0, 1fr); }
+}

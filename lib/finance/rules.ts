@@ -29,16 +29,20 @@ export function parsePesoInput(value: string): number | null {
   if (!Number.isSafeInteger(minor) || minor <= 0 || minor > 100_000_000) throw new Error("Enter a positive rate up to PHP 1,000,000.");
   return minor;
 }
+export function membershipMonths(value: unknown = 1): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 12) throw new Error("Choose between 1 and 12 whole months.");
+  return value;
+}
 export function snapshotRate(settings: GymSettings, category: unknown, kind: ChargeKind, quantity = 1): RateSnapshot {
   const classified = rateCategory(category);
   if (!classified) throw new Error("An admin must set Student / Regular before a purchase.");
-  // Package/custom-expiry pricing has not been agreed: only single-month purchases are defined.
-  if (quantity !== 1) throw new Error("Only one daily session or one month has configured pricing.");
+  membershipMonths(quantity);
+  if (kind === "daily_session" && quantity !== 1) throw new Error("Only one daily session can be purchased at a time.");
   const rates = validateRates(settings as unknown as Record<string, unknown>);
   const key = `${classified}${kind === "daily_session" ? "Daily" : "Monthly"}Minor` as keyof Rates;
   const unitRateMinor = rates[key];
   if (unitRateMinor === null) throw new Error("Set the applicable monthly rate before submitting a membership purchase.");
-  return { categorySnapshot: classified, rateRevision: settings.rateRevision, unitRateMinor, quantity, amountMinor: unitRateMinor };
+  return { categorySnapshot: classified, rateRevision: settings.rateRevision, unitRateMinor, quantity, amountMinor: unitRateMinor * quantity };
 }
 export function philippineDate(at: number | Date): string {
   const date = new Date(at);
@@ -64,7 +68,7 @@ export function collectionTotals(charges: Charge[], requests: PaymentRequest[], 
   const between = (date: string) => date >= from && date <= through;
   const byId = new Map(charges.map(charge => [charge.id, charge]));
   const totals = { expectedMinor: 0, dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0,
-    pendingDailyMinor: 0, pendingRenewalMinor: 0, confirmedMinor: 0, confirmedCount: 0, cashMinor: 0, gcashMinor: 0 };
+    pendingDailyMinor: 0, pendingRenewalMinor: 0, confirmedMinor: 0, confirmedCount: 0, cashMinor: 0, gcashMinor: 0, otherElectronicMinor: 0 };
   for (const charge of charges) {
     const recognized = charge.kind === "daily_session" ? charge.chargeDate : charge.recognizedPurchaseAt === null ? null : philippineDate(charge.recognizedPurchaseAt);
     if (recognized && between(recognized)) {
@@ -84,7 +88,7 @@ export function collectionTotals(charges: Charge[], requests: PaymentRequest[], 
     if (request.status === "approved" && request.confirmedAt !== null && between(philippineDate(request.confirmedAt)) && !confirmedCharges.has(charge.id)) {
       confirmedCharges.add(charge.id);
       totals.confirmedMinor += request.amountMinor; totals.confirmedCount += 1;
-      totals[request.method === "cash" ? "cashMinor" : "gcashMinor"] += request.amountMinor;
+      totals[request.method === "cash" ? "cashMinor" : request.method === "gcash" || request.paymentAccountSnapshot?.kind === "gcash" ? "gcashMinor" : "otherElectronicMinor"] += request.amountMinor;
     }
   }
   return totals;

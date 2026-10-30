@@ -1,4 +1,9 @@
 "use client";
+
+import { FormInput } from "@/components/ui/form-input";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { ReceiptRetention } from "@/lib/receipt-retention";
@@ -51,14 +56,14 @@ export function ReceiptRetentionControls({ receiptId }: { receiptId: string }) {
         <label><input type="checkbox" checked={legal} onChange={event => setLegal(event.target.checked)} /> Keep evidence for a legal or accounting hold</label>
         {status === "approved" && <>
           <p>Approved evidence stays protected until you confirm the relevant tax return dates with your bookkeeper. Enter dates for the accounting year containing this payment. Saving both dates confirms the five-year accounting period applies; keep a hold for any longer requirement.</p>
-          <label>Return filing deadline<input type="date" value={deadline} onChange={event => setDeadline(event.target.value)} style={{ display: "block", minHeight: 44 }} /></label>
-          <label>Actual return filing date<input type="date" value={filed} onChange={event => setFiled(event.target.value)} style={{ display: "block", minHeight: 44 }} /></label>
+          <label>Return filing deadline<FormInput type="date" value={deadline} onChange={event => setDeadline(event.target.value)} style={{ display: "block", minHeight: 44 }} /></label>
+          <label>Actual return filing date<FormInput type="date" value={filed} onChange={event => setFiled(event.target.value)} style={{ display: "block", minHeight: 44 }} /></label>
           <p>{policy.accountingDeleteAfter ? `Eligible for removal from ${new Intl.DateTimeFormat("en-PH", { dateStyle: "long", timeZone: "Asia/Manila" }).format(policy.accountingDeleteAfter)}, unless held.` : "Accounting protection is active; no automatic removal date is set."}</p>
         </>}
         <button onClick={() => void save()}>Save retention and holds</button>
       </>}
     </fieldset>}
-    {!policy && !message && <p role="status">Loading retention policy…</p>}
+    {!policy && !message && <LoadingSkeleton label="Loading retention policy…" variant="form" />}
     <button disabled={busy} onClick={() => { setPolicy(null); setMessage(""); setReload(value => value + 1); }}>Refresh retention</button>
     {message && <p role="status">{message}</p>}
   </details>;

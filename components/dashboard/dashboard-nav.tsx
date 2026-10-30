@@ -3,195 +3,140 @@
 import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
+import { IconOverview, IconPeople, IconStatistics, IconAudit, IconPayment, IconMessage, IconQr, IconSettings, IconSignOut, IconPanel, IconMenu, IconClose } from "./nav-icons";
+import styles from "./dashboard-nav.module.css";
 
-// TASKLIST Phase 7 — persistent dashboard chrome. The sidebar is rendered by
-// `app/dashboard/layout.tsx`, so it stays put across every dashboard route once
-// the admin is signed in. It exposes all five destinations named in
-// `admin-dashboard-content.md` §0; Statistics and Account Settings are still
-// their own later phases, so those links land on a route that doesn't exist yet
-// until then — the nav itself is what Phase 7 owns.
-
-interface NavItem {
-  label: string;
-  href: string;
-  /** `true` → active only on an exact path match (Overview is `/dashboard`
-   *  itself, which would otherwise match every child route). */
-  exact?: boolean;
-}
-
-const NAV: NavItem[] = [
-  { label: "Overview", href: "/dashboard", exact: true },
-  { label: "People", href: "/dashboard/people" },
-  { label: "Statistics", href: "/dashboard/statistics" },
-  { label: "Audit history", href: "/dashboard/audit" },
-  { label: "Payment review", href: "/dashboard/payments" },
-  { label: "SMS operations", href: "/dashboard/sms" },
-  { label: "Print Check-in QR", href: "/dashboard/print-qr" },
-  { label: "Account Settings", href: "/dashboard/settings" },
+const NAV = [
+  { label: "Overview", href: "/dashboard", Icon: IconOverview },
+  { label: "People", href: "/dashboard/people", Icon: IconPeople },
+  { label: "Statistics", href: "/dashboard/statistics", Icon: IconStatistics },
+  { label: "Audit history", href: "/dashboard/audit", Icon: IconAudit },
+  { label: "Payment review", href: "/dashboard/payments", Icon: IconPayment },
+  { label: "SMS operations", href: "/dashboard/sms", Icon: IconMessage },
+  { label: "QR codes", href: "/dashboard/print-qr", Icon: IconQr },
+  { label: "Account Settings", href: "/dashboard/settings", Icon: IconSettings },
 ];
+const STORAGE_KEY = "tibay-sidebar-collapsed";
+const CHANGE_EVENT = "tibay-sidebar-change";
+let fallbackCollapsed = false;
+function readCollapsed() {
+  try { return window.localStorage.getItem(STORAGE_KEY) === "true"; }
+  catch { return fallbackCollapsed; }
+}
+function subscribe(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
+}
+const serverSnapshot = () => false;
 
 export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const collapsed = useSyncExternalStore(subscribe, readCollapsed, serverSnapshot);
+  const drawer = useRef<HTMLDialogElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
+  const activeIndex = NAV.findIndex(({ href }) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)));
 
+  const finishClosing = useCallback(() => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    drawer.current?.close();
+    setDrawerClosing(false);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    if (!drawer.current?.open || closeTimer.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finishClosing();
+      return;
+    }
+    setDrawerClosing(true);
+    // Fallback if the animation is interrupted or its end event is missed.
+    closeTimer.current = setTimeout(finishClosing, 250);
+  }, [finishClosing]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) closeDrawer(); });
+    return () => { active = false; };
+  }, [pathname, closeDrawer]);
+  useEffect(() => () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  }, []);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 861px)");
+    const closeOnDesktop = () => { if (media.matches) finishClosing(); };
+    media.addEventListener("change", closeOnDesktop);
+    return () => media.removeEventListener("change", closeOnDesktop);
+  }, [finishClosing]);
+
+  function toggleCollapsed() {
+    fallbackCollapsed = !collapsed;
+    try { window.localStorage.setItem(STORAGE_KEY, String(fallbackCollapsed)); } catch { /* Keep the control usable when storage is unavailable. */ }
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  }
   async function handleSignOut() {
-    await signOut();
-    router.replace("/login");
+    setSigningOut(true);
+    setSignOutError(false);
+    try { await signOut(); router.replace("/login"); }
+    catch { setSignOutError(true); setSigningOut(false); }
   }
 
-  return (
-    <aside className="rs-dashboard-sidebar" style={asideStyle}>
-      <div style={brandRow}>
-        <BrandLogo />
+  function contents(mobile: boolean) {
+    const compact = collapsed && !mobile;
+    return <>
+      <div className={styles.brandRow}>
+        <div className={styles.brandClip}><BrandLogo sidebar /></div>
+        {mobile && <button type="button" className={styles.control} aria-label="Close navigation" onClick={closeDrawer}><IconClose /></button>}
       </div>
-
-      <nav style={navStyle}>
-        {NAV.map((item) => {
-          const active = item.exact
-            ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              style={navLinkStyle(active)}
-            >
-              <span style={navDot(active)} />
-              {item.label}
-            </Link>
-          );
-        })}
+      {!mobile && <button type="button" className={`${styles.collapse} ${styles.tipTarget}`} aria-label={compact ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!compact} onClick={toggleCollapsed}>
+        <IconPanel /><span className={styles.label}>Collapse sidebar</span>
+        {compact && <span className={styles.tooltip} aria-hidden="true">Expand sidebar</span>}
+      </button>}
+      <nav className={styles.nav} aria-label={mobile ? "Mobile navigation" : "Sidebar navigation"}>
+        {activeIndex >= 0 && <span aria-hidden="true" className={styles.activeIndicator} style={{ "--active-index": activeIndex } as CSSProperties} />}
+        {NAV.map(({ href, label, Icon }, index) => <Link key={href} href={href} className={`${styles.link} ${styles.tipTarget}`} aria-label={label} aria-current={index === activeIndex ? "page" : undefined} onClick={() => { if (mobile) closeDrawer(); }}>
+          <Icon size={20} /><span className={styles.label}>{label}</span>
+          {compact && <span className={styles.tooltip} aria-hidden="true">{label}</span>}
+        </Link>)}
       </nav>
-
-      <div style={footerStyle}>
-        <div style={identityRow}>
-          <div style={avatarStyle}>
-            {(user?.email ?? "?").slice(0, 2).toUpperCase()}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={identityEmail}>{user?.email ?? "—"}</div>
-            <div style={identityRole}>Owner / Admin</div>
-          </div>
+      <div className={styles.footer}>
+        <div className={styles.identity} title={user?.email ?? undefined}>
+          <div className={styles.avatar}>{(user?.email ?? "?").slice(0, 2).toUpperCase()}</div>
+          <div className={styles.identityDetails}><div className={styles.email}>{user?.email ?? "—"}</div><div className={styles.role}>Owner / Admin</div></div>
         </div>
-        <button type="button" onClick={handleSignOut} style={signOutStyle}>
-          Sign out
+        <button type="button" className={`${styles.signOut} ${styles.tipTarget}`} aria-label={signingOut ? "Signing out" : "Sign out"} disabled={signingOut} onClick={handleSignOut}>
+          <IconSignOut /><span className={styles.label}>{signingOut ? "Signing out…" : "Sign out"}</span>
+          {compact && <span className={styles.tooltip} aria-hidden="true">Sign out</span>}
         </button>
+        {signOutError && <p className={styles.error} role="alert">Sign out failed. Please retry.</p>}
       </div>
-    </aside>
-  );
+    </>;
+  }
+
+  return <>
+    <aside className={`rs-dashboard-sidebar ${styles.sidebar}`} data-collapsed={collapsed}>{contents(false)}</aside>
+    <header className={styles.mobileHeader}>
+      <BrandLogo sidebar />
+      <button type="button" className={styles.control} aria-label="Open navigation" aria-haspopup="dialog" aria-controls="dashboard-navigation-drawer" aria-expanded={drawerOpen} onClick={() => { drawer.current?.showModal(); setDrawerOpen(true); }}><IconMenu /></button>
+    </header>
+    <dialog id="dashboard-navigation-drawer" ref={drawer} className={styles.drawer} data-closing={drawerClosing} aria-label="Navigation"
+      onClose={() => { setDrawerOpen(false); setDrawerClosing(false); }}
+      onCancel={event => { event.preventDefault(); closeDrawer(); }}
+      onAnimationEnd={event => { if (drawerClosing && event.target === event.currentTarget) finishClosing(); }}
+      onClick={event => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDrawer(); } }}>
+      <div className={styles.drawerContent}>{contents(true)}</div>
+    </dialog>
+  </>;
 }
-
-// --- styles ---------------------------------------------------------------
-
-const monoFont = "var(--font-geist-mono), ui-monospace, monospace";
-
-const asideStyle: CSSProperties = {
-  width: 252,
-  flex: "none",
-  background: "var(--rs-panel)",
-  borderRight: "1px solid var(--rs-line)",
-  display: "flex",
-  flexDirection: "column",
-  padding: "22px 16px",
-  gap: 26,
-  position: "sticky",
-  top: 0,
-  height: "100vh",
-};
-
-const brandRow: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 11,
-  padding: "0 6px",
-};
-
-const navStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 3,
-};
-
-function navLinkStyle(active: boolean): CSSProperties {
-  return {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    height: 38,
-    padding: "0 12px",
-    borderRadius: 6,
-    textDecoration: "none",
-    fontSize: 14,
-    fontWeight: 500,
-    background: active ? "var(--rs-accent)" : "transparent",
-    color: active ? "var(--rs-on-accent)" : "var(--rs-fg)",
-  };
-}
-
-function navDot(active: boolean): CSSProperties {
-  return {
-    width: 5,
-    height: 5,
-    borderRadius: "50%",
-    background: active ? "var(--rs-on-accent)" : "var(--rs-muted)",
-  };
-}
-
-const footerStyle: CSSProperties = {
-  marginTop: "auto",
-  display: "flex",
-  flexDirection: "column",
-  gap: 14,
-  borderTop: "1px solid var(--rs-line)",
-  paddingTop: 16,
-};
-
-const identityRow: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "0 6px",
-};
-
-const avatarStyle: CSSProperties = {
-  width: 30,
-  height: 30,
-  flex: "none",
-  borderRadius: "50%",
-  background: "var(--rs-fg)",
-  color: "var(--rs-bg)",
-  display: "grid",
-  placeItems: "center",
-  fontSize: 11,
-  fontWeight: 600,
-  fontFamily: monoFont,
-};
-
-const identityEmail: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const identityRole: CSSProperties = {
-  fontSize: 11,
-  color: "var(--rs-muted)",
-};
-
-const signOutStyle: CSSProperties = {
-  height: 34,
-  padding: "0 12px",
-  border: "1px solid var(--rs-line)",
-  borderRadius: 6,
-  background: "transparent",
-  color: "var(--rs-muted)",
-  fontSize: 13,
-  cursor: "pointer",
-  textAlign: "left",
-};

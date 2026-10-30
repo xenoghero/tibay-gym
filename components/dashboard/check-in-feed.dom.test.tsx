@@ -64,10 +64,14 @@ it("bounds page buttons for large attendance lists while keeping the last page a
 it("handles loading, empty and single-page states without misleading controls", () => {
   const view = render(<CheckInFeed rows={[]} loading />);
   expect(screen.getByText("Loading check-ins…")).toBeTruthy();
-  expect(screen.queryByRole("navigation")).toBeNull();
+  expect(screen.getByRole("navigation", { name: "Check-in pagination" })).toBeTruthy();
+  expect((previous() as HTMLButtonElement).disabled).toBe(true);
+  expect((next() as HTMLButtonElement).disabled).toBe(true);
   view.rerender(<CheckInFeed rows={[]} loading={false} />);
   expect(screen.getByText("No check-ins yet today")).toBeTruthy();
-  expect(screen.queryByRole("navigation")).toBeNull();
+  expect(screen.getByText("Showing 0–0 of 0")).toBeTruthy();
+  expect((previous() as HTMLButtonElement).disabled).toBe(true);
+  expect((next() as HTMLButtonElement).disabled).toBe(true);
   view.rerender(<CheckInFeed rows={rows(1)} loading={false} />);
   expect(screen.getByText("Showing 1–1 of 1")).toBeTruthy();
   expect((previous() as HTMLButtonElement).disabled).toBe(true);

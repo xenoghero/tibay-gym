@@ -8,7 +8,7 @@ import { operationId } from "@/lib/finance/rules";
 import { appendAudit } from "./audit";
 export const PROFILE_BUCKET = "profile-photos";
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export async function readPrivateImage(request: Request) {
+export async function readPrivateImage(request: Request, lossless = false) {
   const mime = request.headers.get("content-type")?.split(";")[0];
   if (!["image/jpeg", "image/png", "image/webp"].includes(mime ?? "")) throw new ApiError(415, "image-format-required");
   if (Number(request.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES) throw new ApiError(413, "image-too-large");
@@ -26,7 +26,8 @@ export async function readPrivateImage(request: Request) {
     const image = sharp(buffer, { limitInputPixels: 16_000_000, animated: false });
     const metadata = await image.metadata();
     if (!metadata.format || !["jpeg", "png", "webp"].includes(metadata.format) || (metadata.pages ?? 1) > 1) throw new Error("Unsupported image");
-    return await image.rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).webp({ quality: 85 }).toBuffer();
+    const resized = image.rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true });
+    return await (lossless ? resized.png() : resized.webp({ quality: 85 })).toBuffer();
   } catch { throw new ApiError(400, "invalid-image"); }
 }
 export async function saveProfileImage(personId: string, bytes: Buffer, rawOperationId: unknown, actorId: string) {

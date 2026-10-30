@@ -7,7 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { CHECKIN_PATH, GYM_NAME, resolveCheckInUrl } from "@/lib/checkin-url";
+import { GYM_NAME, resolvePublicPageUrl } from "@/lib/checkin-url";
 import {
   buildPosterCanvas,
   posterFileStem,
@@ -15,21 +15,20 @@ import {
   POSTER_WIDTH,
 } from "./build-poster";
 
-// TASKLIST Phase 6 — Admin: Print Check-in QR page.
-//
-// One canvas is built from the fixed check-in URL and reused for the preview,
-// the PNG/PDF downloads and the print window. There are deliberately no
-// configuration controls here: the QR target is derived in lib/checkin-url.ts
-// and cannot be edited from the app.
-//
-// Mobile responsive pass: the wide layout (poster left, action column right) is
-// still expressed inline and is unchanged. The narrow layout lives in
-// globals.css under the shared 860px breakpoint — a header matching Overview,
-// the poster taking the full column, and the three actions as a 3-up strip. The
-// `rs-qr-*` classes exist only for that block, and the `display: none` inline
-// styles on the icon and the short label are the wide-layout defaults it flips.
-
-const CAPTION = "Scan to check in";
+// Each destination owns its canvas and export state to prevent stale downloads.
+const POSTERS = {
+  checkin: {
+    label: "Check-in", path: "/checkin", caption: "Scan to check in",
+    instructions: "Open your phone camera and scan.\nEnter your phone number to check in.",
+    description: "For the entrance: members and guests scan to check in.", fileKey: "check-in",
+  },
+  customer: {
+    label: "Customer page", path: "/customer", caption: "Scan to view\nyour membership",
+    instructions: "Open your phone camera and scan.\nEnter your registered phone number to view your membership.",
+    description: "For the counter: customers scan to view their membership, request a renewal, and follow payment status.", fileKey: "customer",
+  },
+} as const;
+type PosterKind = keyof typeof POSTERS;
 
 type Notice = { tone: "info" | "error"; text: string } | null;
 
@@ -116,6 +115,26 @@ function IconExternal() {
 }
 
 export function PrintQrView() {
+  const [kind, setKind] = useState<PosterKind>("checkin");
+  return <main className="rs-qr" style={pageStyle}>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <header className="rs-qr-head" style={headerRow}>
+        <div><div className="rs-qr-kicker" style={kickerStyle}>{GYM_NAME}</div>
+          <h1 className="rs-qr-title" style={headingStyle}>QR codes</h1></div>
+      </header>
+      <p className="rs-qr-lead" style={leadStyle}>Choose a destination, then download or print its poster.</p>
+      <div className="rs-qr-selector" role="group" aria-label="QR destination">
+        {(Object.keys(POSTERS) as PosterKind[]).map(value =>
+          <button type="button" key={value} aria-pressed={kind === value}
+            onClick={() => setKind(value)}>{POSTERS[value].label}</button>)}
+      </div>
+      <QrPoster key={kind} kind={kind} />
+    </div>
+  </main>;
+}
+
+function QrPoster({ kind }: { kind: PosterKind }) {
+  const poster = POSTERS[kind];
   const previewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -132,9 +151,9 @@ export function PrintQrView() {
   // continuations, never synchronously in the effect body.
   useEffect(() => {
     let cancelled = false;
-    const target = resolveCheckInUrl();
+    const target = resolvePublicPageUrl(poster.path);
 
-    buildPosterCanvas({ url: target, gymName: GYM_NAME, caption: CAPTION })
+    buildPosterCanvas({ url: target, gymName: GYM_NAME, caption: poster.caption, instructions: poster.instructions })
       .then((canvas) => {
         if (cancelled) return;
         canvasRef.current = canvas;
@@ -159,9 +178,9 @@ export function PrintQrView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [poster]);
 
-  const fileStem = posterFileStem(GYM_NAME);
+  const fileStem = posterFileStem(GYM_NAME, poster.fileKey);
 
   const downloadPng = useCallback(() => {
     const canvas = canvasRef.current;
@@ -238,10 +257,10 @@ export function PrintQrView() {
       }
       win.document.write(
         `<!doctype html><html><head><meta charset="utf-8">` +
-          `<title>${GYM_NAME} — Check-in QR</title>` +
+          `<title>${GYM_NAME} — ${poster.label} QR</title>` +
           `<style>@page{margin:12mm}html,body{margin:0;padding:0}` +
           `img{display:block;width:100%;height:auto}</style></head>` +
-          `<body><img src="${dataUrl}" alt="Check-in QR poster"` +
+          `<body><img src="${dataUrl}" alt="${poster.label} QR poster"` +
           ` onload="setTimeout(function(){window.focus();window.print();},150)"></body></html>`,
       );
       win.document.close();
@@ -252,7 +271,7 @@ export function PrintQrView() {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [poster.label]);
 
   // Copying the target is the one thing anyone wants to *do* with this string —
   // send it to a member, paste it into a message. The confirmation lives on the
@@ -282,28 +301,8 @@ export function PrintQrView() {
   const actionsDisabled = building || failed || busy !== null;
 
   return (
-    <main className="rs-qr" style={pageStyle}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        {/* The same header shape as the Overview tab: mono kicker over an
-            oversized condensed title, nothing beside it. The old
-            "← Dashboard" link is gone — the sidebar and the bottom bar both
-            already lead back. */}
-        <header className="rs-qr-head" style={headerRow}>
-          <div>
-            <div className="rs-qr-kicker" style={kickerStyle}>
-              {GYM_NAME}
-            </div>
-            <h1 className="rs-qr-title" style={headingStyle}>
-              Print check-in QR
-            </h1>
-          </div>
-        </header>
-
-        <p className="rs-qr-lead" style={leadStyle}>
-          The poster for the entrance. The QR target is fixed and not editable
-          here — print it, pin it by the door, and members and guests scan it
-          with their own phones.
-        </p>
+    <section aria-label={`${poster.label} QR poster`}>
+        <p style={leadStyle}>{poster.description}</p>
 
         <div className="rs-qr-layout" style={layoutStyle}>
           <div className="rs-qr-preview" style={previewFrameStyle}>
@@ -383,7 +382,7 @@ export function PrintQrView() {
             <div className="rs-qr-url" style={urlBoxStyle}>
               <div style={urlLabelStyle}>QR target</div>
               <div className="rs-qr-url-row" style={urlRowStyle}>
-                <code style={urlValueStyle}>{url || `…${CHECKIN_PATH}`}</code>
+                <code style={urlValueStyle}>{url || `…${poster.path}`}</code>
                 <div style={urlActionsStyle}>
                   <button
                     type="button"
@@ -397,12 +396,12 @@ export function PrintQrView() {
                     {copied ? <IconCheck /> : <IconCopy />}
                   </button>
                   <a
-                    href={url || CHECKIN_PATH}
+                    href={url || poster.path}
                     target="_blank"
                     rel="noreferrer"
                     className="rs-qr-url-btn"
-                    aria-label="Open the check-in page in a new tab"
-                    title="Open check-in page"
+                    aria-label={`Open the ${poster.label.toLowerCase()} in a new tab`}
+                    title={`Open ${poster.label.toLowerCase()}`}
                     style={urlButtonStyle(false, false)}
                   >
                     <IconExternal />
@@ -426,8 +425,7 @@ export function PrintQrView() {
             )}
           </div>
         </div>
-      </div>
-    </main>
+    </section>
   );
 }
 

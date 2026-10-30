@@ -1,5 +1,8 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { PeopleFormShell } from "@/components/people/people-form-shell";
+
 import { Suspense } from "react";
 import { useParams } from "next/navigation";
 import { RequireAuth } from "@/lib/auth/require-auth";
@@ -12,7 +15,7 @@ export default function EditProfilePage() {
 
   return (
     <RequireAuth>
-      <Suspense fallback={null}>
+      <Suspense fallback={<PeopleFormShell title="Edit profile"><LoadingSkeleton label="Loading profile…" variant="form" count={5} /></PeopleFormShell>}>
         <EditProfileView personId={params.id} />
       </Suspense>
     </RequireAuth>

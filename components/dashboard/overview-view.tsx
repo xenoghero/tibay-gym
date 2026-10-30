@@ -26,10 +26,12 @@ function personProfileHref(personId: string | null): string {
 }
 
 export function OverviewView() {
+  const [mobilePanel, setMobilePanel] = useState<"check-ins" | "collections">("check-ins");
   const [todaysLogs, setTodaysLogs] = useState<AttendanceLog[]>([]);
   const [openSessions, setOpenSessions] = useState<AttendanceLog[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
+  const [openSessionsLoaded, setOpenSessionsLoaded] = useState(false);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [listenerError, setListenerError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -81,7 +83,7 @@ export function OverviewView() {
         setListenerError(true);
       },
     );
-    const unsubOpen = watchOpenSessions(setOpenSessions, (err) => {
+    const unsubOpen = watchOpenSessions((sessions) => { setOpenSessions(sessions); setOpenSessionsLoaded(true); }, (err) => {
       console.error("[OverviewView] open-sessions listener failed", err);
       setListenerError(true);
     });
@@ -126,6 +128,7 @@ export function OverviewView() {
     setListenerError(false);
     setAlertError(null);
     setLogsLoaded(false);
+    setOpenSessionsLoaded(false);
     setPeopleLoaded(false);
     setRetryKey((k) => k + 1);
   }
@@ -192,7 +195,7 @@ export function OverviewView() {
         <div><div className="rs-ov-kicker">{todayLabel}</div><h1 className="rs-ov-title">Overview</h1></div>
         <span className="rs-ov-live">{listenerError ? "Live updates interrupted" : loading ? "Connecting attendance…" : "Attendance live"}</span>
       </header>
-      <div className="rs-ov-scroll" role="region" aria-label="Overview content" tabIndex={0}>
+      <div className="rs-ov-content">
         {(listenerError || alertError) && <div className="rs-ov-error">
           <span role="alert">{alertError ?? "Live updates dropped out."}</span>
           <button type="button" onClick={retryLiveUpdates}>Retry</button>
@@ -207,15 +210,23 @@ export function OverviewView() {
             <button type="button" onClick={() => void dismissAlert(alert.eventId)} disabled={dismissing.includes(alert.eventId)} aria-label={`Dismiss alert for ${alert.name}`}>×</button>
           </div>)}
         </div>}
-        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading}>
-          <div className="rs-ov-tile rs-ov-tile-hero"><h2>Currently inside</h2><strong>{loading ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
+        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading || !openSessionsLoaded}>
+          <div className="rs-ov-tile rs-ov-tile-hero"><h2>Currently inside</h2><strong>{!openSessionsLoaded || !peopleLoaded ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
           <div className="rs-ov-tile"><h2>Check-ins today</h2><strong>{loading ? "—" : checkinsToday}</strong><span>Live, all sources</span></div>
           <div className="rs-ov-tile"><h2>Members / Guests</h2><strong>{loading ? "—" : `${membersToday} / ${guestsToday}`}</strong><span>Today’s check-ins</span></div>
-          <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{loading ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
+          <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{!peopleLoaded ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
         </section>
         <div className="rs-ov-workspace">
-          <CheckInFeed rows={feedRows} loading={loading} />
-          <FinanceStatistics compact />
+          <div className="rs-ov-panel-selector" role="group" aria-label="Overview panel">
+            <button type="button" aria-pressed={mobilePanel === "check-ins"} aria-controls="overview-check-ins" onClick={() => setMobilePanel("check-ins")}>Recent check-ins</button>
+            <button type="button" aria-pressed={mobilePanel === "collections"} aria-controls="overview-collections" onClick={() => setMobilePanel("collections")}>Today’s collections</button>
+          </div>
+          <div id="overview-check-ins" className="rs-ov-panel" data-selected={mobilePanel === "check-ins"}>
+            <CheckInFeed rows={feedRows} loading={loading} />
+          </div>
+          <div id="overview-collections" className="rs-ov-panel" data-selected={mobilePanel === "collections"}>
+            <FinanceStatistics compact />
+          </div>
         </div>
       </div>
     </main>

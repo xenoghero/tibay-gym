@@ -1,7 +1,14 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import Link from "next/link";
 import { FinanceStatistics } from "./finance-statistics";
+import { LeadStatistics } from "./lead-statistics";
 import { ReportDateSheet } from "./report-date-sheet";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Timestamp } from "firebase/firestore";
@@ -283,7 +290,8 @@ function daysUntil(expiry: Timestamp | null): number {
 
 export function StatisticsView() {
   const reportScroller = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<"collections" | "attendance" | "renewals">("collections");
+  const [tab, setTab] = useState<"collections" | "attendance" | "renewals" | "leads">("collections");
+  useContentTransition(reportScroller, tab);
   const [attendanceRefresh, setAttendanceRefresh] = useState(0);
   const [renewalsRefresh, setRenewalsRefresh] = useState(0);
   const [preset, setPreset] = useState<RangePreset | null>("7d");
@@ -475,7 +483,7 @@ export function StatisticsView() {
         </div>
       </header>
       <div className="rs-stat-tabs" role="tablist" aria-label="Statistics reports">
-        {(["collections", "attendance", "renewals"] as const).map((name, index, tabs) => <button
+        {(["collections", "attendance", "renewals", "leads"] as const).map((name, index, tabs) => <button
           key={name} type="button" role="tab" id={`statistics-tab-${name}`}
           aria-selected={tab === name} aria-controls={`statistics-panel-${name}`}
           tabIndex={tab === name ? 0 : -1}
@@ -493,6 +501,9 @@ export function StatisticsView() {
         >{name[0].toUpperCase() + name.slice(1)}</button>)}
       </div>
       <div ref={reportScroller} className="rs-finance-scroll" role="region" aria-label="Statistics reports">
+      <section role="tabpanel" id="statistics-panel-leads" aria-labelledby="statistics-tab-leads" hidden={tab !== "leads"} tabIndex={0}>
+        <LeadStatistics enabled={tab === "leads"} />
+      </section>
       <section role="tabpanel" id="statistics-panel-collections" aria-labelledby="statistics-tab-collections" hidden={tab !== "collections"} tabIndex={0}>
         <FinanceStatistics />
       </section>
@@ -518,7 +529,7 @@ export function StatisticsView() {
         </div>
         <div style={customRowStyle}>
           <span style={{ fontSize: 13, color: "var(--rs-muted)" }}>Custom</span>
-          <input
+          <FormInput
             type="date"
             value={customStart}
             onChange={(e) => applyCustom(e.target.value, customEnd)}
@@ -526,7 +537,7 @@ export function StatisticsView() {
             style={dateInputStyle(preset === null)}
           />
           <span style={{ color: "var(--rs-muted)" }}>–</span>
-          <input
+          <FormInput
             type="date"
             value={customEnd}
             onChange={(e) => applyCustom(customStart, e.target.value)}
@@ -581,22 +592,27 @@ export function StatisticsView() {
 
             <div style={sheetCustomBlock}>
               <div style={sheetSubLabel}>Custom range</div>
-              <div style={sheetCustomRow}>
-                <input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => applyCustom(e.target.value, customEnd)}
-                  aria-label="Custom range start date"
-                  style={{ ...dateInputStyle(preset === null), height: 44, flex: 1, minWidth: 0 }}
-                />
-                <span style={{ color: "var(--rs-muted)" }}>–</span>
-                <input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => applyCustom(customStart, e.target.value)}
-                  aria-label="Custom range end date"
-                  style={{ ...dateInputStyle(preset === null), height: 44, flex: 1, minWidth: 0 }}
-                />
+              <div className="rs-report-range-fields" style={sheetCustomRow}>
+                <label>
+                  <span>From</span>
+                  <FormInput
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => applyCustom(e.target.value, customEnd)}
+                    aria-label="Custom range start date"
+                    style={{ ...dateInputStyle(preset === null), height: 44 }}
+                  />
+                </label>
+                <label>
+                  <span>Through</span>
+                  <FormInput
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => applyCustom(customStart, e.target.value)}
+                    aria-label="Custom range end date"
+                    style={{ ...dateInputStyle(preset === null), height: 44 }}
+                  />
+                </label>
               </div>
             </div>
             {customStart && customEnd && !rangeForCustom(customStart, customEnd) && <p role="alert">Choose a valid start and end date, with the end on or after the start.</p>}
@@ -621,25 +637,8 @@ export function StatisticsView() {
 
       {!loadError && (loading ? (
         <>
-          <div className="rs-st-tiles" style={tileGridStyle}>
-            {[0, 1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className={`rs-st-skeltile${
-                  n === 0 ? " rs-st-skeltile-hero" : ""
-                }`}
-                style={skeletonTileStyle}
-              >
-                <div style={{ ...skelBar, width: "60%" }} />
-                <div
-                  className="rs-st-skelvalue"
-                  style={{ ...skelBar, height: 34, width: "45%" }}
-                />
-                <div style={{ ...skelBar, width: "80%" }} />
-              </div>
-            ))}
-          </div>
-          <div className="rs-st-skelblock" style={skeletonBlockStyle} />
+          <LoadingSkeleton label="Loading attendance summary…" variant="cards" count={4} />
+          <LoadingSkeleton label="Loading attendance chart…" variant="chart" count={7} />
         </>
       ) : empty ? (
         <>
@@ -937,13 +936,7 @@ export function StatisticsView() {
           </div>
 
           {expiryError ? null : expiryList === null ? (
-            [0, 1, 2].map((n) => (
-              <div key={n} className="rs-st-expskel" style={expirySkeletonRow}>
-                {[0, 1, 2, 3, 4].map((c) => (
-                  <div key={c} style={skelBar} />
-                ))}
-              </div>
-            ))
+            <LoadingSkeleton label="Loading expiring memberships…" />
           ) : expiryRows.length === 0 ? (
             <div className="rs-st-emptysmall" style={emptyStyleSmall}>
               <div style={emptyHeadingStyleSmall}>Nothing due for renewal</div>
@@ -1311,31 +1304,6 @@ const tileSplitSecondary: CSSProperties = {
   color: "var(--rs-muted)",
 };
 
-const skeletonTileStyle: CSSProperties = {
-  boxSizing: "border-box",
-  border: "1px solid var(--rs-line)",
-  borderRadius: 10,
-  padding: 20,
-  height: 136,
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
-
-const skeletonBlockStyle: CSSProperties = {
-  flex: "none",
-  border: "1px solid var(--rs-line)",
-  borderRadius: 10,
-  height: 348,
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
-
-const skelBar: CSSProperties = {
-  height: 10,
-  background: "var(--rs-line)",
-  borderRadius: 3,
-};
 
 const emptyPanelStyle: CSSProperties = {
   border: "1px dashed var(--rs-line)",
@@ -1555,14 +1523,6 @@ const expiryRowStyle: CSSProperties = {
   color: "var(--rs-fg)",
 };
 
-const expirySkeletonRow: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1.4fr 1fr 1fr 1.1fr 0.8fr",
-  gap: 16,
-  padding: "16px 20px",
-  borderTop: "1px solid var(--rs-line)",
-  animation: "shimmer 1.4s ease-in-out infinite",
-};
 
 const emptyStyleSmall: CSSProperties = {
   padding: "48px 24px",

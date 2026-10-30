@@ -1,3 +1,4 @@
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { AttendanceApiError } from "./attendance-error";
 import { CHECKIN_PHONE_ERROR, isCheckinPhone } from "./checkin-phone";
 import type { QrLookupPerson, QrLookupResponse, QrRequest, QrResponse } from "./attendance-api";
@@ -38,7 +39,8 @@ const expiredMessage = "Attendance is still unconfirmed and the recovery window 
 // Only verified, definite first-request rejections unlock a new attempt. A retry
 // rejection must never erase an earlier uncertain outcome (even for these codes).
 // person-unavailable is deliberately excluded: post-commit projection can fail.
-const definiteRejections = new Set(["guest-conflict", "rate-limited", "attendance-cooldown", "attendance-not-initialized", "no-open-session", "checkout-session-changed", "category-required", "daily-payment-required", "gcash-unavailable", "registration-fields-required", "daily-price-changed", "valid-receipt-required", "daily-payment-already-submitted", "registration-reuse"]);
+const definiteRejections = new Set(["guest-conflict", "rate-limited", "attendance-cooldown", "attendance-not-initialized", "no-open-session", "checkout-session-changed", "category-required", "daily-payment-required", "gcash-unavailable", "payment-method-unavailable", "registration-fields-required", "daily-price-changed", "valid-receipt-required", "daily-payment-already-submitted", "registration-reuse"]);
+for (const code of ["voucher-invalid", "voucher-unavailable", "voucher-not-started", "voucher-expired", "voucher-scope", "voucher-minimum", "voucher-limit", "voucher-customer-limit", "voucher-payable", "voucher-no-discount", "voucher-changed"]) definiteRejections.add(code);
 
 /** In-memory attendance lifecycle with stable request identity for retries. */
 export class CheckinAttempt {
@@ -110,7 +112,7 @@ export class CheckinAttempt {
     await this.submitPhone(phone, "attendance", true);
     if (this.state.status === "ready" && this.state.stage === "name") await this.submitGuest(name, address, registration);
   }
-  async submitGuest(name: string, address: string, registration?: import("./registration").RegistrationFields, paymentMethod?: "cash" | "gcash", receipt?: ReceiptPreparation) {
+  async submitGuest(name: string, address: string, registration?: import("./registration").RegistrationFields, paymentMethod?: PaymentMethod, receipt?: ReceiptPreparation) {
     if ((this.state.retryAt ?? 0) > this.deps.now()) return;
     if (this.state.busy || this.state.pending || this.state.stage !== "name" || this.state.status === "confirmed") return;
     if (!name.trim()) { this.update({ status: "blocked", error: "Enter your name." }); return; }
@@ -118,7 +120,7 @@ export class CheckinAttempt {
       this.guestDraft = { phone: this.state.phone, name: name.trim(), address: address.trim(), ...registration };
       this.update({ stage: "payment", displayName: name.trim(), error: null, paymentDue: {
         amountMinor: registration.rateCategory === "student" ? this.state.dailyRates.studentDailyMinor : this.state.dailyRates.regularDailyMinor,
-        expiredMember: false, gcashAvailable: this.state.dailyRates.gcashAvailable ?? false,
+        expiredMember: false, paymentRevision: this.state.dailyRates.paymentRevision, paymentAccounts: this.state.dailyRates.paymentAccounts, gcashAvailable: this.state.dailyRates.gcashAvailable ?? false,
       } });
       return;
     }
@@ -129,11 +131,12 @@ export class CheckinAttempt {
     } catch (error) { this.fail(error, !!this.state.pending); }
     finally { this.update({ busy: false }); }
   }
-  async submitDailyPayment(paymentMethod: "cash" | "gcash", receipt?: ReceiptPreparation) {
+  async submitDailyPayment(paymentMethod: PaymentMethod, receipt?: ReceiptPreparation, voucher?: { voucherCode: string; voucherRevision: number; voucherRateRevision: number; amountMinor: number }) {
     if (this.state.busy || this.state.pending || this.state.stage !== "payment" || (!this.state.person && !this.guestDraft) || (this.state.retryAt ?? 0) > this.deps.now()) return;
     if (this.state.paymentDue?.amountMinor === null) { this.update({ error: "Ask the administrator to classify your rate category first." }); return; }
     this.update({ busy: true, error: null });
-    try { await this.send({ ...(this.guestDraft ? { guest: this.guestDraft } : { personId: this.state.person!.id }), intent: "attendance", paymentMethod, expectedAmountMinor: this.state.paymentDue!.amountMinor! }, false, receipt); }
+    try { await this.send({ ...(this.guestDraft ? { guest: this.guestDraft } : { personId: this.state.person!.id }), intent: "attendance", paymentMethod, ...(paymentMethod !== "cash" ? { paymentRevision: this.state.paymentDue?.paymentRevision } : {}),
+      expectedAmountMinor: voucher?.amountMinor ?? this.state.paymentDue!.amountMinor!, ...(voucher ? { voucherCode: voucher.voucherCode, voucherRevision: voucher.voucherRevision, voucherRateRevision: voucher.voucherRateRevision } : {}) }, false, receipt); }
     catch (error) { this.fail(error, !!this.state.pending); }
     finally { this.update({ busy: false }); }
   }
@@ -154,8 +157,8 @@ export class CheckinAttempt {
       if (this.state.status === "unconfirmed-expired") return;
     }
     let pending = retry ? this.state.pending! : { ...target, eventId: this.deps.eventId(), requestedAt: this.deps.now() };
-    if (!retry && target.paymentMethod === "gcash") {
-      if (!receipt) throw new AttendanceApiError("Choose and upload a receipt before submitting GCash.", "valid-receipt-required", 400);
+    if (!retry && target.paymentMethod && target.paymentMethod !== "cash") {
+      if (!receipt) throw new AttendanceApiError("Choose and upload a receipt before submitting an electronic payment.", "valid-receipt-required", 400);
       const key = JSON.stringify([receipt.key, target]);
       if (this.preparedReceipt?.key !== key) this.preparedReceipt = { key, request: pending };
       this.update({ status: "upload-pending" });
@@ -178,7 +181,7 @@ export class CheckinAttempt {
     } catch (error) {
       if (!retry && error instanceof AttendanceApiError && definiteRejections.has(error.code)) {
         if (["valid-receipt-required", "daily-price-changed", "registration-reuse"].includes(error.code)) this.preparedReceipt = null;
-        this.update({ pending: null, ...(["guest-conflict", "daily-price-changed", "registration-reuse"].includes(error.code) ? { stage: "phone" as const } : {}) });
+        this.update({ pending: null, ...(["guest-conflict", "daily-price-changed", "registration-reuse", "payment-method-unavailable"].includes(error.code) ? { stage: "phone" as const } : {}) });
       }
       throw error;
     }

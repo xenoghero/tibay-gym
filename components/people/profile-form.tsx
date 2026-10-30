@@ -1,5 +1,7 @@
 "use client";
 
+import { FormInput } from "@/components/ui/form-input";
+
 import {
   useMemo,
   useEffect,
@@ -197,7 +199,7 @@ export function ProfileForm({
 
       if (mode === "create") {
         if (isMember && (!purchaseQuote || purchaseQuote.categorySnapshot !== category)) throw new Error("Review a configured monthly price before creating a membership request.");
-        const id = await createPersonWithProfileDetails(input, privateDetails, isMember && purchaseQuote ? { quoteToken: purchaseQuote.quoteToken } : undefined);
+        const id = await createPersonWithProfileDetails(input, privateDetails, isMember && purchaseQuote ? { quoteToken: purchaseQuote.quoteToken, ...(purchaseQuote.voucherSnapshot ? { voucherCode: purchaseQuote.voucherSnapshot.code } : {}) } : undefined);
         router.push(isMember ? "/dashboard/payments" : `/dashboard/people/${id}/edit?created=1`);
         return;
       }
@@ -288,7 +290,8 @@ export function ProfileForm({
           value={phone}
           onChange={setPhone}
           error={fieldErrors.phone}
-          inputMode="tel"
+          type="tel"
+          inputMode="numeric"
           autoComplete="tel"
           hint="Used as the unique key for check-in lookup."
         />
@@ -331,7 +334,7 @@ export function ProfileForm({
 
         <p style={hintStyle}>RFID is optional. Manage cards from the person’s profile after saving.</p>
 
-        {isMember && mode === "create" && <NewProfilePurchaseQuote category={category} onQuote={setPurchaseQuote} />}
+        {isMember && mode === "create" && <NewProfilePurchaseQuote key={category} category={category} onQuote={setPurchaseQuote} disabled={submitting} />}
         {isMember && mode === "edit" && (
           <>
             <Field
@@ -452,7 +455,7 @@ function Field({
       <label htmlFor={id} style={labelStyle}>
         {label}
       </label>
-      <input
+      <FormInput
         id={id}
         type={type}
         inputMode={inputMode}
@@ -460,6 +463,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? `${id}-help` : undefined}
         style={{
           height: 44,
           padding: "0 12px",
@@ -472,9 +476,9 @@ function Field({
           fontSize: 14,
         }}
       />
-      {hint && !error && <p style={hintStyle}>{hint}</p>}
+      {hint && !error && <p id={`${id}-help`} style={hintStyle}>{hint}</p>}
       {error && (
-        <p role="alert" style={{ ...hintStyle, color: "var(--rs-accent-text)" }}>
+        <p id={`${id}-help`} role="alert" style={{ ...hintStyle, color: "var(--rs-accent-text)" }}>
           {error}
         </p>
       )}

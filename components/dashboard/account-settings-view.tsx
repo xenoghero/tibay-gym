@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { PaymentMethodSettings } from "./payment-method-settings";
+
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   EmailAuthProvider,
@@ -13,23 +17,13 @@ import { auth } from "@/lib/firebase";
 import { useToastQueue } from "@/lib/use-toast-queue";
 import { IconSignOut } from "@/components/dashboard/nav-icons";
 import { FinanceSettings } from "@/components/dashboard/finance-settings";
+import { VoucherSettings } from "./voucher-settings";
+import settingsStyles from "./settings.module.css";
 
-// TASKLIST Phase 11 — Admin: Account Settings (admin-dashboard-content.md §7,
-// canvas `isSettings` view). Single-admin login management: read-only email,
-// a change-password form that re-authenticates with the current password
-// before calling Firebase Auth's `updatePassword`, and a "send reset email"
-// escape hatch for a locked-out admin who can't supply the current password.
-//
-// Mobile responsive pass — the page is a grouped settings list (Login /
-// Security / Session), not a stack of cards. At rest it is three short rows
-// that fit one screen without scrolling; the password form is a disclosure that
-// expands in place inside the Security group. The grouping is the same at every
-// width — below 860px the group boxes go full-bleed with hairline rows, above
-// it they stay bordered cards. Layout overrides live in `app/globals.css`
-// (`rs-set-*`), because this view styles itself inline.
-//
-// Sign out is repeated here on purpose: below 860px the only other way out is
-// the bottom bar's More sheet.
+// Hash navigation retains the settings section on refresh/back. Hidden sections
+// remain mounted to preserve drafts when switching between pricing and vouchers.
+const subscribeSection = (listener: () => void) => { window.addEventListener("hashchange", listener); return () => window.removeEventListener("hashchange", listener); };
+const currentSection = () => ["vouchers", "payments", "account"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "pricing";
 
 const displayFont =
   "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
@@ -100,6 +94,9 @@ function IconGo() {
 
 export function AccountSettingsView() {
   const { user, signOut } = useAuth();
+  const section = useSyncExternalStore(subscribeSection, currentSection, () => "pricing");
+  const tabContent = useRef<HTMLDivElement>(null);
+  useContentTransition(tabContent, section);
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -193,7 +190,7 @@ export function AccountSettingsView() {
   const email = user?.email ?? null;
 
   return (
-    <main className="rs-set" style={pageStyle}>
+    <main className={`rs-set ${settingsStyles.page}`} style={pageStyle}>
       {/* Matches the Overview header: kicker over an oversized display title,
           nothing beside it. */}
       <header className="rs-set-head" style={headerRow}>
@@ -208,10 +205,18 @@ export function AccountSettingsView() {
       </header>
 
       <p className="rs-set-lead" style={leadStyle}>
-        The single admin login for this gym.
+        Manage gym pricing, payment methods, vouchers, and your admin account.
       </p>
 
-      <FinanceSettings />
+      <div className={settingsStyles.layout}>
+      <nav className={settingsStyles.navigation} aria-label="Settings sections">
+        {[["pricing", "Pricing"], ["vouchers", "Vouchers"], ["payments", "Payment methods"], ["account", "Account & security"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
+      </nav>
+      <div ref={tabContent} className={settingsStyles.content}>
+      <div hidden={section !== "pricing"}><FinanceSettings /></div>
+      <div hidden={section !== "vouchers"}><VoucherSettings /></div>
+      <div hidden={section !== "payments"}><PaymentMethodSettings /></div>
+      <div hidden={section !== "account"} className={settingsStyles.account}>
 
       <section style={groupStyle}>
         <h2 className="rs-set-group-label" style={groupLabelStyle}>
@@ -360,6 +365,9 @@ export function AccountSettingsView() {
         </div>
       </section>
 
+      </div>
+      </div>
+      </div>
       {toast && (
         <div className="rs-set-toast" style={toastWrap}>
           <div style={toastInner}>
@@ -377,7 +385,7 @@ export function AccountSettingsView() {
 const pageStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
-  maxWidth: 640,
+  width: "100%",
   padding: "34px 40px 60px",
   display: "flex",
   flexDirection: "column",

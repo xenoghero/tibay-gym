@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
   useCallback,
@@ -694,59 +695,7 @@ export function PersonProfileView({ personId }: PersonProfileViewProps) {
 // --- layout frame -----------------------------------------------------------
 
 function ProfileLoadingState() {
-  return (
-    <section
-      className="rs-profile-loader"
-      role="status"
-      aria-live="polite"
-      aria-label="Loading profile"
-    >
-      <div className="rs-profile-loader-stage" aria-hidden="true">
-        <div className="rs-profile-loader-scan" />
-
-        <div className="rs-profile-loader-head">
-          <div className="rs-profile-loader-avatar" />
-          <div className="rs-profile-loader-identity">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-
-        <div className="rs-profile-loader-cards">
-          <div className="rs-profile-loader-card rs-profile-loader-details">
-            <div className="rs-profile-loader-card-title" />
-            {[0, 1, 2, 3, 4].map((row) => (
-              <div className="rs-profile-loader-field" key={row}>
-                <span />
-                <span />
-              </div>
-            ))}
-          </div>
-
-          <div className="rs-profile-loader-card rs-profile-loader-visits">
-            <div className="rs-profile-loader-visit-head">
-              <span />
-              <span />
-              <span />
-            </div>
-            {[0, 1, 2].map((row) => (
-              <div className="rs-profile-loader-visit" key={row}>
-                <span />
-                <span />
-                <span />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="rs-profile-loader-copy">
-        <strong>Loading profile</strong>
-        <span>Gathering membership and visit history</span>
-      </div>
-    </section>
-  );
+  return <LoadingSkeleton label="Loading profile" variant="profile" count={5} />;
 }
 
 function Frame({ children }: { children: React.ReactNode }) {

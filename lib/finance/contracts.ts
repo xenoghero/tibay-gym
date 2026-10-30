@@ -1,3 +1,4 @@
+import type { PaymentMethod } from "@/lib/finance/payment-methods";
 /** Non-SMS financial records. All times are epoch milliseconds; money is PHP centavos. */
 export type RateCategory = "student" | "regular";
 export type LeadSource = "ads" | "facebook" | "google" | "friends" | "signage" | "others";
@@ -26,6 +27,11 @@ export interface RateSnapshot {
   amountMinor: number;
 }
 export interface Charge extends RateSnapshot {
+  baseAmountMinor?: number;
+  discountAmountMinor?: number;
+  voucherSnapshot?: import("./vouchers").VoucherSnapshot | null;
+  abandonedAt?: number | null;
+  abandonmentReason?: string | null;
   confirmedPaymentRequestId?: string | null;
   activePaymentRequestId?: string | null;
   id: string;
@@ -46,7 +52,8 @@ export interface PaymentRequest {
   id: string;
   chargeId: string;
   personId: string;
-  method: "cash" | "gcash";
+  method: PaymentMethod;
+  paymentAccountSnapshot?: import("./payment-methods").PaymentAccountSnapshot | null;
   status: "pending" | "approved" | "rejected";
   amountMinor: number;
   receiptId: string | null;

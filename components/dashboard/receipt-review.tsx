@@ -1,4 +1,9 @@
 "use client";
+
+import { FormInput } from "@/components/ui/form-input";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { parsePesoInput } from "@/lib/finance/rules";
@@ -11,7 +16,7 @@ interface ReviewData {
   review: { confirmedReference?: string; confirmedAmountMinor?: number; reviewRevision: number };
   referenceAlreadyClaimed: boolean; otherReceiptsUsingReference: number;
 }
-export function ReceiptReview({ receiptId, expectedAmountMinor, onReviewed }: { receiptId: string; expectedAmountMinor: number; onReviewed?: (revision: number) => void }) {
+export function ReceiptReview({ receiptId, expectedAmountMinor, onReviewed, paymentAccount }: { receiptId: string; expectedAmountMinor: number; paymentAccount?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot | null; onReviewed?: (revision: number) => void }) {
   const { user } = useAuth();
   const [data, setData] = useState<ReviewData | null>(null);
   const [reference, setReference] = useState(""), [amount, setAmount] = useState(""), [reason, setReason] = useState("");
@@ -95,16 +100,16 @@ export function ReceiptReview({ receiptId, expectedAmountMinor, onReviewed }: { 
     finally { setScanning(false); }
   }
   return <section className={styles.receipt}><h3>Private receipt review</h3>
-    <p>Check the receipt against the gym&apos;s received GCash transaction. OCR is a suggestion; saving a review does not approve payment.</p>
-    {!data && !message && <p role="status">Loading receipt…</p>}
+    <p>Check the receipt against the gym&apos;s received {paymentAccount?.name ?? "GCash"} transaction. OCR is a suggestion; saving a review does not approve payment.</p>
+    {!data && !message && <LoadingSkeleton label="Loading receipt…" variant="form" />}
     {scanning && <p role="status">Scanning this receipt for the reference and amount…</p>}
-    <ReceiptImage key={`image-${receiptId}`} receiptId={receiptId} />
+    <ReceiptImage key={`image-${receiptId}`} receiptId={receiptId} alt={paymentAccount ? `Private ${paymentAccount.name} receipt` : "Private GCash receipt"} />
     {data && <>{!scanning && data.receipt.ocr_status === "failed" && <p role="alert">The receipt could not be read. Scan again or enter the values manually.</p>}{!scanning && data.receipt.ocr_status === "needs_review" && data.receipt.processed_at && <p role="status">Check the detected values. Unclear or conflicting details need manual review.</p>}<p>OCR: {scanning ? "Scanning" : data.receipt.ocr_status === "queued" || !data.receipt.processed_at && data.receipt.ocr_status === "needs_review" ? "Not scanned" : data.receipt.ocr_status} · Confidence: {data.receipt.confidence ?? "unavailable"}% · Expected: PHP {(expectedAmountMinor / 100).toFixed(2)}</p>
       {(data.referenceAlreadyClaimed || data.otherReceiptsUsingReference > 0) && <p role="alert">This reference appears on another receipt or approved payment. Resolve the conflict before approval.</p>}
       {data.receipt.extracted_amount_minor !== null && data.receipt.extracted_amount_minor !== expectedAmountMinor && <p role="alert">The extracted amount differs from the expected charge. Check the actual receipt and funds received.</p>}
       <div style={{ display: "grid", gap: 12 }}>
-        <label>GCash reference<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} value={reference} maxLength={80} disabled={busy || scanning || !data?.canExtract} onChange={e => setReference(e.target.value)} /></label>
-        <label>Reviewed amount (PHP)<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} inputMode="decimal" value={amount} disabled={busy || scanning || !data?.canExtract} onChange={e => setAmount(e.target.value)} /></label>
+        <label>{paymentAccount ? "Payment reference" : "GCash reference"}<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} value={reference} maxLength={80} disabled={busy || scanning || !data?.canExtract} onChange={e => setReference(e.target.value)} /></label>
+        <label>Reviewed amount (PHP)<FormInput style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} inputMode="decimal" value={amount} disabled={busy || scanning || !data?.canExtract} onChange={e => setAmount(e.target.value)} /></label>
         <label>Review reason<input style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }} value={reason} maxLength={500} disabled={busy || scanning || !data?.canExtract} onChange={e => setReason(e.target.value)} /></label>
         <button disabled={busy || scanning || !data?.canExtract} onClick={() => void save()}>Save reviewed reference and amount</button>
       </div>

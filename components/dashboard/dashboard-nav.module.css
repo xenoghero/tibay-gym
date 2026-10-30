@@ -1,0 +1,135 @@
+.sidebar, .drawerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px 16px 18px;
+  color: var(--rs-fg);
+  background: var(--rs-panel);
+}
+.sidebar {
+  width: 252px;
+  flex: none;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-right: 1px solid var(--rs-line);
+  transition: width 200ms ease;
+}
+.sidebar[data-collapsed="true"] { width: 76px; }
+.brandRow { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; flex-shrink: 0; }
+.sidebar[data-collapsed="true"] .brandRow { padding: 0 4px; }
+.brandClip { overflow: hidden; width: 100%; }
+.brandClip :global(.rs-brand-sidebar) { width: 202px; max-width: none; }
+.brandClip :global(.rs-brand-name) { transition: opacity 150ms ease; }
+.sidebar[data-collapsed="true"] .brandClip :global(.rs-brand-name) { opacity: 0; }
+.control, .collapse, .signOut {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--rs-muted);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.control { width: 44px; justify-content: center; padding: 0; }
+.collapse { margin-top: -8px; }
+.collapse svg { transition: transform 200ms ease; }
+.sidebar[data-collapsed="true"] .collapse svg { transform: rotate(180deg); }
+.collapse:hover, .control:hover, .signOut:hover, .link:hover { background: var(--rs-accent-soft); color: var(--rs-fg); }
+.nav { display: flex; flex-direction: column; gap: 4px; position: relative; isolation: isolate; }
+.activeIndicator {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 44px;
+  border-radius: 6px;
+  background: var(--rs-accent);
+  transform: translateY(calc(var(--active-index) * 48px));
+  transition: transform 200ms cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+}
+.link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--rs-fg);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.link[aria-current="page"] { color: var(--rs-on-accent); background: transparent; }
+.link svg, .collapse svg, .signOut svg { flex: none; }
+.label { white-space: nowrap; overflow: hidden; transition: opacity 150ms ease; }
+.sidebar[data-collapsed="true"] .label { opacity: 0; width: 0; }
+.sidebar[data-collapsed="true"] .link, .sidebar[data-collapsed="true"] .collapse, .sidebar[data-collapsed="true"] .signOut { gap: 0; }
+.tipTarget { position: relative; }
+.tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 8px 12px;
+  border: 1px solid var(--rs-line);
+  border-radius: 6px;
+  background: var(--rs-fg);
+  color: var(--rs-bg);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms;
+  z-index: 2;
+}
+.tipTarget:hover .tooltip, .tipTarget:focus-visible .tooltip { visibility: visible; opacity: 1; transform: translateY(-50%); }
+.link:focus-visible, .control:focus-visible, .collapse:focus-visible, .signOut:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 3px; }
+.footer { margin-top: auto; display: flex; flex-direction: column; gap: 14px; padding-top: 16px; border-top: 1px solid var(--rs-line); }
+.identity { display: flex; gap: 10px; align-items: center; padding: 0 6px; min-width: 0; }
+.avatar { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--rs-fg); color: var(--rs-bg); font: 600 11px var(--font-geist-mono), monospace; }
+.identityDetails { min-width: 0; transition: opacity 150ms ease; }
+.email { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.role { font-size: 11px; color: var(--rs-muted); }
+.sidebar[data-collapsed="true"] .identityDetails { width: 0; opacity: 0; }
+.sidebar[data-collapsed="true"] .identity { gap: 0; }
+.signOut { border: 1px solid var(--rs-line); }
+.signOut:disabled { opacity: .5; cursor: wait; }
+.error { font-size: 11px; overflow-wrap: anywhere; color: var(--rs-fg); }
+.mobileHeader { display: none; }
+.drawer { margin: 0; border: 0; padding: 0; width: min(300px, calc(100vw - 44px)); max-width: none; height: 100dvh; max-height: none; background: var(--rs-panel); color: var(--rs-fg); }
+.drawerContent { min-height: 100%; }
+.drawer[open] { animation: drawer-in 200ms ease-out; }
+.drawer::backdrop { background: rgb(0 0 0 / .55); animation: backdrop-in 150ms ease-out; }
+.drawer[open][data-closing="true"] { animation: drawer-out 200ms ease-in forwards; }
+.drawer[data-closing="true"]::backdrop { animation: backdrop-out 200ms ease-in forwards; }
+@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawer-out { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@media (max-width: 860px) {
+  .sidebar { display: none; }
+  .mobileHeader { position: fixed; inset: 0 0 auto; height: 68px; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; background: var(--rs-panel); border-bottom: 1px solid var(--rs-line); }
+  .mobileHeader :global(.rs-brand-sidebar) { font-size: 30px; }
+}
+@media (max-height: 650px) and (min-width: 861px) {
+  .sidebar { overflow-y: auto; gap: 10px; }
+  .link, .activeIndicator { height: 36px; }
+  .activeIndicator { transform: translateY(calc(var(--active-index) * 40px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .brandClip :global(.rs-brand-name), .collapse, .collapse svg, .control, .signOut, .link, .label, .activeIndicator, .tooltip, .identityDetails { transition: none; }
+  .drawer[open], .drawer::backdrop, .drawer[open][data-closing="true"], .drawer[data-closing="true"]::backdrop { animation: none; }
+}

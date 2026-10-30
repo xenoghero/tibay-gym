@@ -17,7 +17,12 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it("does not claim an empty queue while loading and clears stale errors on refresh", async () => {
   let finish!: (value: Response) => void;
   const pending = new Promise<Response>(resolve => { finish = resolve; });
-  vi.stubGlobal("fetch", vi.fn().mockReturnValueOnce(pending).mockResolvedValue(Response.json({ records: [], nextCursor: null })));
+  let first = true;
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url === "/api/finance/payment-methods") return Promise.resolve(Response.json({ accounts: [] }));
+    if (first) { first = false; return pending; }
+    return Promise.resolve(Response.json({ records: [], nextCursor: null }));
+  }));
   await act(async () => { render(<PaymentReview />); });
   expect(screen.getByText("Loading payment requests…")).toBeTruthy(); expect(screen.queryByText("No requests on this page.")).toBeNull();
   await act(async () => { finish(Response.json({}, { status: 503 })); });
@@ -53,15 +58,17 @@ it("filters the loaded queue by customer, reference, status and method", async (
     { charge, payment: paymentFixture("a", charge, { method: "gcash" }), customer: { id: "a", name: "Renier Luna" }, gcashReference: "GC-123" },
     { charge, payment: paymentFixture("b", charge, { status: "approved" }), customer: { id: "b", name: "Ana Santos" } },
   ];
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ records, nextCursor: null })));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/finance/payment-methods" ? { accounts: [{ id: "account_bdo00001", name: "BDO", enabled: true }] } : { records, nextCursor: null })));
   await act(async () => { render(<PaymentReview />); });
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "gc-123" } });
   expect(screen.getByRole("button", { name: "Review payment for Renier Luna" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Review payment for Ana Santos" })).toBeNull();
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
-  fireEvent.change(screen.getByLabelText("Status", { exact: true }), { target: { value: "approved" } });
+  fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+  fireEvent.click(screen.getByRole("option", { name: "Approved" }));
   expect(screen.queryByRole("button", { name: "Review payment for Renier Luna" })).toBeNull();
-  fireEvent.change(screen.getByLabelText("Method", { exact: true }), { target: { value: "gcash" } });
+  fireEvent.click(screen.getByRole("combobox", { name: "Method" }));
+  fireEvent.click(screen.getByRole("option", { name: "BDO" }));
   expect(screen.getByText("No matching requests")).toBeTruthy();
 });
 it("requires review and changed-coverage acknowledgement before approval and preserves the decision payload", async () => {
@@ -82,4 +89,26 @@ it("requires review and changed-coverage acknowledgement before approval and pre
   await act(async () => { fireEvent.click(approve); });
   expect(fetcher).toHaveBeenCalledWith("/api/finance/review", expect.objectContaining({ method: "POST", body: JSON.stringify({ paymentRequestId: "a", decision: "approve", reviewed: true, reason: "", previewToken: "current-preview", acknowledgeMembershipChange: true }) }));
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("loads named accounts from settings, filters by account ID, and refreshes configured methods", async () => {
+  const { chargeFixture, paymentFixture } = await import("@/tests/finance-fixtures");
+  const charge = chargeFixture("renewal", { kind: "renewal" });
+  let accounts = [{ id: "account_bdo00001", name: "BDO", enabled: false }];
+  const records = [
+    { charge, payment: paymentFixture("bank", charge, { method: "account_bdo00001" }), customer: { id: "bank", name: "Bank customer" } },
+    { charge, payment: paymentFixture("cash", charge, { method: "cash" }), customer: { id: "cash", name: "Cash customer" } },
+  ];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/finance/payment-methods" ? { accounts } : { records, nextCursor: null })));
+  await act(async () => { render(<PaymentReview />); });
+  fireEvent.click(screen.getByRole("combobox", { name: "Method" }));
+  expect(screen.getByRole("option", { name: "Cash" })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: "Legacy GCash" })).toBeNull();
+  fireEvent.click(screen.getByRole("option", { name: /BDO/ }));
+  expect(screen.getByRole("button", { name: "Review payment for Bank customer" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Review payment for Cash customer" })).toBeNull();
+  accounts = [...accounts, { id: "account_maya0001", name: "Maya", enabled: true }];
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh requests" })); });
+  fireEvent.click(screen.getByRole("combobox", { name: "Method" }));
+  expect(screen.getByRole("option", { name: "Maya" })).toBeTruthy();
 });

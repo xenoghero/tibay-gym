@@ -2,6 +2,14 @@ import { expect, it } from "vitest";
 import { AT, chargeFixture, paymentFixture } from "@/tests/finance-fixtures";
 import { buildFinanceReport, reportRange } from "./report";
 const day = (date = "2026-10-26") => reportRange(new URLSearchParams({ date }));
+it("keeps bank collections out of the GCash subtotal and shows the submitted account name", () => {
+  const charge = chargeFixture("bank", { confirmedPaymentRequestId: "bank-pay" });
+  const payment = paymentFixture("bank-pay", charge, { method: "account_bank0001", status: "approved", confirmedAt: AT,
+    paymentAccountSnapshot: { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678" } });
+  const report = buildFinanceReport([charge], [payment], day());
+  expect(report.totals).toMatchObject({ confirmedMinor: 6000, gcashMinor: 0, cashMinor: 0, otherElectronicMinor: 6000 });
+  expect(report.ledger[0].paymentMethodLabel).toBe("BPI savings");
+});
 it("uses Philippine midnight, Monday weeks, leap months and bounded valid custom periods", () => {
   expect(reportRange(new URLSearchParams(), Date.parse("2026-10-25T16:00:00Z"))).toEqual(day());
   expect(day().startMs).toBe(Date.parse("2026-10-25T16:00:00Z"));

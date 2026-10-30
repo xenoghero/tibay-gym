@@ -1,5 +1,9 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
+import { FormInput } from "@/components/ui/form-input";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ReportDateSheet } from "./report-date-sheet";
@@ -85,7 +89,8 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
   const totals = report?.totals;
   if (compact) return <section className="rs-finance rs-finance-compact" aria-label="Today's collections" aria-busy={loading}>
     <div className="rs-finance-heading"><h2>Today’s collections</h2><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
-    {loading && <p role="status">{report ? "Updating collections…" : "Loading collections…"}</p>}
+    <div className="rs-ov-collections-scroll" role="region" aria-label="Today's collection details" tabIndex={0}>
+    {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}
     {error && <p role="alert">{error}</p>}
     {!error && report && totals && <>
       <div className="rs-ov-collection-hero"><span>Confirmed collections</span><strong>{money(totals.confirmedMinor)}</strong><small>{totals.confirmedCount} confirmed transactions · Updated {new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</small></div>
@@ -102,10 +107,11 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
       </details>
       {!report.financialCutoverAt && <p>Financial cutover has not been set in Settings. Historical attendance is not backfilled as payments.</p>}
     </>}
+    </div>
   </section>;
   const filters = <>
-    <label>Period<select value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></select></label>
-    {period !== "custom" ? <label>Date<input type="date" required value={date} onChange={event => changed(() => setDate(event.target.value))} /></label> : <><label>From<input type="date" required value={from} onChange={event => changed(() => setFrom(event.target.value))} /></label><label>Through<input type="date" required min={from} value={through} onChange={event => changed(() => setThrough(event.target.value))} /></label></>}
+    <label>Period<FormSelect value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></FormSelect></label>
+    {period !== "custom" ? <label>Date<FormInput type="date" required value={date} onChange={event => changed(() => setDate(event.target.value))} /></label> : <><label>From<FormInput type="date" required value={from} onChange={event => changed(() => setFrom(event.target.value))} /></label><label>Through<FormInput type="date" required min={from} value={through} onChange={event => changed(() => setThrough(event.target.value))} /></label></>}
   </>;
   return <section className="rs-finance rs-collections-report" aria-label="Financial statistics" aria-busy={loading}>
     <div className="rs-stat-section-heading"><div><h2>Collections</h2><p>Recorded charges, confirmed payments and pending requests.</p></div>
@@ -117,7 +123,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
       <div className="rs-collection-refresh"><small>{!error && report ? `Updated ${new Date(report.generatedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}` : "Philippine time"}</small><button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }}>Refresh collections</button></div>
     </div>
     <ReportDateSheet open={dateSheetOpen} onClose={() => setDateSheetOpen(false)}><div className="rs-finance-filters">{filters}</div></ReportDateSheet>
-    {loading && <p role="status">{report ? "Updating collections…" : "Loading collections…"}</p>}
+    {loading && (!report ? <LoadingSkeleton label="Loading collections…" variant="cards" count={compact ? 3 : 4} /> : <LoadingSkeleton label="Updating collections…" variant="inline" />)}
     {error && <p className="rs-report-error" role="alert">{error}</p>}
     {!error && report && totals && <>
       <p className="rs-collection-range">{report.range.from}{report.range.through !== report.range.from ? ` through ${report.range.through}` : ""} · Philippine dates · Weeks start Monday</p>
@@ -131,12 +137,12 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
         <div className="rs-report-panel"><CollectionTrend report={report} /></div>
         <div className="rs-report-panel rs-collection-breakdown"><h3>Purchase breakdown</h3><p>Expected charges and recorded purchases in this period.</p>
           <div className="rs-finance-split">{report.breakdown.map(row => <div key={row.kind}><span>{labels[row.kind]}</span><strong>{money(row.expectedMinor)}</strong><small>{row.expectedCount} charges / purchases · {money(row.confirmedMinor)} confirmed ({row.confirmedCount})</small></div>)}</div>
-          <div className="rs-collection-methods"><span>Confirmed by method</span><div><span>Cash</span><strong>{money(totals.cashMinor)}</strong></div><div><span>GCash</span><strong>{money(totals.gcashMinor)}</strong></div></div>
+          <div className="rs-collection-methods"><span>Confirmed by method</span><div><span>Cash</span><strong>{money(totals.cashMinor)}</strong></div><div><span>GCash</span><strong>{money(totals.gcashMinor)}</strong></div><div><span>Other electronic</span><strong>{money(totals.otherElectronicMinor ?? 0)}</strong></div></div>
         </div>
       </div>
       <details className="rs-report-definitions"><summary>How totals work</summary>
         <p>Expected includes daily charges and approved membership purchases on their recorded purchase date. Pending membership requests are separate. Confirmed collections use the payment confirmation date; delayed confirmations may belong to earlier visits. The difference between expected and confirmed is not an unpaid balance.</p>
-        <p>Pending in this period: Cash {money(totals.pendingCashMinor)} · GCash {money(totals.pendingGcashMinor)} ({totals.pendingCount} requests).</p>
+        <p>Pending in this period: Cash {money(totals.pendingCashMinor)} · GCash {money(totals.pendingGcashMinor)} · Other electronic {money(totals.pendingOtherElectronicMinor ?? 0)} ({totals.pendingCount} requests).</p>
         <p>Each record is one charge; its latest linked request determines its status. “No submission” means no payment request is linked. Categories and prices reflect the original purchase.</p>
       </details>
       <aside className="rs-collection-outstanding" aria-label="Outstanding requests across all dates"><div><strong>Open requests · All dates</strong><p>Separate from the selected reporting period.</p></div>
@@ -145,11 +151,12 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
       {!report.financialCutoverAt && <p>Financial cutover has not been set in Settings. Historical attendance is not backfilled as payments.</p>}
       <div className="rs-report-panel rs-collection-records"><div className="rs-records-heading"><h3>Charge and purchase records</h3><small>{report.ledger.length} loaded</small></div>
         {!report.ledger.length ? <div className="rs-report-empty"><strong>No records in this period</strong><p>Choose a different date range to view charges and purchases.</p></div> : <div role="region" aria-label="Financial records" tabIndex={0}>
-          <div className="rs-finance-table rs-ledger-desktop"><table><thead><tr>{["Tibay number / customer ID", "Type / category", "Amount", "Method / status", "Purchase / visit date", "Confirmation (Manila)", "In selected period"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{report.ledger.map(row => <tr key={row.id}><td>{row.transactionNumber}<small>{row.personId}</small></td><td>{labels[row.kind]}<small>{row.category}</small></td><td>{money(row.amountMinor)}</td><td>{row.method ?? "—"}<small className="rs-payment-status">{row.status}</small></td><td>{row.purchaseDate}</td><td>{row.confirmedAt === null ? "—" : new Date(row.confirmedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</td><td>{[row.expectedInPeriod && "Expected", row.confirmedInPeriod && "Confirmed"].filter(Boolean).join(" · ") || "Submission only"}</td></tr>)}</tbody></table></div>
+          <div className="rs-finance-table rs-ledger-desktop"><table><thead><tr>{["Tibay number / customer ID", "Type / category", "Amount", "Method / status", "Purchase / visit date", "Confirmation (Manila)", "In selected period"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{report.ledger.map(row => <tr key={row.id}><td>{row.transactionNumber}<small>{row.personId}</small></td><td>{labels[row.kind]}<small>{row.category}</small></td><td>{money(row.amountMinor)}</td><td>{row.paymentMethodLabel ?? row.method ?? "—"}<small className="rs-payment-status">{row.status}</small></td><td>{row.purchaseDate}</td><td>{row.confirmedAt === null ? "—" : new Date(row.confirmedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</td><td>{[row.expectedInPeriod && "Expected", row.confirmedInPeriod && "Confirmed"].filter(Boolean).join(" · ") || "Submission only"}</td></tr>)}</tbody></table></div>
           <div className="rs-ledger-mobile">{report.ledger.map(row => <details key={row.id}><summary><span><strong>{labels[row.kind]}</strong><small>{row.transactionNumber}</small></span><span><strong>{money(row.amountMinor)}</strong><small>{row.status} · Details</small></span></summary><dl>
-            <div><dt>Customer ID</dt><dd>{row.personId}</dd></div><div><dt>Category</dt><dd>{row.category}</dd></div><div><dt>Payment method</dt><dd>{row.method ?? "—"}</dd></div><div><dt>Purchase / visit</dt><dd>{row.purchaseDate}</dd></div><div><dt>Confirmed (Manila)</dt><dd>{row.confirmedAt === null ? "Not confirmed" : new Date(row.confirmedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</dd></div><div><dt>In selected period</dt><dd>{[row.expectedInPeriod && "Expected", row.confirmedInPeriod && "Confirmed"].filter(Boolean).join(" · ") || "Submission only"}</dd></div>
+            <div><dt>Customer ID</dt><dd>{row.personId}</dd></div><div><dt>Category</dt><dd>{row.category}</dd></div><div><dt>Payment method</dt><dd>{row.paymentMethodLabel ?? row.method ?? "—"}</dd></div><div><dt>Purchase / visit</dt><dd>{row.purchaseDate}</dd></div><div><dt>Confirmed (Manila)</dt><dd>{row.confirmedAt === null ? "Not confirmed" : new Date(row.confirmedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</dd></div><div><dt>In selected period</dt><dd>{[row.expectedInPeriod && "Expected", row.confirmedInPeriod && "Confirmed"].filter(Boolean).join(" · ") || "Submission only"}</dd></div>
           </dl></details>)}</div>
         </div>}
+        {pageLoading && <LoadingSkeleton label="Loading records…" />}
         {pageError && <p role="alert">{pageError}</p>}{cursor && <button type="button" disabled={pageLoading} onClick={() => void more()}>{pageLoading ? "Loading records…" : "Load more records"}</button>}
       </div>
     </>}

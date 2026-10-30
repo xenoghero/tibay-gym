@@ -89,20 +89,6 @@
 .root summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-size: 12px; }
 .root .footnote { margin: 20px 0; font-size: 12px; }
 .footnote button { border: 0; text-decoration: underline; padding: 4px; color: var(--rs-accent-text); }
-/* Campaigns share the workspace typography and fields; drafts remain mounted. */
-.root :global(.sms-campaigns) > form { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; padding: 24px; border: 1px solid var(--rs-line); border-radius: 8px; }
-.root :global(.sms-campaigns) > form > button { justify-self: start; }
-.root :global(.sms-campaigns) legend { font-weight: 500; margin-bottom: 12px; }
-.root :global(.sms-campaigns) fieldset { align-content: start; }
-.root :global(.sms-campaigns) fieldset label { min-height: 44px; padding: 10px 0; border-bottom: 1px solid var(--rs-line); }
-.root :global(.sms-campaigns) label > span { display: flex; align-items: flex-start; gap: 10px; }
-.root :global(.sms-campaigns) > h3 { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--rs-line); }
-.root :global(.sms-campaigns) article, .root :global(.rs-sms-contact) { padding: 18px 0; border-bottom: 1px solid var(--rs-line); }
-.root :global(.sms-campaigns) article button { margin-right: 8px; }
-.root :global(.sms-campaigns) > div:not(.kicker):not([role="status"]) { margin-top: 24px; padding: 20px; background: var(--rs-panel); border-radius: 6px; }
-.root :global(.sms-campaigns) ul { list-style: disc; padding-left: 20px; margin-bottom: 16px; }
-.root :global(.sms-campaigns) a { text-decoration: underline; }
-.root :global(.sms-campaigns) > div > button { margin-top: 14px; }
 @media (max-width: 1150px) {
   .root { padding: 28px 24px; }
   .activityGrid, .settingsFields { grid-template-columns: 1fr; }
@@ -121,7 +107,6 @@
   .gateway > div { flex: 1 0 calc(100% - 27px); min-width: 0; }
   .gateway button { margin-left: 17px; }
   .panel { padding: 18px; }
-  .root :global(.sms-campaigns) > form { grid-template-columns: 1fr; padding: 18px; }
   .fieldGrid, .filters { grid-template-columns: 1fr; }
   .root input:not([type="checkbox"]), .root textarea, .root select { font-size: 16px; }
   .contact { gap: 12px; grid-template-columns: minmax(0, 1fr); }
@@ -135,3 +120,60 @@
 @media (prefers-reduced-motion: reduce) {
   .root button { transition: none; }
 }
+
+/* Guided SMS workspace */
+.intro { margin: 8px 0 24px; }
+.startGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.startAction { display: flex; flex-direction: column; align-items: flex-start; padding: 24px; background: var(--rs-panel); border-radius: 8px; }
+.startAction h3 { margin-top: 12px; }
+.startAction p { flex: 1; }
+.backLink { margin-bottom: 20px; }
+.journey { max-width: 760px; margin-inline: auto; padding: 24px; border: 1px solid var(--rs-line); border-radius: 8px; }
+.journey > h2 { margin-block: 24px 16px; }
+.journey > p, .journey > details, .journey > .actions { margin-block: 16px; }
+.steps { display: flex; padding: 0; margin: 0 0 24px; list-style: none; gap: 20px; }
+.steps li { display: flex; align-items: center; gap: 8px; color: var(--rs-muted); font-size: 12px; }
+.steps li span { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border: 1px solid var(--rs-line); border-radius: 50%; }
+.steps li[aria-current] { color: var(--rs-fg); font-weight: 600; }
+.steps li[aria-current] span { background: var(--rs-accent); color: var(--rs-on-accent); border-color: var(--rs-accent); }
+.selectionSummary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-block: 18px; color: var(--rs-muted); font-size: 13px; }
+.recipientList { display: grid; margin-block: 16px !important; }
+.root .recipient { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 12px 4px; border-bottom: 1px solid var(--rs-line); cursor: pointer; }
+.recipient > span { display: grid; gap: 2px; min-width: 0; }
+.recipient small { display: block; }
+.excludedRow { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 0; font-size: 12px; border-bottom: 1px solid var(--rs-line); }
+.journeyBar { position: sticky; bottom: -30px; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px; margin: 24px -24px -24px; background: var(--rs-panel); border-top: 1px solid var(--rs-line); border-radius: 0 0 8px 8px; }
+.journeyBar > span { color: var(--rs-muted); font-size: 12px; }
+.queuePanel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, .65fr); gap: 24px; margin-top: 28px; padding-block: 24px; border-block: 1px solid var(--rs-line); }
+.queuePanel > div > p { font-size: 12px; margin-block: 10px; }
+.queuePanel > div > button { margin-block: 6px; }
+.historyRow { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--rs-line); }
+.historyRow > div, .historyRow > span:first-child { min-width: 0; flex: 1; }
+.historyRow .meta { display: block; margin-top: 5px; }
+.historyRow > button { flex-shrink: 0; }
+.truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root .messagePreview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 18px; background: var(--rs-panel); color: var(--rs-fg); border-radius: 6px; }
+.root .message { padding: 0; }
+.root summary.historyRow { display: flex; padding: 16px 0; margin: 0; color: var(--rs-fg); }
+.root summary.historyRow::before { content: "+"; color: var(--rs-muted); }
+.root details[open] > summary.historyRow::before { content: "−"; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 860px) {
+  .header { align-items: flex-start; flex-wrap: wrap; }
+  .header > .actions { margin-left: auto; }
+  .startGrid, .queuePanel { grid-template-columns: 1fr; gap: 16px; }
+  .startAction { padding: 20px; }
+  .startAction > button { width: 100%; }
+  .journey { padding: 18px; }
+  .journeyBar { margin: 24px -18px -18px; bottom: -30px; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); flex-wrap: wrap; gap: 8px; }
+  .journeyBar > .actions { width: 100%; display: flex; flex-wrap: nowrap; }
+  .journeyBar > .actions > button { flex: 1; }
+  .steps { gap: 10px; }
+  .steps li { flex: 1; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 11px; }
+  .historyRow { flex-wrap: wrap; gap: 10px; }
+  .historyRow > div, .historyRow > span:first-child { flex-basis: 100%; }
+  .queuePanel > div > button { width: 100%; }
+}
+
+.gateway[data-ready="true"] { padding: 10px 14px; }
+.gateway[data-ready="true"] p { display: none; }

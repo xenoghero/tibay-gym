@@ -1,0 +1,23 @@
+.region { width: 100%; min-width: 0; padding-block: 12px; }
+.bone { display: inline-block; max-width: 100%; vertical-align: middle; border-radius: 4px; background: var(--rs-line, #333); animation: pulse 1.6s ease-in-out infinite; }
+.rows, .form, .profile, .image { display: grid; gap: 12px; }
+.item { display: grid; gap: 12px; min-width: 0; padding: 18px 16px; border: 1px solid var(--rs-line, #333); border-radius: 6px; }
+.rows .item { grid-template-columns: 2fr 2fr 1fr; align-items: center; min-height: 64px; }
+.form { max-width: 720px; }
+.form .item { border: 0; padding-inline: 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 16px; }
+.cards .item { min-height: 138px; }
+.chart { min-height: 240px; display: flex; align-items: end; gap: 16px; padding: 24px 16px; border-bottom: 1px solid var(--rs-line, #333); }
+.chart .item { animation: pulse 1.6s ease-in-out infinite; flex: 1; height: 160px; border: 0; padding: 0; background: var(--rs-line, #333); opacity: .45; }
+.chart .item:nth-child(even) { height: 100px; }
+.chart .item > * { display: none; }
+.identity { display: flex; align-items: center; gap: 20px; padding-block: 16px; }
+.identity > div { flex: 1; display: grid; gap: 16px; }
+.image { min-height: 300px; align-content: center; }
+.image .item { border: 0; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: .85; } }
+@media (max-width: 600px) { .rows .item { grid-template-columns: 2fr 1fr; } .rows .item > :last-child { display: none; } }
+@media (prefers-reduced-motion: reduce) { .bone, .chart .item { animation: none; } }
+
+.region:has(> .inline) { padding-block: 2px; }

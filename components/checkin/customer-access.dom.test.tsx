@@ -3,14 +3,14 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/components/people/purchase-form", () => ({ PurchaseForm: ({ previousRequestId }: { previousRequestId?: string }) => <p>{previousRequestId ? `Replacing ${previousRequestId}` : "Restricted purchase form"}</p> }));
 import { CustomerAccess } from "./customer-access";
-let verified: boolean, logoutFails: boolean;
+let verified: boolean, logoutFails: boolean, customerName: string;
 const calls: Array<{ method: string; url: string }> = [];
-beforeEach(() => { verified = true; logoutFails = false; calls.length = 0;
+beforeEach(() => { verified = true; logoutFails = false; customerName = "Mara Santos"; calls.length = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
     const method = options?.method ?? "GET"; calls.push({ method, url });
     if (method === "DELETE") return Response.json({}, { status: logoutFails ? 503 : 200 });
     if (url.includes("payments")) return Response.json({ requests: [{ id: "pay", status: "pending", amountMinor: 6000, method: "cash", submittedAt: Date.now(), rejectionReason: null }], nextCursor: null });
-    return Response.json({ verified, rateCategory: "student", type: "guest", expiresAt: Date.now() + 1800000 });
+    return Response.json({ name: customerName, verified, rateCategory: "student", type: "guest", expiresAt: Date.now() + 1800000 });
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
@@ -34,8 +34,24 @@ it("shows pending visitors their limited payment status while withholding member
 });
 it("clears the displayed customer when the server-issued session expires", async () => {
   vi.useFakeTimers(); await login();
+  expect(screen.getByText("Mara Santos", { exact: true })).toBeTruthy();
   await act(async () => { vi.advanceTimersByTime(1800001); });
   expect(screen.getByRole("alert").textContent).toContain("expired"); expect(screen.getByLabelText("Phone number")).toBeTruthy();
+  expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
+});
+it("shows the selected customer's name and replaces it when using a different number", async () => {
+  expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
+  await login();
+  expect(screen.getByText("Mara Santos", { exact: true }).closest("p")?.textContent).toBe("Profile for Mara Santos");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Sign out / use a different number" })); });
+  expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
+  customerName = "Nina Flores";
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "09171234567" } });
+    fireEvent.submit(screen.getByRole("button", { name: "View my membership" }).closest("form")!);
+  });
+  expect(screen.getByText("Nina Flores", { exact: true })).toBeTruthy();
+  expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
 });
 it("surfaces a rejected latest payment and opens its correction without a new purchase", async () => {
   const fetcher = vi.mocked(fetch);
@@ -73,7 +89,7 @@ it("refreshes the membership overview when checking an approved payment", async 
   await login();
   const fetcher = vi.mocked(fetch);
   const original = fetcher.getMockImplementation()!;
-  fetcher.mockImplementation(async (url, options) => String(url).endsWith("/session") ? Response.json({ verified: true, rateCategory: "student", type: "member", status: "active", membershipExpiryMs: Date.now() + 86400000, expiresAt: Date.now() + 1800000 }) : original(url, options));
+  fetcher.mockImplementation(async (url, options) => String(url).endsWith("/session") ? Response.json({ name: customerName, verified: true, rateCategory: "student", type: "member", status: "active", membershipExpiryMs: Date.now() + 86400000, expiresAt: Date.now() + 1800000 }) : original(url, options));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh payment status" })); });
   expect(screen.getByText("Active", { exact: true })).toBeTruthy();
   expect(screen.queryByText("Guest profile")).toBeNull();

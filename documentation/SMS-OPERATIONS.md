@@ -2,6 +2,16 @@
 
 Provider selected by the owner on October 28, 2026: [capcom6/android-sms-gateway](https://github.com/capcom6/android-sms-gateway).
 
+## Admin screen and guided journeys
+
+The SMS workspace opens on **Messages**, with two starting actions: **Send an announcement** and **Review due reminders**. **History** contains announcements, saved drafts and individual delivery records; **Contacts** manages permission. **Settings** is a secondary header action.
+
+Announcements follow **Choose recipients → Write message → Review → Queue → Process → Results**. Search and load more contacts directly in the recipient picker; selection and message text survive moving backward or switching tabs during the session. Only eligible contacts are selectable, with exclusions explained separately. Preview still saves the reviewed draft and requires explicit confirmation before queueing. Saved drafts reopen from History for review, subject to the existing 30-minute expiry.
+
+After queueing, use **Process queued messages** to explicitly run the existing worker, then **View delivery progress** to open the announcement's results. Processing handles the shared queue, in bounded batches; repeat as needed. Queueing alone never sends. Reminder checks show eligible counts and saved templates; **Queue next reminder batch** still processes the next 50 profiles, which may differ from the preview. No automatic schedule was added.
+
+History loads announcements when opened, displays Philippine dates and clear delivery labels, and keeps provider attempts under **Technical details**. Recent results and summary counts cover loaded records only; history pagination retains stable ID order even though loaded messages display newest first. Mobile uses one composition stage at a time with a sticky selection count and action bar.
+
 ## Local setup and activation
 
 1. Install SMS Gateway on the Android phone, grant its required SMS permissions, and use a funded SIM/appropriate carrier plan. The sender is that SIM's phone number; this adapter does not configure an alphanumeric sender.
@@ -17,7 +27,9 @@ An admin asks whether the customer agrees to receive Tibay Gym reminders and gym
 
 ## Queue and recovery
 
-The admin API requires the existing verified admin identity; the worker POST endpoint `/api/sms/worker` supports that identity or the existing private maintenance credential. It is ready for later scheduling; no host or schedule was created. Use **Run sending worker** locally. Each run rotates through at most ten history rows, including provider-status reconciliation. Larger histories require more runs; a short run does not imply the whole queue is drained.
+For phone-free verification, run `npm run test:sms:offline`. It exercises the queue/worker and actual HTTP adapter against a synthetic loopback gateway without contacting the configured phone or changing live settings. See `sms-offline-verification.md` for results and the distinction between simulated delivery and real handset receipt.
+
+The admin API requires the existing verified admin identity; the worker POST endpoint `/api/sms/worker` supports that identity or the existing private maintenance credential. It is ready for later scheduling; no host or schedule was created. Use **Process queued messages** locally. Each run rotates through at most ten history rows, including provider-status reconciliation. Larger histories require more runs; a short run does not imply the whole queue is drained.
 
 Messages use stable SHA-256 IDs and one recipient per gateway submission. Claims use Firestore transactions with 60-second leases; requests time out after 12 seconds and do not follow redirects. The worker stores only response codes, allowlisted state names and fixed outcome codes, not raw provider bodies. Safe explicit HTTP 429 rejections retry with exponential backoff (2 then 4 minutes) up to the configured maximum. Validation/auth rejections are terminal; HTTP 5xx, conflicts, malformed responses, transport errors and expired in-flight claims remain uncertain and are looked up by the same ID. Even a lookup returning 404 never triggers a blind resend. Check the Android gateway/outbound log and recipient when a message remains indeterminate; the application intentionally has no force-resend action.
 
@@ -27,7 +39,7 @@ Private contacts, message destinations/text and attempts are removed by ordinary
 
 ## Expiry and inactivity reminders
 
-Use **Preview due reminders** and **Preview more profiles** to inspect eligible counts without queueing, including while disabled. **Scan and queue due reminders** processes the next 50 profiles when sending is enabled and configured; repeat to cover the roster, then run the sending worker. The protected `POST /api/sms/reminders` endpoint supports future scheduling with the existing maintenance credential. No live schedule exists. Future hosting should invoke scans repeatedly after the configured daily Philippine time to cover the entire roster and run the worker frequently enough to drain it; both endpoints rotate their cursors and safely deduplicate repeated runs.
+Use **Check due reminders** and **Check more profiles** to inspect eligible counts without queueing, including while disabled. **Queue next reminder batch** processes the next 50 profiles when sending is enabled and configured; repeat to cover the roster, then run the sending worker. The protected `POST /api/sms/reminders` endpoint supports future scheduling with the existing maintenance credential. No live schedule exists. Future hosting should invoke scans repeatedly after the configured daily Philippine time to cover the entire roster and run the worker frequently enough to drain it; both endpoints rotate their cursors and safely deduplicate repeated runs.
 
 Expiry reminders use today's 7/5/1-day difference from the latest Philippine expiry date and never catch up missed points. Each expiry timestamp and offset forms its own key. Inactivity is strictly more than ten elapsed days since recorded attendance, once per last-visit episode; no-visit members are excluded. A new visit resets the episode. Immediately before a submission, the worker cancels obsolete reminders after renewal/attendance changes and rechecks contact eligibility. Expiry work that reaches another date is cancelled. Templates are snapshotted at queueing, with `{expiry}` and `{days}` supported only in the expiry template. Reminder checks do not depend on a hosted scheduler to be used locally.
 
@@ -39,10 +51,10 @@ Collection rates, payments/approvals, OCR review/recovery, customer access, repo
 
 1. Record customer permission in SMS operations and load the desired customer pages. Only consenting, non-opted-out profiles whose current number matches the recorded permission appear in the selection list.
 2. Write a message of at most 480 characters and select up to 100 recipients. Use multiple separately reviewed campaigns for larger audiences; this bound keeps dispatch within one Firestore transaction. Do not select the same people in multiple campaigns for the same announcement.
-3. **Preview campaign** saves a draft with the exact text, eligible customer IDs, and fingerprints of the reviewed phone/consent revisions. Duplicate numbers are collapsed. Review the exact message and recipient count; excluded people are counted. No SMS is queued or sent by previewing.
-4. Tick the explicit review checkbox and **Queue campaign** within 30 minutes. Any edits require a fresh preview. Dispatch atomically rechecks the audience and creates one deterministic message per remaining customer. Opt-outs/changed numbers/changed consent revisions are cancelled; deleted profiles get no new private records. Repeated dispatch of the same campaign is safe.
+3. **Review announcement** saves a draft with the exact text, eligible customer IDs, and fingerprints of the reviewed phone/consent revisions. Duplicate numbers are collapsed. Review the exact message and recipient count; excluded people are counted. No SMS is queued or sent by previewing.
+4. Tick the explicit review checkbox and **Queue messages** within 30 minutes. Any edits require a fresh preview. Dispatch atomically rechecks the audience and creates one deterministic message per remaining customer. Opt-outs/changed numbers/changed consent revisions are cancelled; deleted profiles get no new private records. Repeated dispatch of the same campaign is safe.
 5. Run the sending worker only when live setup is ready and sending is enabled. Queueing a campaign does not itself contact the gateway. Disabled settings prevent sending. Unsent messages expire after 24 hours, preventing an old campaign from becoming an activation backlog.
-6. **Refresh campaigns**, **View campaign**, and **Refresh progress** show derived counts and per-recipient outcomes. There is no separately mutable campaign status. Inspect recipient attempts for accepted/failed/uncertain evidence. A removed recipient reflects profile deletion rather than a delivery result. History pages use stable IDs. Drafts can be reviewed again from saved history after a reload; a dispatched draft is shown as dispatched, so a lost browser response does not require creating a replacement campaign.
+6. **Refresh announcements**, **View details**, and **Refresh delivery progress** show derived counts and per-recipient outcomes. There is no separately mutable campaign status. Inspect recipient attempts for accepted/failed/uncertain evidence. A removed recipient reflects profile deletion rather than a delivery result. History pages use stable IDs. Drafts can be reviewed again from saved history after a reload; a dispatched draft is shown as dispatched, so a lost browser response does not require creating a replacement campaign.
 
 Campaign snapshots retain internal audience IDs and hashed phone/consent fingerprints, not names or raw numbers. Private messages/attempts are deleted with the customer; minimal campaign/audit history remains. Campaign text should be a shared announcement, without personal customer details.
 

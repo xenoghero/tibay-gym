@@ -14,10 +14,13 @@ export async function GET(request: Request) {
       query = query.startAfter(snapshot);
     }
     const rows = await query.limit(21).get(), page = rows.docs.slice(0, 20);
-    return json({ requests: page.map(doc => {
+    return json({ requests: await Promise.all(page.map(async doc => {
       const data = doc.data();
+      const charge = data.chargeId ? (await db.doc(`charges/${data.chargeId}`).get()).data() : undefined;
       return { id: doc.id, status: data.status, amountMinor: data.amountMinor, method: data.method,
-        submittedAt: data.submittedAt, rejectionReason: data.rejectionReason ?? null };
-    }), nextCursor: rows.size > 20 ? page.at(-1)!.id : null });
+        ...(data.paymentAccountSnapshot ? { paymentAccountSnapshot: data.paymentAccountSnapshot } : {}), submittedAt: data.submittedAt, rejectionReason: data.rejectionReason ?? null,
+        ...(charge?.abandonedAt ? { closed: true } : {}),
+        ...(charge?.voucherSnapshot ? { voucherCode: charge.voucherSnapshot.code, discountAmountMinor: charge.discountAmountMinor, baseAmountMinor: charge.baseAmountMinor } : {}) };
+    })), nextCursor: rows.size > 20 ? page.at(-1)!.id : null });
   });
 }

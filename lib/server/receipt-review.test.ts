@@ -27,3 +27,9 @@ it("rejects stale reviews and changes to finalized payments", async () => {
   mocks.store!.data.get("paymentRequests/pmt1")!.status = "approved";
   await expect(correctReceipt("admin", { ...body(), operationId: "receipt-correction-0003" })).rejects.toMatchObject({ code: "payment-not-pending" });
 });
+it("accepts alphanumeric bank references while retaining strict numeric GCash validation", async () => {
+  await expect(correctReceipt("admin", { ...body(), reference: "BPI-AB1234" })).rejects.toMatchObject({ code: "invalid-reference" });
+  mocks.store!.data.get("paymentRequests/pmt1")!.paymentAccountSnapshot = { kind: "bank", name: "BPI", accountNumber: "0012345678" };
+  await correctReceipt("admin", { ...body(), reference: "BPI-AB1234" });
+  expect(mocks.store!.data.get("receiptReviews/r1")).toMatchObject({ confirmedReference: "BPIAB1234" });
+});

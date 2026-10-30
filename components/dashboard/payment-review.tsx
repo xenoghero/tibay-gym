@@ -1,10 +1,21 @@
 "use client";
+
+import { StyledSelect } from "@/components/ui/styled-select";
+import { paymentLabel, type PaymentAccount } from "@/lib/finance/payment-methods";
+
+import { useContentTransition } from "@/lib/use-content-transition";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { Charge, PaymentRequest, Coverage } from "@/lib/finance/contracts";
 import { ReceiptReview } from "./receipt-review";
 import { DailyPayments } from "./daily-payments";
+import { DailyPaymentHistory } from "./daily-payment-history";
 import { PaymentDrawer, PaymentStatus, paymentDate, peso, styles } from "./payment-ui";
+import { PriceBreakdown } from "@/components/people/voucher-entry";
+import { SettingsConfirm } from "./settings-confirm";
 interface Row { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; gcashReference?: string | null }
 interface Preview { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; coverage: Coverage | null; previewToken: string; membershipChanged: boolean }
 export function PaymentReview() {
@@ -14,11 +25,17 @@ export function PaymentReview() {
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(""), [status, setStatus] = useState("all"), [method, setMethod] = useState("all");
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+  const [accountError, setAccountError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
   const requestSequence = useRef(0);
+  const tabContent = useRef<HTMLDivElement>(null);
+  useContentTransition(tabContent, kind);
   async function headers() { return { Authorization: `Bearer ${await user?.getIdToken()}` }; }
   async function list(next?: string) {
+    if (kind === "daily_session") return;
     const sequence = ++requestSequence.current; setLoading(true);
     try {
       const response = await fetch(`/api/finance/review?kind=${kind}${next ? `&cursor=${encodeURIComponent(next)}` : ""}`, { headers: await headers(), signal: AbortSignal.timeout(30_000) });
@@ -43,12 +60,26 @@ export function PaymentReview() {
   useEffect(() => {
     let active = true;
     const sequence = ++requestSequence.current;
-    if (user) user.getIdToken().then(token => fetch(`/api/finance/review?kind=${kind}`, { headers: { Authorization: `Bearer ${token}` } }))
+    if (user && kind !== "daily_session") user.getIdToken().then(token => fetch(`/api/finance/review?kind=${kind}`, { headers: { Authorization: `Bearer ${token}` } }))
       .then(async response => { if (!response.ok) throw new Error("Could not load payment requests. Try again."); const result = await response.json(); if (active && sequence === requestSequence.current) { setRows(result.records); setCursor(result.nextCursor); setMessage(""); } })
       .catch(e => { if (active && sequence === requestSequence.current) setMessage(e.message); })
       .finally(() => { if (active && sequence === requestSequence.current) setLoading(false); });
     return () => { active = false; };
   }, [user, kind]);
+  useEffect(() => {
+    let active = true;
+    if (user) user.getIdToken().then(token => fetch("/api/finance/payment-methods", { headers: { Authorization: `Bearer ${token}` } }))
+      .then(async response => {
+        if (!response.ok) throw new Error("Could not load payment method filters. Refresh to try again.");
+        const data = await response.json();
+        if (!Array.isArray(data.accounts)) throw new Error("Could not load payment method filters. Refresh to try again.");
+        if (active) {
+          setAccounts(data.accounts); setAccountError("");
+          setMethod(current => current === "all" || current === "cash" || data.accounts.some((account: PaymentAccount) => account.id === current) ? current : "all");
+        }
+      }).catch(error => { if (active) setAccountError(error.message); });
+    return () => { active = false; };
+  }, [user, refreshKey]);
   async function decide(decision: "approve" | "reject") {
     if (!selected || !reviewed || busy) return;
     if (decision === "reject" && !reason.trim()) { setMessage("Enter a rejection reason."); return; }
@@ -57,7 +88,7 @@ export function PaymentReview() {
       const response = await fetch("/api/finance/review", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
         body: JSON.stringify({ paymentRequestId: selected.payment.id, decision, reviewed: true, reason, previewToken: selected.previewToken, acknowledgeMembershipChange: ack }) });
       if (!response.ok) { await preview(selected.payment.id); throw new Error("Decision not applied. Review refreshed coverage and receipt values; check any reference conflict or amount mismatch before trying again."); }
-      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
+      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? kind === "daily_session" ? "Daily payment collected." : "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not confirm the decision. Refresh before retrying."); }
     finally { setBusy(false); }
   }
@@ -75,6 +106,17 @@ export function PaymentReview() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Cleanup could not finish."); }
     finally { setBusy(false); }
   }
+  async function closePurchase() {
+    if (!selected || busy || !closeReason.trim()) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/finance/purchases", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
+        body: JSON.stringify({ action: "abandon", chargeId: selected.charge.id, paymentRequestId: selected.payment.id, reason: closeReason, confirmed: true }) });
+      if (!response.ok) throw new Error("Could not close this purchase. Refresh to check whether payment was already approved.");
+      setClosing(false); setSelected(null); setCloseReason(""); await list(); setMessage("Membership request closed. Its voucher reservation was released; history is preserved.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not close this purchase."); }
+    finally { setBusy(false); }
+  }
   const visibleRows = rows.filter(row => {
     const query = search.trim().toLowerCase();
     return (status === "all" || row.payment.status === status) && (method === "all" || row.payment.method === method)
@@ -86,27 +128,36 @@ export function PaymentReview() {
       <div><div className={styles.kicker}>Payments & collections</div><h1 className={styles.title}>Payment review</h1></div>
     </header>
     <div className={styles.tabs} role="group" aria-label="Payment type">
-      {[["membership", "Renewal requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(true); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
+      {[["membership", "Renewal requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(value !== "daily_session"); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
     </div>
     <div className={styles.toolbar}>
       <label className={styles.search}>Search this page<input type="search" placeholder="Name, customer ID or reference" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved / collected</option><option value="rejected">Rejected</option></select></label>
-      <label>Method<select value={method} onChange={e => setMethod(e.target.value)}><option value="all">All methods</option><option value="cash">Cash</option><option value="gcash">GCash</option></select></label>
+      <StyledSelect compact label="Status" value={status} onChange={setStatus} options={[
+        { value: "all", name: "All statuses" },
+        ...(kind === "daily_session" ? [{ value: "awaiting", name: "Awaiting payment" }] : []),
+        { value: "pending", name: kind === "daily_session" ? "Pending review" : "Pending" },
+        { value: "approved", name: kind === "daily_session" ? "Collected" : "Approved" },
+        { value: "rejected", name: kind === "daily_session" ? "Payment rejected" : "Rejected" },
+      ]} />
+      <StyledSelect compact label="Method" value={method} onChange={setMethod} options={[
+        { value: "all", name: "All methods" }, { value: "cash", name: "Cash" },
+        ...accounts.map(account => ({ value: account.id, name: account.name, detail: account.enabled ? undefined : "Disabled for new payments" })),
+      ]} />
       <button disabled={busy || loading} onClick={() => void refresh()} aria-label="Refresh requests">↻ Refresh</button>
       <details className={styles.maintenance}><summary>Maintenance</summary><div className={styles.maintenanceMenu}><p>Remove eligible receipt evidence and photos. Protected records are kept.</p><button disabled={busy} onClick={() => void cleanupEvidence()}>Run retention cleanup</button></div></details>
     </div>
+    {accountError && <p className={styles.message} role="status">{accountError}</p>}
     {message && <p className={styles.message} role="status">{message}</p>}
-    <div className={styles.scroll}>
-      {kind === "daily_session" && <DailyPayments key={refreshKey} search={search} status={status} method={method} onConfirmed={() => void list().catch(e => setMessage(e.message))} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
-      <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
-        <div className={styles.sectionHead}><h2>{kind === "membership" ? "Renewal requests" : "Daily payment requests"}</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
-        {kind === "daily_session" && <p className={styles.note}>Review submitted payments here. Confirm walk-in cash in the charge list above.</p>}
-        {loading ? <div className={styles.loading} role="status"><p>Loading payment requests…</p>{[0, 1, 2].map(i => <div className={styles.skeleton} key={i} aria-hidden="true" />)}</div> : <>
+    <div ref={tabContent} className={styles.scroll}>
+      {kind === "daily_session" && <DailyPayments key={refreshKey} disabled={busy} search={search} status={status} method={method} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
+      {kind !== "daily_session" && <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
+        <div className={styles.sectionHead}><h2>Renewal requests</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
+        {loading ? <LoadingSkeleton label="Loading payment requests…" count={5} /> : <>
           {!visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching requests" : "No requests on this page."}</h3><p>{rows.length ? "Try another search or change the filters." : "Refresh to check for new payment requests."}</p></div> :
           <table className={styles.table}><thead><tr>{["Customer", "Payment", "Coverage", "Submitted", "Status", "Action"].map(s => <th scope="col" key={s}>{s}</th>)}</tr></thead>
             <tbody>{visibleRows.map(row => <tr key={row.payment.id}>
               <td><strong>{row.customer.name}</strong><small className={styles.method}>{row.charge?.categorySnapshot ?? "—"}</small></td>
-              <td><strong className={styles.amount}>{peso(row.payment.amountMinor)}</strong><small>{row.payment.method === "gcash" ? "GCash" : "Cash"}</small></td>
+              <td><strong className={styles.amount}>{peso(row.payment.amountMinor)}</strong><small>{paymentLabel(row.payment)}</small></td>
               <td><span className={styles.mobileLabel}>Coverage</span>{(row.payment.appliedCoverage ?? row.charge?.requestedCoverage)?.expiryDate ? `Until ${paymentDate((row.payment.appliedCoverage ?? row.charge?.requestedCoverage)!.expiryDate)}` : "Daily session"}</td>
               <td><span className={styles.mobileLabel}>Submitted</span>{paymentDate(row.payment.submittedAt)}<small>{new Date(row.payment.submittedAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })}</small></td>
               <td><PaymentStatus status={row.payment.status} /></td>
@@ -115,22 +166,25 @@ export function PaymentReview() {
           </table>}
         </>}
         <div className={styles.pagination}><span>Search and filters apply to this loaded page.</span>{cursor && <button disabled={busy || loading} onClick={() => list(cursor).catch(e => setMessage(e.message))}>Next 50 requests →</button>}</div>
-      </section>
+      </section>}
     </div>
-    {reviewLoading && !selected && <p className={styles.message} role="status">Opening payment details…</p>}
+    {reviewLoading && !selected && <LoadingSkeleton label="Opening payment details…" variant="form" />}
     {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
+      {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}
       <dl className={styles.details}>
-        <div><dt>Payment method</dt><dd>{selected.payment.method === "gcash" ? "GCash" : "Cash"}</dd></div>
+        <div><dt>Payment method</dt><dd>{paymentLabel(selected.payment)}</dd></div>
+        {selected.payment.paymentAccountSnapshot && <><div><dt>Account holder</dt><dd>{selected.payment.paymentAccountSnapshot.accountHolder}</dd></div><div><dt>Account number</dt><dd>{selected.payment.paymentAccountSnapshot.accountNumber}</dd></div></>}
         <div><dt>Category</dt><dd className={styles.method}>{selected.charge.categorySnapshot}</dd></div>
         <div><dt>Tibay number</dt><dd>{selected.charge.tibayTransactionNumber}</dd></div>
         <div><dt>Submitted</dt><dd>{paymentDate(selected.payment.submittedAt)}</dd></div>
         <div><dt>Payment type</dt><dd className={styles.method}>{selected.charge.kind.replaceAll("_", " ")}</dd></div>
-        <div><dt>GCash reference</dt><dd>{selected.payment.gcashReferenceSnapshot ?? "See receipt review"}</dd></div>
+        <div><dt>Payment reference</dt><dd>{selected.payment.gcashReferenceSnapshot ?? "See receipt review"}</dd></div>
       </dl>
       {selected.coverage && <p className={styles.message}>Final coverage if approved now: {selected.coverage.startDate} to {selected.coverage.expiryDate}</p>}
-      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
-      {selected.payment.status === "pending" ? <>
+      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} paymentAccount={selected.payment.paymentAccountSnapshot} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
+      {selected.charge.kind === "daily_session" && <DailyPaymentHistory key={selected.charge.id} chargeId={selected.charge.id} currentPaymentRequestId={selected.payment.id} />}
+      {selected.charge.abandonedAt ? <p className={styles.message}>Closed {paymentDate(selected.charge.abandonedAt)}. {selected.charge.abandonmentReason} This purchase cannot be approved or corrected.</p> : selected.payment.status === "pending" ? <>
         <h3>Review checklist</h3>
         {selected.membershipChanged && <label><input type="checkbox" checked={ack} disabled={busy} onChange={e => setAck(e.target.checked)} /> Membership changed since submission. I reviewed and accept the refreshed coverage.</label>}
         <label><input type="checkbox" checked={reviewed} disabled={busy} onChange={e => setReviewed(e.target.checked)} /> I reviewed the amount, evidence and final coverage.</label>
@@ -138,6 +192,8 @@ export function PaymentReview() {
         {message && <p className={styles.message} role="status">{message}</p>}
         <div className={styles.actions}><button className={styles.primary} disabled={busy || !reviewed || (selected.membershipChanged && !ack)} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve — payment received"}</button><button className={styles.danger} disabled={busy || !reviewed} onClick={() => void decide("reject")}>Reject request</button></div>
       </> : <p>Final outcome: {selected.payment.status}. {selected.payment.rejectionReason}</p>}
+      {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>Close abandoned membership request</button>}
+      {closing && <SettingsConfirm title="Close this membership request?" label="Close request" danger busy={busy} confirmDisabled={!closeReason.trim()} onCancel={() => setClosing(false)} onConfirm={() => void closePurchase()}><p>This permanently ends this purchase and releases its voucher reservation. No membership is activated. Payment corrections will no longer be available; a new purchase will use current pricing.</p><label>Reason (required)<textarea maxLength={500} value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label>{message && <p role="status">{message}</p>}</SettingsConfirm>}
     </PaymentDrawer>}
   </main>;
 }

@@ -14,3 +14,11 @@ export function parseReceiptText(text: string, confidence: number) {
   const unique = [...new Set(amounts)], amountMinor = unique.length === 1 ? unique[0] : null;
   return { reference, amountMinor, status: reference && amountMinor !== null && confidence >= 70 ? "extracted" as const : "needs_review" as const };
 }
+
+export function normalizePaymentReference(value: unknown, account?: { kind: string } | null) {
+  if (!account || account.kind === "gcash") return normalizeGcashReference(value);
+  if (typeof value !== "string" || !/^[A-Za-z0-9 -]{4,80}$/.test(value)) throw new Error("Enter the payment reference shown on the receipt.");
+  const normalized = value.replace(/[ -]/g, "").toUpperCase();
+  if (normalized.length < 4 || normalized.length > 64) throw new Error("Check the payment reference.");
+  return normalized;
+}

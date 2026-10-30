@@ -7,7 +7,10 @@ const state = vi.hoisted(() => ({ store: null as ReturnType<typeof memoryFiresto
 vi.mock("./firebase-admin", () => ({ adminDb: () => state.store!.db }));
 import { getPurchaseQuote, submitPurchase, paymentReviewPreview, decidePayment, purchaseChargeId, purchaseRequestId } from "./purchases";
 import { DEFAULT_SETTINGS } from "@/lib/finance/rules";
+import type { PaymentAccount } from "@/lib/finance/payment-methods";
+import { voucherFixture } from "@/tests/voucher-fixture";
 const NOW = Date.parse("2026-10-25T03:00:00Z");
+const bank: PaymentAccount = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", enabled: true, qrImage: null };
 let sequence = 0;
 const rows = (name: string) => [...state.store!.data].filter(([path]) => path.startsWith(`${name}/`));
 beforeEach(() => {
@@ -16,6 +19,23 @@ beforeEach(() => {
   state.store.data.set("gymSettings/finance", { ...DEFAULT_SETTINGS, financialCutoverAt: NOW - 1000, studentMonthlyMinor: 100000, regularMonthlyMinor: 120000 });
 });
 afterEach(() => vi.useRealTimers());
+it("binds a bank receipt to its account and requires reviewed evidence before renewal approval", async () => {
+  state.store!.data.set("gymSettings/payments", { revision: 1, accounts: [bank] });
+  const operation = "bank-renewal-operation-1", quote = await getPurchaseQuote("p1");
+  const receiptId = "a".repeat(64), receiptToken = "b".repeat(43), id = purchaseRequestId("p1", operation);
+  state.store!.data.set(`receiptIntents/${receiptId}`, { state: "ready", personId: "p1", chargeId: purchaseChargeId("p1", operation), amountMinor: quote.amountMinor,
+    paymentRequestId: id, paymentRevision: 1, paymentMethod: bank.id, tokenHash: createHash("sha256").update(receiptToken).digest("hex"), expiresAt: NOW + 10000, linked: false });
+  const body = { operationId: operation, quoteToken: quote.quoteToken, method: bank.id, paymentRevision: 1, receiptId, receiptToken };
+  await expect(submitPurchase("customer:p1", "p1", { ...body, paymentRevision: 0 })).rejects.toMatchObject({ code: "payment-method-unavailable" });
+  await submitPurchase("customer:p1", "p1", body);
+  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "pending", method: bank.id, paymentAccountSnapshot: { name: bank.name, accountNumber: bank.accountNumber } });
+  await expect(decision(id)).rejects.toMatchObject({ code: "receipt-review-required" });
+  state.store!.data.set(`receiptReviews/${receiptId}`, { confirmedReference: "BPI-00AB1234", confirmedAmountMinor: quote.amountMinor, reviewRevision: 1 });
+  state.store!.data.set("gymSettings/payments", { revision: 2, accounts: [{ ...bank, enabled: false, name: "Old bank" }] });
+  await decision(id);
+  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "approved", gcashReferenceSnapshot: "BPI00AB1234", paymentAccountSnapshot: { name: "BPI savings" } });
+  expect(rows("approvedPaymentReferences")).toHaveLength(1);
+});
 async function request(method: "cash" | "gcash" = "cash", extra = {}) {
   const quote = await getPurchaseQuote("p1"), body = { operationId: `membership-operation-${++sequence}`, quoteToken: quote.quoteToken, method, ...extra };
   return { result: await submitPurchase("customer:p1", "p1", body), body };
@@ -34,6 +54,45 @@ it("leaves cash membership unchanged until approval, then applies one month exac
   expect((state.store!.data.get("persons/p1")!.membershipExpiry as Timestamp).toMillis()).toBe(Date.parse("2026-11-30T16:00:00Z"));
   expect(rows("paymentRequests")[0][1]).toMatchObject({ status: "approved", confirmedAt: NOW, appliedCoverage: { startDate: "2026-11-01", expiryDate: "2026-12-01", months: 1 } });
   expect(rows("statusChanges")).toHaveLength(1);
+});
+it.each([2, 3, 5, 12])("quotes, snapshots, and approves %i months at the monthly rate", async months => {
+  const quote = await getPurchaseQuote("p1", undefined, undefined, months);
+  expect(quote.amountMinor).toBe(100000 * months);
+  expect(quote.coverage?.months).toBe(months);
+  await expect(submitPurchase("customer:p1", "p1", { method: "cash", months: 1, quoteToken: quote.quoteToken, operationId: "wrong-duration-operation" })).rejects.toMatchObject({ code: "purchase-quote-changed" });
+  const result = await submitPurchase("customer:p1", "p1", { method: "cash", months, quoteToken: quote.quoteToken, operationId: "duration-operation-00001" });
+  expect(rows("charges")[0][1]).toMatchObject({ quantity: months, unitRateMinor: 100000, amountMinor: 100000 * months, requestedCoverage: quote.coverage });
+  const preview = await paymentReviewPreview(result.id);
+  expect(preview.coverage).toEqual(quote.coverage);
+  await decision(result.id);
+  expect(rows("paymentRequests")[0][1].appliedCoverage).toEqual(quote.coverage);
+  expect((state.store!.data.get("persons/p1")!.membershipExpiry as Timestamp).toMillis()).toBe(Date.parse(`${quote.coverage!.expiryDate}T00:00:00+08:00`));
+});
+it("preserves a rejected purchase's duration and price during correction", async () => {
+  const quote = await getPurchaseQuote("p1", undefined, undefined, 3);
+  const original = await submitPurchase("customer:p1", "p1", { method: "cash", months: 3, quoteToken: quote.quoteToken, operationId: "duration-reject-operation" });
+  await decision(original.id, "reject", { reason: "Payment not received" });
+  state.store!.data.get("gymSettings/finance")!.studentMonthlyMinor = 150000;
+  const replacementQuote = await getPurchaseQuote("p1", original.id);
+  expect(replacementQuote).toMatchObject({ amountMinor: 300000, coverage: { months: 3 } });
+  await expect(getPurchaseQuote("p1", original.id, undefined, 1)).rejects.toMatchObject({ code: "replacement-duration-locked" });
+  const replacement = await submitPurchase("customer:p1", "p1", { method: "cash", months: 3, previousRequestId: original.id, quoteToken: replacementQuote.quoteToken, operationId: "duration-replace-operation" });
+  await decision(replacement.id);
+  expect(rows("charges")).toHaveLength(1);
+  expect(state.store!.data.get(`paymentRequests/${replacement.id}`)?.appliedCoverage).toMatchObject({ months: 3 });
+});
+it("applies a fixed voucher once to the full multi-month price", async () => {
+  state.store!.data.set("vouchers/voucher-1", { ...voucherFixture({ discountKind: "fixed", value: 3000 }) });
+  state.store!.data.set("voucherCodeClaims/TRAIN10", { voucherId: "voucher-1" });
+  const quote = await getPurchaseQuote("p1", undefined, "TRAIN10", 3);
+  expect(quote).toMatchObject({ baseAmountMinor: 300000, discountAmountMinor: 3000, amountMinor: 297000 });
+  const result = await submitPurchase("customer:p1", "p1", { method: "cash", months: 3, voucherCode: "TRAIN10", quoteToken: quote.quoteToken, operationId: "duration-voucher-operation" });
+  expect(rows("charges")[0][1]).toMatchObject({ quantity: 3, amountMinor: 297000, discountAmountMinor: 3000 });
+  await decision(result.id);
+  expect(rows("paymentRequests")[0][1].appliedCoverage).toMatchObject({ months: 3 });
+});
+it.each([0, 13, 1.5, "3", null])("rejects invalid membership duration %s", async months => {
+  await expect(submitPurchase("customer:p1", "p1", { method: "cash", months, operationId: "invalid-months-operation" })).rejects.toMatchObject({ code: "invalid-membership-months" });
 });
 it("restarts expired membership on the approval date, not the old submission date", async () => {
   state.store!.data.get("persons/p1")!.membershipExpiry = Timestamp.fromMillis(NOW - 86400000);

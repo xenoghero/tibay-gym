@@ -1,73 +1,88 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+
+import { FormInput } from "@/components/ui/form-input";
+
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { GymSettings, Rates } from "@/lib/finance/contracts";
 import { parsePesoInput } from "@/lib/finance/rules";
-
-const fields: Array<[keyof Rates, string]> = [
-  ["studentDailyMinor", "Student daily"], ["regularDailyMinor", "Regular daily"],
-  ["studentMonthlyMinor", "Student monthly"], ["regularMonthlyMinor", "Regular monthly"],
-];
+import { SettingsConfirm } from "./settings-confirm";
+import styles from "./settings.module.css";
+const fields: Array<[keyof Rates, string]> = [["studentDailyMinor", "Student daily"], ["regularDailyMinor", "Regular daily"], ["studentMonthlyMinor", "Student monthly"], ["regularMonthlyMinor", "Regular monthly"]];
+const valuesFor = (s: GymSettings) => Object.fromEntries(fields.map(([key]) => [key, s[key] === null ? "" : (s[key]! / 100).toFixed(2)]));
+const money = (v: number | null) => v === null ? "Not configured" : new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(v / 100);
 export function FinanceSettings() {
   const { user } = useAuth();
-  const [settings, setSettings] = useState<GymSettings | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState<{ id: string; payload: string } | null>(null);
+  const [settings, setSettings] = useState<GymSettings | null>(null), [values, setValues] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({}), [review, setReview] = useState<Rates | null>(null), [conflict, setConflict] = useState<GymSettings | null>(null);
+  const attempt = useRef<{ id: string; payload: string } | null>(null);
   async function load() {
     if (!user) return;
-    const response = await fetch("/api/finance/settings", { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
-    if (!response.ok) throw new Error("Could not load pricing. Try again.");
-    const next: GymSettings = await response.json();
-    setSettings(next);
-    setValues(Object.fromEntries(fields.map(([key]) => [key, next[key] === null ? "" : (next[key]! / 100).toFixed(2)])));
+    setLoading(true);
+    try {
+      const response = await fetch("/api/finance/settings", { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+      if (!response.ok) throw new Error("Could not load pricing. Try again.");
+      const next: GymSettings = await response.json(); setSettings(next); setValues(valuesFor(next)); setMessage("");
+    } finally { setLoading(false); }
   }
   useEffect(() => { let active = true;
-    if (!user) return;
-    user.getIdToken().then(token => fetch("/api/finance/settings", { headers: { Authorization: `Bearer ${token}` } }))
-      .then(async response => {
-        if (!response.ok) throw new Error("Could not load pricing. Try again.");
-        const next: GymSettings = await response.json();
-        if (!active) return;
-        setSettings(next);
-        setValues(Object.fromEntries(fields.map(([key]) => [key, next[key] === null ? "" : (next[key]! / 100).toFixed(2)])));
-      }).catch(error => { if (active) setMessage(error.message); });
+    if (user) user.getIdToken().then(token => fetch("/api/finance/settings", { headers: { Authorization: `Bearer ${token}` } }))
+      .then(async response => { if (!response.ok) throw new Error("Could not load pricing. Try again."); const next: GymSettings = await response.json(); if (active) { setSettings(next); setValues(valuesFor(next)); } })
+      .catch(e => { if (active) setMessage(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [user]);
-  async function save(event: FormEvent) {
-    event.preventDefault(); if (!user || !settings) return;
+  function validate(event: FormEvent) {
+    event.preventDefault(); const errors: Record<string, string> = {}, rates: Record<string, number | null> = {};
+    for (const [key] of fields) { try { rates[key] = parsePesoInput(values[key]); if (key.includes("Daily") && rates[key] === null) errors[key] = "Daily pricing is required."; } catch { errors[key] = "Enter a positive PHP amount with up to two decimal places."; } }
+    setErrors(errors); if (!Object.keys(errors).length) setReview(rates as unknown as Rates);
+  }
+  async function save() {
+    if (!user || !settings || !review) return;
     setBusy(true); setMessage("");
     try {
-      const rates = Object.fromEntries(fields.map(([key]) => [key, parsePesoInput(values[key] ?? "")]));
-      const payload = JSON.stringify({ ...rates, rateRevision: settings.rateRevision });
-      const id = attempt?.payload === payload ? attempt.id : crypto.randomUUID();
-      setAttempt({ id, payload });
-      const response = await fetch("/api/finance/settings", { method: "POST", headers: {
-        "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}`,
-      }, body: JSON.stringify({ ...rates, rateRevision: settings.rateRevision, operationId: id }) });
+      const payload = JSON.stringify({ ...review, rateRevision: settings.rateRevision });
+      if (attempt.current?.payload !== payload) attempt.current = { id: crypto.randomUUID(), payload };
+      const response = await fetch("/api/finance/settings", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ ...review, rateRevision: settings.rateRevision, operationId: attempt.current.id }) });
       if (!response.ok) {
-        if (response.status === 409) { await load(); setAttempt(null); throw new Error("Pricing changed. Review the refreshed rates and save again."); }
-        throw new Error("Could not save rates. Check the amounts and retry.");
+        if (response.status === 409) {
+          const latest = await fetch("/api/finance/settings", { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+          if (latest.ok) setConflict(await latest.json());
+          setReview(null); throw new Error("Pricing changed in another session. Your draft is preserved. Review the latest rates below.");
+        }
+        throw new Error("Could not save rates. Your changes are preserved; try again.");
       }
-      setSettings(await response.json()); setAttempt(null); setMessage("Rates saved. Existing purchases keep their original prices.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save rates."); }
+      const saved = await response.json(); setSettings(saved); setValues(valuesFor(saved)); setEditing(false); setReview(null); attempt.current = null;
+      setMessage("Rates saved. Existing purchases keep their original prices.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not save rates."); }
     finally { setBusy(false); }
   }
-  return <section aria-labelledby="finance-settings-title">
-    <h2 id="finance-settings-title">Collection rates</h2>
-    <p>Prices in Philippine pesos. Leave monthly prices empty to keep membership purchases unavailable. Package and custom-expiry prices are not configured.</p>
-    {!settings ? <button type="button" onClick={() => load().catch(error => setMessage(error.message))}>Load pricing</button> :
-      <form onSubmit={save} style={{ display: "grid", gap: 14 }}>
-        {fields.map(([key, label]) => <label key={key} style={{ display: "grid", gap: 6 }}>
-          {label} (PHP)
-          <input aria-label={`${label} (PHP)`} inputMode="decimal" required={key.includes("Daily")} disabled={busy}
-            value={values[key] ?? ""} onChange={e => setValues({ ...values, [key]: e.target.value })}
-            style={{ minHeight: 44, padding: 10, fontSize: 16, width: "100%", color: "var(--rs-fg)", background: "var(--rs-bg)", border: "1px solid var(--rs-line)" }} />
-        </label>)}
-        <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save rates"}</button>
-        <p>Financial reporting begins when pricing is first saved. Historical attendance is never converted into payments.</p>
-      </form>}
-    {message && <p role="status">{message}</p>}
+  const changed = settings && fields.some(([key]) => values[key] !== valuesFor(settings)[key]);
+  return <section className={styles.section} aria-labelledby="pricing-title" aria-busy={loading}>
+    <div className={styles.head}><div><h2 id="pricing-title">Gym pricing</h2><p className={styles.sub}>Daily visits and one-month memberships, in Philippine pesos.</p></div></div>
+    {loading ? <LoadingSkeleton label="Loading pricing…" variant="form" count={4} /> : !settings ? <button onClick={() => load().catch(e => setMessage(e.message))}>Retry loading pricing</button> : <form onSubmit={validate}>
+      <div className={styles.pricingGrid}>
+        {(["student", "regular"] as const).map(category => <section key={category} className={styles.pricingCard} aria-labelledby={`pricing-${category}`}>
+          <header><h3 id={`pricing-${category}`}>{category === "student" ? "Student" : "Regular"}</h3><p className={styles.sub}>{category === "student" ? "Student rate category" : "Standard rate category"}</p></header>
+          <div className={styles.priceTerms}>
+          {(["Daily", "Monthly"] as const).map(term => { const key = `${category}${term}Minor` as keyof Rates; return <div key={term} className={styles.priceTerm}>
+            <span className={styles.priceLabel}>{term} · PHP</span>
+            {editing ? <><FormInput aria-label={`${category === "student" ? "Student" : "Regular"} ${term.toLowerCase()} (PHP)`} inputMode="decimal" value={values[key] ?? ""} disabled={busy} aria-invalid={!!errors[key]} aria-describedby={`${key}-hint`} onChange={e => setValues({ ...values, [key]: e.target.value })} />
+              <small id={`${key}-hint`} className={errors[key] ? styles.error : ""}>{errors[key] || (term === "Monthly" ? "Leave empty to disable new purchases." : "Required for paid daily visits.")}</small></> : <><span className={styles.priceAmount} data-unconfigured={settings[key] === null}>{money(settings[key])}</span>{settings[key] === null && <small>Membership purchases unavailable</small>}</>}
+          </div>; })}</div></section>)}
+      </div>
+      <div className={styles.pricingControls}>
+        {editing ? <><button type="button" disabled={busy} onClick={() => { setValues(valuesFor(settings)); setEditing(false); setErrors({}); setConflict(null); setMessage(""); }}>Cancel</button><button type="submit" className={styles.primary} disabled={busy || !changed || !!conflict}>Save changes</button></> : <button type="button" className={styles.primary} onClick={() => setEditing(true)}>Edit prices</button>}
+      </div>
+      <div className={styles.footer}><p className={styles.sub}>{settings.updatedAt ? `Updated ${new Date(settings.updatedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" })} · Philippine time` : "Default daily rates. Save to begin financial reporting."}<small>Revision {settings.rateRevision} · Existing submitted prices are preserved.</small></p>
+      </div>
+      {!settings.financialCutoverAt && <p className={styles.sub}>Financial reporting starts on the first save. Historical attendance remains unchanged.</p>}
+    </form>}
+    {message && <p className={styles.message} role="status">{message}</p>}
+    {conflict && <div className={styles.preview}><strong>Latest saved rates</strong>{fields.map(([key, label]) => <p key={key}>{label}: {money(conflict[key])} · Your draft: {values[key] || "Not configured"}</p>)}<button onClick={() => { setSettings(conflict); setConflict(null); setReview(null); }}>Keep draft and review against these rates</button></div>}
+    {review && settings && <SettingsConfirm title="Save pricing changes?" busy={busy} onCancel={() => setReview(null)} onConfirm={() => void save()} label="Save changes"><p>These prices apply to new purchases. Submitted purchases retain their original prices.</p>{fields.filter(([key]) => settings[key] !== review[key]).map(([key, label]) => <p key={key}><strong>{label}</strong><br />{money(settings[key])} → {money(review[key])}{review[key] === null && <small>New membership purchases for this category will be unavailable.</small>}</p>)}{message && <p role="status">{message}</p>}</SettingsConfirm>}
   </section>;
 }

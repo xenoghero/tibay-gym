@@ -87,7 +87,7 @@ export async function mutateAdmin(actorId: string, body: Record<string, unknown>
       const createMembership = action === "profile-create" && after.type === "member";
       const initialPerson = { ...after, type: "guest", status: null, membershipExpiry: null };
       const stagedPurchase = createMembership ? await preparePurchase(tx, db, actorId, personId, initialPerson,
-        { ...(body.financial ? record(body.financial) : {}), method: "cash", operationId: `${id}-purchase` }) : null;
+        { ...(body.financial ? record(body.financial) : {}), method: "cash", operationId: `${id}-purchase` }, true) : null;
       if (createMembership) Object.assign(after, { type: "guest", status: null, membershipExpiry: null, joinDate: null });
       if (action === "profile-update") {
         if (after.type !== person!.type) throw new ApiError(409, "purchase-review-required");
