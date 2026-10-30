@@ -6,7 +6,7 @@ import { FormInput } from "./form-input";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it.each(["date", "datetime-local", "time"])("opens the native %s picker from the field body and Alt+Down", type => {
+it.each(["time"])("opens the native %s picker from the field body and Alt+Down", type => {
   const showPicker = vi.fn();
   render(<label>Coverage<FormInput type={type} /></label>);
   const input = screen.getByLabelText("Coverage");
@@ -25,7 +25,7 @@ it.each([undefined, () => { throw new DOMException("Unavailable", "NotAllowedErr
   render(<label>Expiry<FormInput type="date" defaultValue="2026-10-29" onChange={onChange} /></label>);
   const input = screen.getByLabelText("Expiry") as HTMLInputElement;
   Object.defineProperty(input, "showPicker", { configurable: true, value: showPicker });
-  expect(fireEvent.click(input)).toBe(true);
+  fireEvent.click(input);
   fireEvent.change(input, { target: { value: "2026-11-29" } });
   expect(input.value).toBe("2026-11-29");
   expect(onChange).toHaveBeenCalledOnce();
@@ -45,6 +45,7 @@ it("respects readonly, disabled fieldsets and cancelled caller events", () => {
     fireEvent.keyDown(input, { key: "ArrowRight" });
   }
   expect(showPicker).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 it("preserves native date bounds, required validation, labels, form values and refs", () => {

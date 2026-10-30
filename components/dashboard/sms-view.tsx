@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import { FormInput } from "@/components/ui/form-input";
 
@@ -179,7 +180,7 @@ export function SmsView() {
           <SmsCampaignHistory contacts={contacts} request={api} active={tab === "History"} selectedId={historyCampaignId} selectionVersion={historySelectionVersion} onReview={preview => { setAnnouncementQueued(false); setRecoveredDraft(preview); setDraftVersion(value => value + 1); setJourney("announcement"); selectTab("Messages"); }} />
           <section className={styles.history} aria-label="Individual message history">
             <div className={styles.sectionHead}><div><h2>Individual messages</h2><p>Announcements, reminders and requested tests · Philippine time</p></div><span className={styles.badge}>{data.messages.length} loaded</span></div>
-            <div className={styles.filters}><label>Search loaded messages<input type="search" value={historySearch} placeholder="Name, phone or message" onChange={event => setHistorySearch(event.target.value)} /></label><label>Delivery status<select value={historyStatus} onChange={event => setHistoryStatus(event.target.value)}><option value="all">All statuses</option>{["queued", "sending", "accepted", "sent", "delivered", "uncertain", "failed", "cancelled"].map(status => <option key={status} value={status}>{smsStatus(status)}</option>)}</select></label></div>
+            <div className={styles.filters}><label>Search loaded messages<input type="search" value={historySearch} placeholder="Name, phone or message" onChange={event => setHistorySearch(event.target.value)} /></label><label>Delivery status<FormSelect value={historyStatus} onChange={event => setHistoryStatus(event.target.value)}><option value="all">All statuses</option>{["queued", "sending", "accepted", "sent", "delivered", "uncertain", "failed", "cancelled"].map(status => <option key={status} value={status}>{smsStatus(status)}</option>)}</FormSelect></label></div>
             <p>Accepted by gateway and sent by gateway do not confirm delivery. Only “Delivered” confirms a delivery report.</p>
             {!data.messages.length && <p>No messages queued yet.</p>}
             {!!data.messages.length && !filteredMessages.length && <p>No matching loaded messages. Change the filters or load more history.</p>}
@@ -198,7 +199,7 @@ export function SmsView() {
         <div id="sms-panel-Contacts" role="tabpanel" aria-labelledby="sms-tab-Contacts" hidden={tab !== "Contacts"} tabIndex={0}>
           <section><div className={styles.sectionHead}><div><h2>Contact permission</h2><p>{eligibleCount} eligible · {contacts.length} customers loaded{contactNext ? " · More customers available" : ""}</p></div></div>
             <p>Record permission only after the customer agrees to reminders and gym messages. Opt out immediately on request. A changed number requires new permission.</p>
-            <div className={styles.filters}><label>Search loaded contacts<input type="search" placeholder="Search name or phone…" value={search} onChange={event => setSearch(event.target.value)} /></label><label>Permission status<select value={permissionFilter} onChange={event => setPermissionFilter(event.target.value)}><option value="all">All contacts</option><option value="eligible">Eligible to receive</option><option value="excluded">Excluded from sending</option></select></label></div>
+            <div className={styles.filters}><label>Search loaded contacts<input type="search" placeholder="Search name or phone…" value={search} onChange={event => setSearch(event.target.value)} /></label><label>Permission status<FormSelect value={permissionFilter} onChange={event => setPermissionFilter(event.target.value)}><option value="all">All contacts</option><option value="eligible">Eligible to receive</option><option value="excluded">Excluded from sending</option></FormSelect></label></div>
             <div className={styles.contactHeader} aria-hidden="true"><span>Customer</span><span>Permission</span><span>Actions</span></div>
             {contacts.length === 0 ? <div className={styles.empty}><h3>No official customer profiles.</h3><p>Customer profiles will appear here so you can record their SMS permission.</p></div> : filteredContacts.length === 0 ? <div className={styles.empty}><h3>No matching loaded contacts</h3><p>Try another name or phone number, or change the permission filter.</p></div> : filteredContacts.map(row => <article key={row.id} className={styles.contact}>
               <div><strong>{row.name}</strong><div className={styles.meta}>{row.phone || "No phone number"}</div></div><span className={styles.badge} data-status={permissionStatus(row) === "Permission recorded" ? "accepted" : "excluded"}>{permissionStatus(row)}</span>
@@ -217,7 +218,7 @@ export function SmsView() {
               </section>
               <section className={styles.panel}><div className={styles.kicker}>02 / Schedule</div><h2>Timing & retries</h2><div className={styles.fieldGrid}>
                 <label>Daily sending time (Asia/Manila)<FormInput type="time" required value={settings.sendTime} onChange={e => setSettings({ ...settings, sendTime: e.target.value })} /></label>
-                <label>Maximum attempts<select aria-label="Maximum attempts" required value={settings.maxAttempts} onChange={e => setSettings({ ...settings, maxAttempts: Number(e.target.value) })}>{[1, 2, 3].map(count => <option key={count} value={count}>{count}</option>)}</select><small>Only explicit rate-limit rejections retry. Maximum 3 attempts.</small></label>
+                <label>Maximum attempts<FormSelect aria-label="Maximum attempts" required value={settings.maxAttempts} onChange={e => setSettings({ ...settings, maxAttempts: Number(e.target.value) })}>{[1, 2, 3].map(count => <option key={count} value={count}>{count}</option>)}</FormSelect><small>Only explicit rate-limit rejections retry. Maximum 3 attempts.</small></label>
               </div></section>
               <section className={`${styles.panel} ${styles.wide}`}><div className={styles.kicker}>03 / Message templates</div><h2>Reminder messages</h2><p>Keep messages clear and include the opt-out instructions.</p><div className={styles.fieldGrid}>
                 <label>Expiry template<textarea aria-label="Expiry template" required maxLength={480} value={settings.expiryTemplate} onChange={e => setSettings({ ...settings, expiryTemplate: e.target.value })} /><small>Available tokens: {"{expiry}"}, {"{days}"} · {settings.expiryTemplate.length}/480 characters</small></label>
@@ -228,7 +229,7 @@ export function SmsView() {
           </form>
           <section className={styles.panel}><div className={styles.kicker}>Delivery check</div><h2>Test delivery</h2><p>Select a customer who requested this test. Queueing does not send until sending is enabled and a worker runs.</p>
             <form onSubmit={event => { event.preventDefault(); act(async () => { await api("", { action: "test", personId, text: testText }); await load(); setNotice("Test queued. Open Messages and process the queue when ready."); }); }}>
-              <fieldset disabled={busy}><label>Test recipient<select required value={personId} onChange={e => setPersonId(e.target.value)}><option value="">Choose customer</option>{contacts.filter(row => !contactExclusion(row)).map(row => <option key={row.id} value={row.id}>{row.name} · {row.phone}</option>)}</select></label>
+              <fieldset disabled={busy}><label>Test recipient<FormSelect required value={personId} onChange={e => setPersonId(e.target.value)}><option value="">Choose customer</option>{contacts.filter(row => !contactExclusion(row)).map(row => <option key={row.id} value={row.id}>{row.name} · {row.phone}</option>)}</FormSelect></label>
               <label>Test message<textarea required maxLength={480} value={testText} onChange={e => setTestText(e.target.value)} /></label></fieldset><div className={styles.actions}><button disabled={busy}>Queue requested test</button><button type="button" onClick={() => selectTab("Messages", true)}>Go to message processing</button></div>
             </form>
           </section>

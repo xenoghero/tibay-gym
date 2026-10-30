@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import { FormInput } from "@/components/ui/form-input";
 
@@ -109,7 +110,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
     </div>
   </section>;
   const filters = <>
-    <label>Period<select value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></select></label>
+    <label>Period<FormSelect value={period} onChange={event => changed(() => setPeriod(event.target.value))}><option value="day">Selected day</option><option value="week">Monday–Sunday week</option><option value="month">Calendar month</option><option value="custom">Date range</option></FormSelect></label>
     {period !== "custom" ? <label>Date<FormInput type="date" required value={date} onChange={event => changed(() => setDate(event.target.value))} /></label> : <><label>From<FormInput type="date" required value={from} onChange={event => changed(() => setFrom(event.target.value))} /></label><label>Through<FormInput type="date" required min={from} value={through} onChange={event => changed(() => setThrough(event.target.value))} /></label></>}
   </>;
   return <section className="rs-finance rs-collections-report" aria-label="Financial statistics" aria-busy={loading}>

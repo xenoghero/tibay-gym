@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import Link from "next/link";
 import { useRef, useState } from "react";
@@ -53,9 +54,9 @@ export function CheckInFeed({ rows, loading }: { rows: CheckInRow[]; loading: bo
     </div>
     <footer className="rs-ov-feed-footer">
       <div className="rs-ov-feed-range"><span role="status" aria-live="polite">{loading ? "Loading…" : `Showing ${rows.length ? start + 1 : 0}–${Math.min(start + pageSize, rows.length)} of ${rows.length}`}</span>
-        <label>Per page<select disabled={loading} value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goTo(1); }}>
+        <label>Per page<FormSelect disabled={loading} value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goTo(1); }}>
           <option value={5}>5</option><option value={10}>10</option><option value={25}>25</option>
-        </select></label>
+        </FormSelect></label>
       </div>
       <nav className="rs-ov-pagination" aria-label="Check-in pagination">
         <button type="button" disabled={loading || currentPage === 1} onClick={() => goTo(currentPage - 1)} aria-label="Previous check-in page">Previous</button>

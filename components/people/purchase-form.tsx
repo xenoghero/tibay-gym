@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import { PaymentMethodSelect } from "@/components/payments/payment-method-select";
 import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
@@ -128,9 +129,9 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
       {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
       {quote.coverage && <p>Preview: {quote.coverage.startDate} to {quote.coverage.expiryDate}. Final dates are calculated at approval; active memberships extend from the current expiry.</p>}
-      <label>Payment method<select aria-label="Purchase payment method" value={method} disabled={busy} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }}>
+      <label>Payment method<FormSelect aria-label="Purchase payment method" value={method} disabled={busy} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }}>
         <option value="cash">Cash — pending confirmation</option>{!admin && <>{quote.paymentAccounts ? quote.paymentAccounts.map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</>}
-      </select></label>
+      </FormSelect></label>
       {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
       {method !== "cash" && <label>{method === "gcash" ? "GCash receipt" : "Payment receipt"}<input aria-label="Purchase receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p>Submit evidence only for money already sent to the gym&apos;s selected payment account.</p><p>{RECEIPT_RETENTION_NOTICE}</p></label>}
       <button disabled={busy || refreshing} onClick={() => void submit()}>{busy ? "Submitting…" : "Submit payment request for review"}</button>

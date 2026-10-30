@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import { useEffect, useMemo, useState } from "react";
 import { listPersons, type Person } from "@/lib/db";
@@ -54,7 +55,7 @@ export function LeadStatistics({ enabled }: { enabled: boolean }) {
       </div>
     </div>
     <div className={`rs-collection-toolbar ${styles.filters}`}>
-      <label>Registration period <select value={period} onChange={event => setPeriod(event.target.value as Period)}>{periods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Registration period <FormSelect value={period} onChange={event => setPeriod(event.target.value as Period)}>{periods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</FormSelect></label>
       {period === "custom" && <><label>From <FormInput type="date" value={start} onChange={event => setStart(event.target.value)} aria-label="Leads start date" /></label>
         <label>To <FormInput type="date" value={end} min={start || undefined} onChange={event => setEnd(event.target.value)} aria-label="Leads end date" /></label></>}
     </div>

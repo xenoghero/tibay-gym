@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { FieldPopover } from "./field-popover";
+import shared from "./field-controls.module.css";
 import styles from "./styled-select.module.css";
 
 export interface SelectOption { value: string; name: string; detail?: string; mark?: string; disabled?: boolean }
@@ -12,14 +14,12 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const selected = options.find(option => option.value === value);
-  useEffect(() => {
-    function outside(event: PointerEvent) {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, []);
-  function show() { setActive(Math.max(0, options.findIndex(option => option.value === value && !option.disabled))); setOpen(true); }
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useLayoutEffect(() => {
+    if (open) document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [open, active, id]);
+  function show() { setAnchor(root.current!.querySelector("button")); setActive(Math.max(0, options.findIndex(option => option.value === value && !option.disabled))); setOpen(true); }
   function choose(index: number) {
     const option = options[index];
     if (option && !option.disabled) { onChange(option.value); setOpen(false); }
@@ -30,7 +30,7 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
       aria-expanded={open && !disabled} aria-controls={`${id}-options`} aria-activedescendant={open && !disabled ? `${id}-${active}` : undefined}
       className={styles.trigger} disabled={disabled} onClick={() => open ? setOpen(false) : show()}
       onKeyDown={event => {
-        if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
         else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
           event.preventDefault();
           if (!open) { show(); return; }
@@ -48,15 +48,15 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
       <span className={styles.copy}><strong>{selected?.name ?? "Choose an option"}</strong>{selected?.detail && <small>{selected.detail}</small>}</span>
       <span className={styles.chevron} aria-hidden="true" />
     </button>
-    {open && !disabled && <ul id={`${id}-options`} role="listbox" aria-labelledby={`${id}-label`} className={styles.menu}>
-      {options.map((option, index) => <li key={option.value} id={`${id}-${index}`} role="option" aria-selected={value === option.value}
-        aria-disabled={option.disabled} data-active={active === index} className={styles.option}
+    {open && !disabled && anchor && <FieldPopover anchor={anchor} onClose={close} id={`${id}-options`} role="listbox" label={label}>
+      {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={value === option.value}
+        aria-disabled={option.disabled} data-active={active === index} className={shared.option}
         onPointerDown={event => event.preventDefault()} onPointerMove={() => { if (!option.disabled) setActive(index); }} onClick={() => choose(index)}>
         {option.mark && <span className={styles.mark} aria-hidden="true">{option.mark}</span>}
         <span className={styles.copy}><strong>{option.name}</strong>{option.detail && <small>{option.detail}</small>}</span>
         {value === option.value && <span className={styles.check} aria-hidden="true">✓</span>}
-      </li>)}
-    </ul>}
+      </div>)}
+    </FieldPopover>}
   </div>;
 }
 

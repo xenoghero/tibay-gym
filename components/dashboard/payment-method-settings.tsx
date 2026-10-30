@@ -1,4 +1,5 @@
 "use client";
+import { FormSelect } from "@/components/ui/form-select";
 
 import { FormInput } from "@/components/ui/form-input";
 
@@ -64,7 +65,7 @@ export function PaymentMethodSettings() {
     {message && !draft && <p className={styles.message} role="status">{message}</p>}
     {draft && <SettingsDrawer closeLabel="Close payment account drawer" title={settings?.accounts.some(account => account.id === draft.id) ? "Edit payment account" : "Add payment account"} busy={busy || uploading} closing={false} onExited={() => setDraft(null)} onClose={() => setDraft(null)}>
       <form className={styles.editor} onSubmit={event => { event.preventDefault(); void save(); }}><div className={styles.fields}>
-        <label>Account type<select value={draft.kind} disabled={busy || uploading} onChange={event => setDraft({ ...draft, kind: event.target.value as PaymentAccount["kind"] })}><option value="gcash">GCash</option><option value="maya">Maya</option><option value="bank">Bank transfer</option></select></label>
+        <label>Account type<FormSelect value={draft.kind} disabled={busy || uploading} onChange={event => setDraft({ ...draft, kind: event.target.value as PaymentAccount["kind"] })}><option value="gcash">GCash</option><option value="maya">Maya</option><option value="bank">Bank transfer</option></FormSelect></label>
         <label>Display name<input required maxLength={100} value={draft.name} disabled={busy || uploading} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="e.g. BPI savings" /></label>
         <label>Account holder<input required maxLength={100} value={draft.accountHolder} disabled={busy || uploading} onChange={event => setDraft({ ...draft, accountHolder: event.target.value })} /></label>
         <label>Account / mobile number<FormInput type={draft.kind === "bank" ? "text" : "tel"} inputMode={draft.kind === "bank" ? "text" : "numeric"} required maxLength={100} value={draft.accountNumber} disabled={busy || uploading} onChange={event => setDraft({ ...draft, accountNumber: event.target.value })} /></label>
