@@ -25,7 +25,7 @@ import {
 } from "@/lib/db/profile-details";
 
 // Official members and guests share this collection, distinguished by `type`.
-// Public self-registration stays in unverifiedPersons until admin approval.
+// Public self-registration uses unverifiedPersons when admin verification is enabled.
 
 export const PERSON_COLLECTION = "persons";
 

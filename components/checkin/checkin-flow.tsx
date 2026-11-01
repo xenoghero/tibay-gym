@@ -65,6 +65,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [waitSeconds, setWaitSeconds] = useState(0);
   const [registrationBusy, setRegistrationBusy] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [registeredUnverified, setRegisteredUnverified] = useState(true);
   const [registrationPending, setRegistrationPending] = useState(false);
   const [checkinRequested, setCheckinRequested] = useState(false);
   const registrationRequest = useRef<Record<string, unknown> | null>(null);
@@ -114,10 +115,11 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
       registrationInFlight.current = true;
       setRegistrationPending(true);
       setRegistrationBusy(true); setRegistrationError("");
-      const result = await attendanceApi<{ personId: string }>("/api/attendance/register", registrationRequest.current);
+      const result = await attendanceApi<{ personId: string; unverified?: boolean }>("/api/attendance/register", registrationRequest.current);
       if (!result || typeof result.personId !== "string") throw new Error("Could not confirm account creation. Retry the same request.");
       registrationRequest.current = null;
       setRegistrationPending(false);
+      setRegisteredUnverified(result.unverified !== false);
       setRegistered(true);
     } catch (error) {
       if (error instanceof AttendanceApiError && error.status >= 400 && error.status < 500) {
@@ -173,7 +175,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
         {!registered && state.status !== "confirmed" && (
           <form onSubmit={submit} aria-busy={state.busy || registrationBusy}>
             <h1 style={headingStyle}>{registering ? "Create account" : state.stage === "payment" ? "Confirm your visit" : "Check in"}</h1>
-            <p style={leadStyle}>{registering ? "No payment required. Create your profile for admin verification." : state.stage === "payment" ? "Choose your payment method to complete your check-in." : "Enter your phone number to record your attendance."}</p>
+            <p style={leadStyle}>{registering ? "No payment required. Create your gym profile." : state.stage === "payment" ? "Choose your payment method to complete your check-in." : "Enter your phone number to record your attendance."}</p>
             {state.stage === "payment" ? <>
               <div className={styles.session}><h2>Daily session</h2>
               {state.paymentDue?.expiredMember && <p>Your membership has expired. This daily session records a visit and does not renew membership.</p>}
@@ -238,7 +240,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
         )}
         {registered && <div>
           <h1 style={headingStyle}>Account created</h1>
-          <p style={leadStyle}>{name}, your account is awaiting admin verification. You can check in with your phone number whenever you are ready.</p>
+          <p style={leadStyle}>{name}, {registeredUnverified ? "your account is awaiting admin verification." : "your account is verified and ready."} You can check in with your phone number whenever you are ready.</p>
           <button type="button" style={primaryButton(false)} onClick={() => {
             attempt.reset(); setRegistered(false); setCheckinRequested(true); setRegistrationError("");
           }}>Check in now</button>

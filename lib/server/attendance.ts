@@ -13,6 +13,7 @@ import { reservation } from "./rfid/enrollment";
 import type { RegistrationFields } from "@/lib/registration";
 import { appendAudit } from "./audit";
 import { prepareDailyCharge } from "./daily-charges";
+import { registrationSettings } from "@/lib/registration-settings";
 
 export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
@@ -76,7 +77,8 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     const pendingRef = personId && input.source === "qr" ? db.doc(`unverifiedPersons/${personId}`) : null;
     const pending = pendingRef ? (await tx.get(pendingRef)).data() as PersonData | undefined : undefined;
     const guest = input.source === "qr" ? input.guest : undefined;
-    const unverified = !official && (!!pending || !!guest);
+    const requireVerification = guest ? registrationSettings((await tx.get(db.doc("gymSettings/registration"))).data()).requireVerification : true;
+    const unverified = !official && (!!pending || (!!guest && requireVerification));
     const personRef = unverified ? pendingRef : officialRef;
     const storedPerson = official ?? pending;
     const logCollection = unverified ? "unverifiedAttendanceLogs" : "attendanceLogs";
@@ -168,8 +170,10 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     if (guest) {
       tx.set(personRef!, { ...person, phone: guest.phone, name: guest.name, joinDate: null,
         rateCategory: guest.rateCategory ?? null, leadSource: guest.leadSource ?? null, leadSourceOther: guest.leadSourceOther ?? null,
-        address: guest.address, visitCount: 0, lastVisitAt: null, createdAt: stamp, updatedAt: stamp });
-      appendAudit(tx, db, { actorId: `customer:${personId}`, action: "registration-created", entityType: "unverifiedPerson", entityId: personId!,
+        ...(unverified ? { address: guest.address } : { verifiedAt: stamp, verifiedBy: "system:auto-verification" }),
+        visitCount: 0, lastVisitAt: null, createdAt: stamp, updatedAt: stamp });
+      if (!unverified && guest.address) tx.set(db.doc(`profileDetails/${personId}`), { personId, address: guest.address, updatedAt: stamp });
+      appendAudit(tx, db, { actorId: `customer:${personId}`, action: "registration-created", entityType: unverified ? "unverifiedPerson" : "person", entityId: personId!,
         personId: personId!, operationId: input.eventId, after: { type: "guest", rateCategory: guest.rateCategory ?? null } });
     }
     if (openRef) tx.update(openRef, { checkOutAt: stamp, closedReason: stale ? "auto" : "implicit" });

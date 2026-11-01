@@ -270,6 +270,19 @@ it("frozen profiles reject QR and admin repair without attendance changes", asyn
   await expect(repairVisits("p1")).rejects.toThrow("person-unavailable");
   expect(logs()).toHaveLength(0);
 });
+it("auto-verifies inline guest registration into official attendance when verification is disabled", async () => {
+  store.data.delete("persons/p1"); store.data.delete("attendanceState/p1");
+  store.data.set("gymSettings/registration", { requireVerification: false, revision: 1 });
+  const request = { ...qr(), guest: { name: "Guest", phone: "123", address: "Private" } };
+  const result = await scanAttendance(request);
+  expect(await scanAttendance(request)).toEqual(result);
+  expect(store.data.get("persons/p1")).toMatchObject({ type: "guest", visitCount: 1, verifiedBy: "system:auto-verification" });
+  expect(store.data.get("persons/p1")).not.toHaveProperty("address");
+  expect(store.data.get("profileDetails/p1")).toMatchObject({ address: "Private" });
+  expect(store.data.has("unverifiedPersons/p1")).toBe(false);
+  expect(logs()).toHaveLength(1);
+  expect(store.data.get("attendanceState/p1")).toMatchObject({ lastAction: "checked-in" });
+});
 
 it("profile deletion freezes before cleanup, cancels enrollment, releases cards, and resumes after failure", async () => {
   await scanAttendance(qr());

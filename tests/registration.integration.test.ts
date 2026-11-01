@@ -11,6 +11,7 @@ import { POST as lookup } from "@/app/api/attendance/lookup/route";
 import { POST as scan } from "@/app/api/attendance/scan/route";
 import { approveUnverified, deleteUnverified } from "@/lib/server/unverified";
 import { DEFAULT_SETTINGS } from "@/lib/finance/rules";
+import { getRegistrationSettings, saveRegistrationSettings } from "@/lib/server/registration-settings";
 
 let store: ReturnType<typeof memoryFirestore>;
 const body = { eventId: "registration-operation-0001", phone: "09999999999", name: "Sam", address: "Street",
@@ -24,6 +25,53 @@ beforeEach(() => {
   vi.spyOn(console, "info").mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
+
+it("defaults verification on and rejects invalid or stale settings changes", async () => {
+  expect(await getRegistrationSettings()).toEqual({ requireVerification: true, revision: 0 });
+  expect(store.data.has("gymSettings/registration")).toBe(false);
+  await expect(saveRegistrationSettings("admin", { requireVerification: "false", revision: 0 })).rejects.toMatchObject({ status: 400 });
+  await expect(saveRegistrationSettings("admin", { requireVerification: false, revision: 0, actorId: "forged" })).rejects.toMatchObject({ status: 400 });
+  expect(await saveRegistrationSettings("admin", { requireVerification: false, revision: 0 })).toEqual({ requireVerification: false, revision: 1 });
+  await expect(saveRegistrationSettings("admin", { requireVerification: true, revision: 0 })).rejects.toMatchObject({ status: 409 });
+  expect(rows("auditEvents")[0][1]).toMatchObject({ actorId: "admin", relevantAfter: { enabled: false } });
+});
+
+it("auto-verifies new profiles into the overview roster with private details and working attendance", async () => {
+  await saveRegistrationSettings("admin", { requireVerification: false, revision: 0 });
+  const result = await (await register(request(body))).json();
+  expect(result.unverified).toBe(false);
+  const { personId } = result;
+  expect(store.data.get(`persons/${personId}`)).toMatchObject({ name: "Sam", type: "guest", visitCount: 0,
+    lastVisitAt: null, membershipExpiry: null, verifiedBy: "system:auto-verification" });
+  expect(store.data.get(`persons/${personId}`)).not.toHaveProperty("address");
+  expect(store.data.get(`profileDetails/${personId}`)).toMatchObject({ address: "Street" });
+  expect(rows("unverifiedPersons")).toHaveLength(0);
+  expect(rows("attendanceLogs")).toHaveLength(0);
+  expect(rows("charges")).toHaveLength(0);
+  expect(store.data.get(`attendanceState/${personId}`)).toMatchObject({ openLogId: null });
+  const found = await (await lookup(request({ phone: body.phone }))).json();
+  expect(found.person.id).toBe(personId);
+  expect(found.person.unverified).not.toBe(true);
+  await saveRegistrationSettings("admin", { requireVerification: true, revision: 1 });
+  expect(await (await register(request(body))).json()).toEqual(result);
+  expect((await register(request({ ...body, name: "Changed" }))).status).toBe(409);
+  const response = await scan(request({ eventId: "auto-profile-checkin-001", requestedAt: Date.now(), personId,
+    paymentMethod: "cash", expectedAmountMinor: 6000 }));
+  expect(response.status).toBe(200);
+  expect((await response.json()).unverified).not.toBe(true);
+  expect(rows("attendanceLogs")).toHaveLength(1);
+});
+
+it("keeps pending registrations pending across setting changes and applies re-enabling to new profiles", async () => {
+  const original = await (await register(request(body))).json();
+  await saveRegistrationSettings("admin", { requireVerification: false, revision: 0 });
+  expect(await (await register(request(body))).json()).toEqual(original);
+  expect(rows("persons")).toHaveLength(0);
+  await saveRegistrationSettings("admin", { requireVerification: true, revision: 1 });
+  const next = await register(request({ ...body, eventId: "another-registration-001", phone: "09123456789" }));
+  expect((await next.json()).unverified).toBe(true);
+  expect(rows("unverifiedPersons")).toHaveLength(2);
+});
 
 it("immediately saves an unverified account with zero visits and no payment", async () => {
   const response = await register(request(body));
