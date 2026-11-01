@@ -1,6 +1,7 @@
 "use client";
 
 import { PaymentMethodSettings } from "./payment-method-settings";
+import { RegistrationSettings } from "./registration-settings";
 
 import { useContentTransition } from "@/lib/use-content-transition";
 
@@ -217,6 +218,8 @@ export function AccountSettingsView() {
       <div hidden={section !== "vouchers"}><VoucherSettings /></div>
       <div hidden={section !== "payments"}><PaymentMethodSettings /></div>
       <div hidden={section !== "account"} className={settingsStyles.account}>
+
+      <RegistrationSettings />
 
       <section style={groupStyle}>
         <h2 className="rs-set-group-label" style={groupLabelStyle}>

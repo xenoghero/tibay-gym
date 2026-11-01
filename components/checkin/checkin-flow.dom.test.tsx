@@ -82,6 +82,18 @@ it("creating an account saves it without a payment or attendance request", async
   expect(screen.getByLabelText<HTMLInputElement>("Phone number").value).toBe("09123456789");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+it("shows an immediately verified account confirmation when verification is disabled", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({ personId: "official-1", unverified: false }));
+  render(<CheckInFlow registrationIntent />);
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Sam" } });
+  fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "09123456789" } });
+  fireEvent.click(screen.getByRole("radio", { name: /Student/ }));
+  fireEvent.change(screen.getByLabelText("Where did you know Tibay Gym?"), { target: { value: "friends" } });
+  await submit();
+  expect(screen.getByText(/your account is verified and ready/i)).toBeDefined();
+  expect(screen.queryByText(/awaiting admin verification/i)).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
 it("phone input keeps only digits and caps typed or pasted values at 11 digits", () => {
   render(<CheckInFlow />);
   const input = screen.getByLabelText<HTMLInputElement>("Phone number");

@@ -8,6 +8,7 @@ import { registrationFields } from "@/lib/registration";
 import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit";
 import { sameOrigin } from "@/lib/server/customer-session";
 import { appendAudit } from "@/lib/server/audit";
+import { registrationSettings } from "@/lib/registration-settings";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     publicRateLimiter.consume(caller, "guest", JSON.stringify([operationId, digest]));
     const personId = `registration-${createHash("sha256").update(operationId).digest("hex")}`;
     const db = adminDb();
-    await db.runTransaction(async tx => {
+    const unverified = await db.runTransaction(async tx => {
       const ref = db.doc(`unverifiedPersons/${personId}`);
       const previous = (await tx.get(ref)).data();
       const official = (await tx.get(db.doc(`persons/${personId}`))).data();
@@ -35,25 +36,31 @@ export async function POST(request: Request) {
       // A stable operation ID makes a lost registration response safe to retry.
       if (previous) {
         if (previous.registrationFingerprint !== digest) throw new ApiError(409, "guest-conflict");
-        return;
+        return true;
       }
       if (official) {
-        if (official.phone !== profile.phone) throw new ApiError(409, "guest-conflict");
-        return;
+        if (official.phone !== profile.phone || (official.registrationFingerprint && official.registrationFingerprint !== digest)) throw new ApiError(409, "guest-conflict");
+        return false;
       }
       const matching = await tx.get(db.collection("persons").where("phone", "==", profile.phone));
       const pending = await tx.get(db.collection("unverifiedPersons").where("phone", "==", profile.phone));
       if (!matching.empty || !pending.empty) throw new ApiError(409, "guest-conflict");
+      const { requireVerification } = registrationSettings((await tx.get(db.doc("gymSettings/registration"))).data());
       const stamp = Timestamp.now();
-      tx.set(ref, { ...profile, registrationFingerprint: digest, type: "guest", status: null,
+      const { address, ...publicProfile } = profile;
+      tx.set(requireVerification ? ref : db.doc(`persons/${personId}`), { ...publicProfile,
+        ...(requireVerification ? { address } : { verifiedAt: stamp, verifiedBy: "system:auto-verification" }),
+        registrationFingerprint: digest, type: "guest", status: null,
         membershipExpiry: null, rfidTagId: null, joinDate: null, visitCount: 0, lastVisitAt: null,
         createdAt: stamp, updatedAt: stamp });
-      tx.set(db.doc(`unverifiedAttendanceState/${personId}`), { openLogId: null, lastAction: null,
+      if (!requireVerification && address) tx.set(db.doc(`profileDetails/${personId}`), { personId, address, updatedAt: stamp });
+      tx.set(db.doc(`${requireVerification ? "unverifiedAttendanceState" : "attendanceState"}/${personId}`), { openLogId: null, lastAction: null,
         lastLogId: null, lastAcceptedScanAt: null, updatedAt: stamp });
       appendAudit(tx, db, { actorId: `customer:${personId}`, action: "registration-created",
-        entityType: "unverifiedPerson", entityId: personId, personId, operationId,
+        entityType: requireVerification ? "unverifiedPerson" : "person", entityId: personId, personId, operationId,
         after: { type: "guest", rateCategory: profile.rateCategory } });
+      return requireVerification;
     });
-    return json({ personId });
+    return json({ personId, unverified });
   }, "registration");
 }

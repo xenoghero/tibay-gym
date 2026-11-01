@@ -23,7 +23,7 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
             {phone && <div><dt>Phone number</dt><dd>{phone}</dd></div>}
             {mode === "payment" && <><div><dt>Session</dt><dd>Daily visit</dd></div><div><dt>Amount due</dt><dd>{amount == null ? "Category required" : `₱${(amount / 100).toFixed(2)}`}</dd></div></>}
           </dl>}
-          <div className={styles.help}><span className={styles.helpMark} aria-hidden="true">i</span><div><strong>{registering ? "No payment to create an account" : "Need a hand?"}</strong><p>{registering ? "Your profile will await admin verification. Registration does not record a visit." : "Ask the front desk if you need help with your profile, membership, or payment."}</p></div></div>
+          <div className={styles.help}><span className={styles.helpMark} aria-hidden="true">i</span><div><strong>{registering ? "No payment to create an account" : "Need a hand?"}</strong><p>{registering ? "Registration saves your profile and does not record a visit." : "Ask the front desk if you need help with your profile, membership, or payment."}</p></div></div>
         </aside>
         <section className={styles.content} aria-label={registering ? "Registration" : "Check-in desk"}>
           {mode !== "welcome" && <div className={styles.step}><span>{mode === "complete" ? "✓" : registering ? "01" : mode === "payment" ? "02" : "01"}</span>{mode === "complete" ? "Confirmation" : registering ? "Your profile" : mode === "payment" ? "Session & payment" : "Find your profile"}</div>}
