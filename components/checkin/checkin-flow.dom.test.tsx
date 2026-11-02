@@ -6,6 +6,8 @@ import { PublicEntry } from "./public-entry";
 
 // Keep image/framework resources out of the request trace; attendance code is real.
 vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => <span role="img" aria-label={alt} /> }));
+// Promotional reads are tested independently; this trace is attendance requests only.
+vi.mock("./promotion-banner", () => ({ PromotionBanner: () => null }));
 let clock: number;
 let loseScan: boolean;
 let lookupMissing: boolean;

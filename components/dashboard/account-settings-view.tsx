@@ -2,6 +2,7 @@
 
 import { PaymentMethodSettings } from "./payment-method-settings";
 import { RegistrationSettings } from "./registration-settings";
+import { PromotionSettings } from "./promotion-settings";
 
 import { useContentTransition } from "@/lib/use-content-transition";
 
@@ -24,7 +25,7 @@ import settingsStyles from "./settings.module.css";
 // Hash navigation retains the settings section on refresh/back. Hidden sections
 // remain mounted to preserve drafts when switching between pricing and vouchers.
 const subscribeSection = (listener: () => void) => { window.addEventListener("hashchange", listener); return () => window.removeEventListener("hashchange", listener); };
-const currentSection = () => ["vouchers", "payments", "account"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "pricing";
+const currentSection = () => ["vouchers", "payments", "promotions", "account"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "pricing";
 
 const displayFont =
   "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
@@ -206,17 +207,18 @@ export function AccountSettingsView() {
       </header>
 
       <p className="rs-set-lead" style={leadStyle}>
-        Manage gym pricing, payment methods, vouchers, and your admin account.
+        Manage gym pricing, payment methods, vouchers, promotions, and your admin account.
       </p>
 
       <div className={settingsStyles.layout}>
       <nav className={settingsStyles.navigation} aria-label="Settings sections">
-        {[["pricing", "Pricing"], ["vouchers", "Vouchers"], ["payments", "Payment methods"], ["account", "Account & security"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
+        {[["pricing", "Pricing"], ["vouchers", "Vouchers"], ["payments", "Payment methods"], ["promotions", "Promotions"], ["account", "Account & security"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
       </nav>
       <div ref={tabContent} className={settingsStyles.content}>
       <div hidden={section !== "pricing"}><FinanceSettings /></div>
       <div hidden={section !== "vouchers"}><VoucherSettings /></div>
       <div hidden={section !== "payments"}><PaymentMethodSettings /></div>
+      <div hidden={section !== "promotions"}><PromotionSettings /></div>
       <div hidden={section !== "account"} className={settingsStyles.account}>
 
       <RegistrationSettings />

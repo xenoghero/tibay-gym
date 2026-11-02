@@ -1,0 +1,22 @@
+.guide { padding: 18px 20px; background: var(--rs-panel); border-left: 3px solid var(--rs-accent); border-radius: 0 6px 6px 0; margin-bottom: 26px; }
+.guide strong { font-size: 14px; }
+.guide p { color: var(--rs-muted); font-size: 12px; margin: 6px 0 0; }
+.listHead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--rs-line); margin-top: 30px; padding-top: 26px; margin-bottom: 14px; }
+.listHead h3, .upload h3 { font-weight: 600; font-size: 16px; margin: 0; }
+.listHead > span, .save > span { color: var(--rs-muted); font-size: 12px; }
+.empty { padding: 24px; border: 1px dashed var(--rs-line); border-radius: 8px; }
+.empty p { font-size: 13px; color: var(--rs-muted); margin: 8px 0 0; }
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.item { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 18px; padding: 18px; border: 1px solid var(--rs-line); border-radius: 8px; align-items: start; }
+.thumbnail, .preview { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; object-fit: contain; background: var(--rs-panel); border-radius: 4px; }
+.details { min-width: 0; }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.actions .toggle { display: flex; align-items: center; gap: 8px; margin-right: auto; font-weight: 400; }
+.actions .remove { color: var(--rs-danger, #a92d2d); }
+.save { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+.upload { display: grid; gap: 18px; max-width: 680px; }
+.upload button { justify-self: start; }
+.upload input[type=file] { padding: 10px; font-size: 13px; }
+.upload input::file-selector-button { min-height: 36px; border: 1px solid var(--rs-line); border-radius: 4px; background: var(--rs-panel); color: var(--rs-fg); margin-right: 10px; padding: 6px 10px; cursor: pointer; }
+.error { color: var(--rs-danger, #a92d2d); margin-block: 18px; }
+@media (max-width: 900px) { .item { grid-template-columns: minmax(0, 1fr); } .thumbnail { max-width: 360px; } }

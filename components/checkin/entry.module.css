@@ -1,4 +1,5 @@
 .page { min-height: 100dvh; background: #faf8f0; color: #20211d; font-family: var(--font-geist-sans), system-ui, sans-serif; padding: 40px 32px 24px; display: grid; align-items: center; color-scheme: light; }
+.page:has(.workspace[data-mode=welcome]) { align-items: center; }
 .frame { width: 100%; max-width: 1080px; margin: 0 auto; }
 .brand { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px 40px; background: #ffcc00; color: #20211d; border-bottom: 1px solid #20211d14; }
 .brand :global(.rs-brand-sidebar) { font-size: 44px; padding: 0; gap: 12px; }

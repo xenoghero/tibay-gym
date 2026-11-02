@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import styles from "./entry.module.css";
+import { PromotionBanner } from "./promotion-banner";
 
 export function EntryShell({ children, mode = "welcome", name, phone, amount }: {
   children: ReactNode;
@@ -30,6 +31,7 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
           {children}
         </section>
       </div>
+      {mode === "welcome" && <PromotionBanner />}
       <footer className={styles.footer}>Tibay Gym <span>One visit at a time.</span></footer>
     </div>
   </main>;
