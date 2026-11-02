@@ -4,8 +4,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { FormInput } from "./form-input";
 import { FormSelect } from "./form-select";
+import { PaymentMethodSelect } from "@/components/payments/payment-method-select";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it.each(["date", "datetime-local"])("opens the shared %s calendar with Alt+Down and restores focus on Escape", type => {
   render(<label>Date<FormInput type={type} /></label>);
@@ -85,4 +86,29 @@ it("supports dropdown keyboard selection, skips disabled options, and submits th
   fireEvent.click(select);
   fireEvent.pointerDown(document.body);
   expect(screen.queryByRole("listbox")).toBeNull();
+});
+
+it("opens payment methods above the selector even when there is room below", () => {
+  const change = vi.fn();
+  render(<PaymentMethodSelect value="cash" available placement="top" onChange={change} />);
+  const trigger = screen.getByRole("combobox", { name: "Payment method" });
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 400, bottom: 476, left: 20, right: 373, width: 353, height: 76, x: 20, y: 400, toJSON() {} });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(180);
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("listbox", { name: "Payment method" });
+  expect(menu.style.top).toBe("214px");
+  fireEvent.click(screen.getByRole("option", { name: /GCash/ }));
+  expect(change).toHaveBeenCalledWith("gcash");
+  expect(screen.queryByRole("listbox")).toBeNull();
+});
+
+it("limits a tall upward payment menu to the available space", () => {
+  render(<PaymentMethodSelect value="cash" available placement="top" onChange={vi.fn()} />);
+  const trigger = screen.getByRole("combobox", { name: "Payment method" });
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 200, bottom: 276, left: 20, right: 373, width: 353, height: 76, x: 20, y: 200, toJSON() {} });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(600);
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("listbox", { name: "Payment method" });
+  expect(menu.style.top).toBe("8px");
+  expect(menu.style.maxHeight).toBe("186px");
 });

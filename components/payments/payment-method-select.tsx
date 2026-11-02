@@ -3,8 +3,8 @@
 import { StyledSelect, type SelectOption } from "@/components/ui/styled-select";
 import type { PaymentAccount, PaymentMethod } from "@/lib/finance/payment-methods";
 
-export function PaymentMethodSelect({ value, accounts, available, disabled, onChange }: {
-  value: PaymentMethod; accounts?: PaymentAccount[]; available?: boolean; disabled?: boolean;
+export function PaymentMethodSelect({ value, accounts, available, disabled, placement = "auto", onChange }: {
+  value: PaymentMethod; accounts?: PaymentAccount[]; available?: boolean; disabled?: boolean; placement?: "auto" | "top";
   onChange(value: PaymentMethod): void;
 }) {
   const options: SelectOption[] = [
@@ -15,5 +15,5 @@ export function PaymentMethodSelect({ value, accounts, available, disabled, onCh
       { value: "gcash", name: "GCash", detail: available ? "Mobile wallet" : "Currently unavailable", mark: "▣", disabled: !available },
     ]),
   ];
-  return <StyledSelect label="Payment method" value={value} options={options} disabled={disabled} onChange={value => onChange(value as PaymentMethod)} />;
+  return <StyledSelect label="Payment method" value={value} options={options} disabled={disabled} placement={placement} onChange={value => onChange(value as PaymentMethod)} />;
 }

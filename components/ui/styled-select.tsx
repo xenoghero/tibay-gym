@@ -6,8 +6,8 @@ import shared from "./field-controls.module.css";
 import styles from "./styled-select.module.css";
 
 export interface SelectOption { value: string; name: string; detail?: string; mark?: string; disabled?: boolean }
-export function StyledSelect({ label, value, options, disabled, compact = false, onChange }: {
-  label: string; value: string; options: SelectOption[]; disabled?: boolean; compact?: boolean; onChange(value: string): void;
+export function StyledSelect({ label, value, options, disabled, compact = false, placement = "auto", onChange }: {
+  label: string; value: string; options: SelectOption[]; disabled?: boolean; compact?: boolean; placement?: "auto" | "top"; onChange(value: string): void;
 }) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -48,7 +48,7 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
       <span className={styles.copy}><strong>{selected?.name ?? "Choose an option"}</strong>{selected?.detail && <small>{selected.detail}</small>}</span>
       <span className={styles.chevron} aria-hidden="true" />
     </button>
-    {open && !disabled && anchor && <FieldPopover anchor={anchor} onClose={close} id={`${id}-options`} role="listbox" label={label}>
+    {open && !disabled && anchor && <FieldPopover anchor={anchor} onClose={close} id={`${id}-options`} role="listbox" label={label} placement={placement}>
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={value === option.value}
         aria-disabled={option.disabled} data-active={active === index} className={shared.option}
         onPointerDown={event => event.preventDefault()} onPointerMove={() => { if (!option.disabled) setActive(index); }} onClick={() => choose(index)}>

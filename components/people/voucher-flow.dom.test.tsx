@@ -40,6 +40,10 @@ async function apply(code: string) {
   fireEvent.change(screen.getByLabelText("Voucher code"), { target: { value: code } });
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Apply" })); });
 }
+async function selectDuration(name: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: "Membership duration" }));
+  await act(async () => { fireEvent.click(screen.getByRole("option", { name })); });
+}
 it("shows discount math and submits the applied server quote, without client-calculated totals", async () => {
   await act(async () => { render(<PurchaseForm portal />); });
   await apply("TRAIN10");
@@ -70,14 +74,17 @@ it("requests the selected months, refreshes that duration, and submits its serve
     return Response.json({ ...plain, amountMinor: 100000 * months, quoteToken: `months-${months}`, coverage: { ...plain.coverage, months, expiryDate: months === 12 ? "2027-10-29" : "2027-01-29" } });
   }));
   await act(async () => { render(<PurchaseForm portal />); });
-  expect((screen.getByRole("radio", { name: "1 month" }) as HTMLInputElement).checked).toBe(true);
-  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "3 months" })); });
-  expect((screen.getByRole("radio", { name: "3 months" }) as HTMLInputElement).checked).toBe(true);
-  expect(screen.getByText("₱3,000.00")).toBeTruthy();
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("1 month");
+  expect(screen.getByRole("button", { name: "Shorter membership duration" }).hasAttribute("disabled")).toBe(true);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" })); });
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("3 months");
+  expect(screen.getByText("Amount").parentElement?.textContent).toContain("₱3,000");
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh quote" })); });
   expect(String(vi.mocked(fetch).mock.calls.at(-1)![0])).toContain("months=3");
-  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "1 year" })); });
-  expect(screen.getByText("₱12,000.00")).toBeTruthy();
+  await selectDuration("1 year");
+  expect(screen.getByText("Amount").parentElement?.textContent).toContain("₱12,000");
+  expect(screen.getByRole("button", { name: "Longer membership duration" }).hasAttribute("disabled")).toBe(true);
   await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
   expect(posts[0]).toMatchObject({ months: 12, quoteToken: "months-12" });
 });
@@ -85,10 +92,25 @@ it("requests the selected months, refreshes that duration, and submits its serve
 it("keeps the existing duration and quote when changing months fails", async () => {
   await act(async () => { render(<PurchaseForm portal />); });
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: "unavailable" }, { status: 503 }));
-  await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "5 months" })); });
-  expect((screen.getByRole("radio", { name: "1 month" }) as HTMLInputElement).checked).toBe(true);
+  await selectDuration("5 months");
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("1 month");
   expect(screen.getByText("Could not update the duration. Try again.")).toBeTruthy();
-  expect(screen.getByText("₱1,000.00")).toBeTruthy();
+  expect(screen.getByText("Amount").parentElement?.textContent).toContain("₱1,000");
+});
+it("steps between five months and one year without requesting unsupported durations", async () => {
+  const requested: number[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const months = Number(new URL(url, "http://localhost").searchParams.get("months") ?? 1);
+    requested.push(months);
+    return Response.json({ ...plain, amountMinor: 100000 * months, coverage: { ...plain.coverage, months } });
+  }));
+  await act(async () => { render(<PurchaseForm portal />); });
+  await selectDuration("5 months");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" })); });
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("1 year");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Shorter membership duration" })); });
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("5 months");
+  expect(requested).toEqual([1, 5, 12, 5]);
 });
 it("clears selected receipt evidence when the payable quote changes", async () => {
   await act(async () => { render(<PurchaseForm portal />); });
