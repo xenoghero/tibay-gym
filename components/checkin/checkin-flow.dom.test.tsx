@@ -63,7 +63,7 @@ it("Create Account opens all profile fields directly without renewal or payment 
   expect(screen.queryByText("Renewal and payment status")).toBeNull();
   expect(screen.getByRole("group", { name: "Rate category" })).toBeDefined();
   expect(fetchMock).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /Back to welcome/ }));
+  fireEvent.click(screen.getByRole("link", { name: "Tibay Gym welcome" }));
   fireEvent.click(screen.getByRole("button", { name: "Check In" }));
   expect(screen.getByLabelText("Phone number")).toBeDefined();
   expect(screen.queryByLabelText("Name")).toBeNull();
@@ -90,6 +90,10 @@ it("creating an account saves it without a payment or attendance request", async
   expect(screen.getByRole("button", { name: /Daily session only/ }).textContent).toContain("₱60");
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(String(fetchMock.mock.calls[1][0])).toBe("/api/attendance/lookup");
+  fireEvent.click(screen.getByRole("button", { name: "Step 1: Your number" }));
+  expect(screen.getByLabelText<HTMLInputElement>("Phone number").value).toBe("");
+  expect(screen.queryByLabelText("Name")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 it("shows an immediately verified account confirmation when verification is disabled", async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ personId: "official-1", unverified: false }));
@@ -174,7 +178,7 @@ it("daily choice can return to the membership choice before submitting attendanc
   fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
   expect(screen.getByRole("group", { name: "Daily payment method" })).toBeDefined();
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole("button", { name: /Back to session choices/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Step 2: Session" }));
   expect(screen.getByRole("button", { name: /Start membership/ })).toBeDefined();
 });
 it("keeps daily sessions available when monthly pricing is unset", async () => {
@@ -204,7 +208,7 @@ it("keeps promotional banners on the first page and out of payment and registrat
   expect(screen.getByRole("complementary", { name: "Gym promotions" })).toBeDefined();
   fireEvent.click(screen.getByRole("button", { name: "Check In" }));
   expect(screen.queryByRole("complementary", { name: "Gym promotions" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /Back to welcome/ }));
+  fireEvent.click(screen.getByRole("link", { name: "Tibay Gym welcome" }));
   expect(screen.getByRole("complementary", { name: "Gym promotions" })).toBeDefined();
   fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
   expect(screen.queryByRole("complementary", { name: "Gym promotions" })).toBeNull();
@@ -253,6 +257,40 @@ it("page mount/hydration starts no acquisition, attendance/sweep or direct Fires
   expect(fetchMock).not.toHaveBeenCalled(); expect(getPosition).not.toHaveBeenCalled();
   expect(screen.queryByRole("radio")).toBeNull();
 });
+it("places the compact progress strip above the form and keeps future steps disabled without a Welcome button", () => {
+  render(<PublicEntry />);
+  fireEvent.click(screen.getByRole("button", { name: "Check In" }));
+  const navigation = screen.getByRole("navigation", { name: "Check-in steps" });
+  expect(navigation.querySelector('[aria-current="step"]')?.textContent).toBe("1Number");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 2: Session" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 3: Payment" }).disabled).toBe(true);
+  expect(document.querySelector("header button")).toBeNull();
+  expect(screen.queryByRole("button", { name: /Back to welcome|different number|Back to session choices/ })).toBeNull();
+  const form = document.querySelector("form")!;
+  expect(navigation.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+it("locks completed steps and the brand link while a daily attendance result is uncertain", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "p1", name: "Alex", type: "guest", rateCategory: "regular", visitCount: 2 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, regularMonthlyMinor: 70000 },
+    paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: false } }));
+  render(<PublicEntry />);
+  fireEvent.click(screen.getByRole("button", { name: "Check In" }));
+  fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "09123456789" } });
+  await submit();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /Cash Pay/ }));
+  loseScan = true; await submit();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 2: Session" }).disabled).toBe(true);
+  expect(screen.queryByRole("link", { name: "Tibay Gym welcome" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Step 1: Your number" }));
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await submit();
+  expect(outgoing[0].body).toEqual(outgoing[1].body);
+  expect(screen.getByText("Checked in")).toBeDefined();
+});
 it("known-person submission makes lookup + scan without requesting device position", async () => {
   mount(); await submit();
   expect(outgoing.map(row => row.path)).toEqual(["/api/attendance/lookup", "/api/attendance/scan"]);
@@ -300,7 +338,7 @@ it("guest form delay preserves capture; uncertainty locks name, address and rese
   loseScan = true; await submit();
   expect(screen.getByLabelText<HTMLInputElement>("Name").disabled).toBe(true);
   expect(screen.getByLabelText<HTMLTextAreaElement>(/Address/).disabled).toBe(true);
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: /different number/ }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(true);
   expect(outgoing[1]).toMatchObject({ path: "/api/attendance/register", body: { phone: "09123456789", name: "Sam", address: "Street" } });
   await submit(); expect(outgoing[2].body).toEqual(outgoing[1].body);
   expect(screen.getByText("Account created")).toBeDefined();

@@ -195,7 +195,20 @@
 .dailyChoice > span:last-child { text-align: right; }
 .dailyChoice b { font: 600 30px/1 var(--font-barlow-condensed), sans-serif; }
 .actionNote { font-size: 12px; line-height: 1.7; color: #b2b6a5; margin: 18px 0; }
-.backButton { display: block; width: 100%; min-height: 44px; padding: 8px 0; border: 0; background: transparent; color: #b2b6a5; text-align: left; font-size: 13px; cursor: pointer; }
+.brandLink { color: inherit; text-decoration: none; border-radius: 4px; }
+.brandLink:focus-visible { outline: 2px solid #ffcc00; outline-offset: 5px; }
+.progressSteps { margin: -8px 0 24px; }
+.progressSteps ol { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; list-style: none; margin: 0; padding: 0; }
+.progressSteps li { min-width: 0; }
+.progressSteps button, .currentStep { display: flex; position: relative; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 8px 2px 13px; border: 0; background: transparent; color: #d5ddc5; font-family: inherit; font-size: 11px; line-height: 1.4; text-align: center; }
+.progressSteps button { cursor: pointer; }
+.progressSteps button::after, .currentStep::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 2px; background: #424b34; }
+.progressSteps li[data-state=complete] button::after { background: #9da97a; }
+.progressSteps .currentStep { color: #ffcc00; font-weight: 600; }
+.currentStep::after { background: #ffcc00; }
+.stepNumber { flex-shrink: 0; font-size: 10px; font-weight: 500; }
+.progressSteps button:disabled { cursor: default; opacity: .55; }
+.progressSteps button:hover:not(:disabled) { background: #252c1b; border-radius: 4px 4px 0 0; color: #fff; }
 @supports (appearance: base-select) { .select::picker(select) { background: #1c1f16; color: #f7f7ee; border-color: #424736; } .select option:hover, .select option:focus { background: #292e1e; } .select option:checked { background: #363a1d; } }
 @media (max-width: 700px) {
   .page { padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }

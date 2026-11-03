@@ -3,18 +3,20 @@ import { BrandLogo } from "@/components/brand-logo";
 import styles from "./entry.module.css";
 import { PromotionBanner } from "./promotion-banner";
 
-export function EntryShell({ children, mode = "welcome", name, phone, amount }: {
+export function EntryShell({ children, mode = "welcome", name, phone, amount, navigation, onWelcome }: {
   children: ReactNode;
   mode?: "welcome" | "register" | "phone" | "choice" | "payment" | "complete";
   name?: string;
   phone?: string;
   amount?: number | null;
+  navigation?: ReactNode;
+  onWelcome?: () => void;
 }) {
   const registering = mode === "register";
   return <main className={styles.page}>
     <div className={styles.frame}>
       <div className={styles.workspace} data-mode={mode}>
-        <header className={styles.brand}><BrandLogo sidebar tagline="LAKAS.TIBAY.HUSAY" /></header>
+        <header className={styles.brand}>{onWelcome ? <a className={styles.brandLink} href="/checkin" aria-label="Tibay Gym welcome" onClick={event => { event.preventDefault(); onWelcome(); }}><BrandLogo sidebar tagline="LAKAS.TIBAY.HUSAY" /></a> : <BrandLogo sidebar tagline="LAKAS.TIBAY.HUSAY" />}</header>
         {mode !== "welcome" && mode !== "choice" && <aside className={styles.overview} aria-label="Visit overview">
           <span className={styles.eyebrow}>TIBAY GYM · WELCOME IN</span>
           <h2>{mode === "complete" ? "All set.\nKeep showing up." : registering ? "Your first step.\nA stronger you." : "Show up.\nGet stronger."}</h2>
@@ -27,7 +29,7 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
           <div className={styles.help}><span className={styles.helpMark} aria-hidden="true">i</span><div><strong>{registering ? "No payment to create an account" : "Need a hand?"}</strong><p>{registering ? "Registration saves your profile and does not record a visit." : "Ask the front desk if you need help with your profile, membership, or payment."}</p></div></div>
         </aside>}
         <section className={styles.content} aria-label={registering ? "Registration" : "Check-in desk"}>
-          {mode !== "welcome" && mode !== "choice" && <div className={styles.step}><span>{mode === "complete" ? "✓" : registering ? "01" : mode === "payment" ? "02" : "01"}</span>{mode === "complete" ? "Confirmation" : registering ? "Your profile" : mode === "payment" ? "Session & payment" : "Find your profile"}</div>}
+          {navigation ?? (mode !== "welcome" && mode !== "choice" && <div className={styles.step}><span>{mode === "complete" ? "✓" : registering ? "01" : mode === "payment" ? "02" : "01"}</span>{mode === "complete" ? "Confirmation" : registering ? "Your profile" : mode === "payment" ? "Session & payment" : "Find your profile"}</div>)}
           {children}
         </section>
       </div>

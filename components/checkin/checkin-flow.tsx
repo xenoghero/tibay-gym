@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties }
 import { useRouter } from "next/navigation";
 import { EntryShell } from "./entry-shell";
 import { GuestSessionChoice } from "./guest-session-choice";
+import { CheckinSteps, type CheckinStep } from "./checkin-steps";
 import styles from "./entry.module.css";
 import { ImageUpload } from "./image-upload";
 import { Timestamp } from "firebase/firestore";
@@ -101,7 +102,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   }, [attempt, requestedAt]);
 
   function reset() {
-    if (!attempt.reset()) return;
+    if (!attempt.reset()) return false;
     setPhone(""); setName(""); setAddress("");
     setCategory(""); setSource(""); setOther(""); setRegistrationError("");
     setPaymentMethod("");
@@ -110,6 +111,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     setSessionChoice("choose");
     setMembershipError("");
     setRegistered(false); setCheckinRequested(false); setRegistrationPending(false); registrationRequest.current = null;
+    return true;
   }
   async function createAccount() {
     if (registrationInFlight.current || (registrationRetryAt ?? 0) > Date.now()) return;
@@ -185,7 +187,22 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     : state.status === "upload-pending" ? "Saving your private receipt…"
     : state.status === "attendance-pending" ? "Confirming attendance…" : "";
   const person = state.person;
+  const navigationLocked = locked || voucherBusy || membershipOpening;
+  function changeNumber() {
+    if (navigationLocked) return;
+    if (reset()) setCheckinRequested(true);
+  }
+  function chooseSession() {
+    if (!navigationLocked) setSessionChoice("choose");
+  }
+  function welcome() {
+    if (!navigationLocked && reset()) onBack?.();
+  }
   const choosingSession = state.stage === "payment" && person?.type === "guest" && state.paymentDue != null && sessionChoice !== "daily" && state.status !== "confirmed";
+  const numberStep: CheckinStep = { label: "Number", accessibleLabel: "Your number", onSelect: changeNumber };
+  const steps: CheckinStep[] = registering ? (registrationIntent ? [{ label: "Profile" }] : [numberStep, { label: "Profile" }]) :
+    [numberStep, ...(person?.type === "member" ? [] : [{ label: "Session", onSelect: chooseSession }]), { label: "Payment" }];
+  const currentStep = registering ? steps.length - 1 : choosingSession ? 1 : state.stage === "payment" ? steps.length - 1 : 0;
   const membershipExpiry = person?.membershipExpiryMs != null ? Timestamp.fromMillis(person.membershipExpiryMs) : null;
   const receipt: Receipt | null = state.result?.action === "checked-in" ? {
     name: state.displayName, type: person?.type ?? "guest",
@@ -196,11 +213,12 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
 
   return (
     <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : choosingSession ? "choice" : state.stage === "payment" ? "payment" : "phone"}
-      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}>
+      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}
+      navigation={!registered && state.status !== "confirmed" ? <CheckinSteps steps={steps} current={currentStep} disabled={navigationLocked} /> : undefined}
+      onWelcome={onBack && !navigationLocked ? welcome : undefined}>
         {choosingSession && person && state.paymentDue && <GuestSessionChoice person={person} rates={state.dailyRates} paymentDue={state.paymentDue}
           busy={membershipOpening} error={membershipError} onDaily={() => setSessionChoice("daily")}
-          onMembership={() => void openMembership()}
-          onBack={reset} onWelcome={onBack ? () => { reset(); onBack(); } : undefined} />}
+          onMembership={() => void openMembership()} />}
         {!registered && !choosingSession && state.status !== "confirmed" && (
           <form onSubmit={submit} aria-busy={state.busy || registrationBusy}>
             <h1 style={headingStyle}>{registering ? "Create account" : state.stage === "payment" ? "Confirm your visit" : "Check in"}</h1>
@@ -261,11 +279,6 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
               {progress || (expired ? "Attendance unconfirmed" : waitSeconds > 0 ? "Please wait" : state.pending ? "Retry confirmation"
                 : state.status === "blocked" ? "Retry" : registering ? "Create account" : "Check in")}
             </button>
-            {(state.stage === "name" || state.stage === "payment") && (
-              <button type="button" onClick={reset} style={linkButton} disabled={locked}>← Use a different number</button>
-            )}
-            {state.stage === "payment" && person?.type === "guest" && !locked && <button type="button" onClick={() => setSessionChoice("choose")} style={linkButton}>← Back to session choices</button>}
-            {onBack && <button type="button" onClick={onBack} style={linkButton} disabled={locked}>← Back to welcome</button>}
           </form>
         )}
         {registered && <div>

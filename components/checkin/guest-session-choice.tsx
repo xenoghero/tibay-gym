@@ -6,9 +6,9 @@ import styles from "./entry.module.css";
 
 const money = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(minor / 100);
 
-export function GuestSessionChoice({ person, rates, paymentDue, busy, error, onDaily, onMembership, onBack, onWelcome }: {
+export function GuestSessionChoice({ person, rates, paymentDue, busy, error, onDaily, onMembership }: {
   person: QrLookupPerson; rates: DailyRates | null; paymentDue: DailyPaymentDue;
-  busy: boolean; error: string; onDaily(): void; onMembership(): void; onBack(): void; onWelcome?: () => void;
+  busy: boolean; error: string; onDaily(): void; onMembership(): void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
@@ -38,7 +38,5 @@ export function GuestSessionChoice({ person, rates, paymentDue, busy, error, onD
       <span>{paymentDue.amountMinor == null ? <strong>See front desk</strong> : <><b>{money(paymentDue.amountMinor)}</b><small>/ session <span aria-hidden="true">→</span></small></>}</span>
     </button>
     <p className={styles.actionNote}>Membership starts after admin payment approval. Choosing membership does not record a visit or create a daily charge.</p>
-    <button type="button" className={styles.backButton} disabled={busy} onClick={onBack}>← Use a different number</button>
-    {onWelcome && <button type="button" className={styles.backButton} disabled={busy} onClick={onWelcome}>← Back to welcome</button>}
   </div>;
 }
