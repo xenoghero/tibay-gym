@@ -14,9 +14,9 @@ export function PublicEntry() {
           <svg className={styles.optionIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
             <path d="M14 4h5v16h-5M3 12h12m-5-5 5 5-5 5" />
           </svg>
-          <span>Returning member?</span>
+          <span>Ready to train?</span>
         </h2>
-        <p>Check in with your registered phone number.</p>
+        <p>Members and guests, check in with your registered phone number.</p>
         <button className={styles.primary} onClick={() => setChoice("checkin")}>Check In <span aria-hidden="true">→</span></button>
       </section>
       <section className={styles.newOption} aria-labelledby="first-time-title">

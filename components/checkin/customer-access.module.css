@@ -293,3 +293,13 @@
 @media (prefers-color-scheme: dark) {
   .memberPass[data-status="active"] .passStatus { color: #35bd78; }
 }
+
+.checkinPortal { --rs-fg: #f7f7ee; --rs-bg: #12130f; --rs-panel: #20221b; --rs-line: #424736; --rs-muted: #b2b6a5; --rs-accent: #ffcc00; --rs-accent-text: #ffdf66; --rs-on-accent: #181a12; --rs-accent-soft: #ffcc001a; --rs-danger: #ffaaa0; max-width: none; background: #12130f; color: #f7f7ee; color-scheme: dark; }
+.checkinPortal > .header, .checkinPortal > .memberWorkspace, .checkinPortal > .welcome { max-width: 1080px; margin-inline: auto; }
+.checkinPortal .loginPanel { background: #20221b; border-color: #424736; }
+.checkinPortal .accessWatermark { -webkit-text-stroke-color: #35382d; }
+.checkinPortal .memberPass[data-status="active"] .passStatus, .checkinPortal .badge[data-status="approved"] { color: #b9e4c3; }
+.checkinPortal .badge[data-status="pending"] { background: #ffcc001a; color: #ffdf66; border-color: #817126; }
+.checkinPortal .badge[data-status="rejected"] { background: #ffaaa014; color: #ffaaa0; border-color: #9c615a; }
+.checkinPortal .notice { flex-wrap: wrap; }
+@media (max-width: 700px) { .checkinPortal { padding-inline: 24px; } .checkinPortal .header { gap: 12px; } .checkinPortal .header > button { font-size: 11px; } }

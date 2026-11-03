@@ -30,6 +30,65 @@ it("revokes before clearing account view and keeps a failed sign-out retryable",
   expect(screen.getByLabelText("Phone number").getAttribute("value")).toBe(""); expect(screen.queryByRole("region", { name: "Membership card" })).toBeNull();
   expect(calls.filter(call => call.method === "DELETE")).toHaveLength(2);
 });
+it("opens the existing membership purchase with the check-in identity, then shows pending review without attendance", async () => {
+  let membershipSubmitted = false;
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (url, options) => {
+    if (String(url).includes("payments")) return Response.json({ requests: [], pendingMembership: membershipSubmitted ? {
+      id: "membership-1", kind: "new_membership", status: "pending", amountMinor: 60000, method: "cash", submittedAt: Date.now(), rejectionReason: null,
+    } : null, nextCursor: null });
+    return original(url, options);
+  });
+  await act(async () => { render(<CustomerAccess membershipSetup />); });
+  expect(calls[0]).toEqual({ method: "GET", url: "/api/customer/session" });
+  expect(calls.some(call => call.method === "POST")).toBe(false);
+  expect(screen.getByRole("heading", { name: "Start membership" })).toBeDefined();
+  expect(screen.getByText("Restricted purchase form")).toBeDefined();
+  expect(screen.queryByLabelText("Phone number")).toBeNull();
+  membershipSubmitted = true;
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Submit payment request" })); });
+  expect(screen.getByText(/Please approach the front desk.*No daily charge or attendance/)).toBeDefined();
+  expect(calls.some(call => call.url.startsWith("/api/attendance"))).toBe(false);
+  expect(screen.getByRole("link", { name: "Check-in ↗" }).getAttribute("href")).toBe("/checkin");
+});
+it("shows an existing pending membership even when the latest payment page contains only daily sessions", async () => {
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (url, options) => String(url).includes("payments") ? Response.json({
+    requests: [{ id: "daily", kind: "daily_session", status: "pending", amountMinor: 6000, method: "cash", submittedAt: Date.now(), rejectionReason: null }],
+    pendingMembership: { id: "old-membership", kind: "new_membership", status: "pending", amountMinor: 60000, method: "cash", submittedAt: Date.now() - 100000, rejectionReason: null }, nextCursor: "older",
+  }) : original(url, options));
+  await act(async () => { render(<CustomerAccess membershipSetup />); });
+  expect(screen.getByRole("region", { name: "Pending membership request" })).toBeDefined();
+  expect(screen.getByText(/Please approach the front desk to confirm your payment/)).toBeDefined();
+  expect(screen.queryByText("Restricted purchase form")).toBeNull();
+});
+it("does not imply membership approval is pending for a guest with only daily payments", async () => {
+  await act(async () => { render(<CustomerAccess membershipSetup />); });
+  expect(screen.getByText("Restricted purchase form")).toBeDefined();
+  await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Overview" })); });
+  expect(screen.queryByText(/No daily charge or attendance was created by this membership request/)).toBeNull();
+});
+it("rechecks verification during membership handoff rather than trusting the earlier lookup", async () => {
+  verified = false;
+  await act(async () => { render(<CustomerAccess membershipSetup />); });
+  expect(screen.getByText("Profile verification needed")).toBeDefined();
+  expect(screen.queryByText("Restricted purchase form")).toBeNull();
+  expect(calls.some(call => call.url.includes("purchase") || call.url.startsWith("/api/attendance"))).toBe(false);
+  expect(screen.getByRole("link", { name: /Choose a daily session/ }).getAttribute("href")).toBe("/checkin");
+});
+it("allows direct members payment setup visits to enter their phone when no session exists", async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: "customer-session-required" }, { status: 401 }));
+  await act(async () => { render(<CustomerAccess membershipSetup />); });
+  expect(screen.getByLabelText<HTMLInputElement>("Phone number").disabled).toBe(false);
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "09171234567" } });
+    fireEvent.submit(screen.getByRole("button", { name: "View my membership" }).closest("form")!);
+  });
+  expect(screen.getByText("Restricted purchase form")).toBeDefined();
+  expect(window.location.hash).toBe("#renew");
+  const loginCall = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === "POST");
+  expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({ phone: "09171234567" });
+});
 it("shows pending visitors their limited payment status while withholding membership purchases", async () => {
   verified = false; await login();
   expect(screen.getByText("Latest payment")).toBeTruthy(); expect(screen.getByText("Pending review", { exact: true })).toBeTruthy();

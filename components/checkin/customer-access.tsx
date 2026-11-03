@@ -4,32 +4,51 @@ import { paymentLabel } from "@/lib/finance/payment-methods";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import { PromotionBanner } from "./promotion-banner";
 import styles from "./customer-access.module.css";
 interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
-export function CustomerAccess() {
+export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: boolean } = {}) {
   const [phone, setPhone] = useState(""), [summary, setSummary] = useState<Summary | null>(null);
-  const [error, setError] = useState(""), [busy, setBusy] = useState(false);
+  const [error, setError] = useState(""), [busy, setBusy] = useState(membershipSetup);
   useEffect(() => {
     if (!summary) return;
     const timer = window.setTimeout(() => { setSummary(null); setPhone(""); setError("Your session expired. Re-enter your phone number to continue."); }, Math.max(0, summary.expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [summary]);
-  async function login(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
+  const openAccount = useCallback(async (number: string, membership: boolean) => {
+    setBusy(true); setError("");
     try {
-      const response = await fetch("/api/customer/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
+      const response = await fetch("/api/customer/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: number }), signal: AbortSignal.timeout(20_000) });
       if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait before trying again." : "Could not access this account. Check the number or ask the gym administrator.");
-      const details = await fetch("/api/customer/session");
+      const details = await fetch("/api/customer/session", { signal: AbortSignal.timeout(20_000) });
       if (!details.ok) throw new Error("Your session could not be confirmed. Try again.");
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#overview`);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${membership ? "#renew" : "#overview"}`);
       setSummary(await details.json());
     } catch (e) { setError(e instanceof Error ? e.message : "Could not access your account."); }
     finally { setBusy(false); }
+  }, []);
+  useEffect(() => {
+    if (!membershipSetup) return;
+    const controller = new AbortController();
+    fetch("/api/customer/session", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) })
+      .then(async response => {
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error("Could not confirm your session. Re-enter your phone number to continue.");
+        const details: Summary = await response.json();
+        if (controller.signal.aborted) return;
+        if (!window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#renew`);
+        setSummary(details);
+      })
+      .catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Could not confirm your session. Please retry."); })
+      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
+    return () => controller.abort();
+  }, [membershipSetup]);
+  function login(event: FormEvent) {
+    event.preventDefault(); void openAccount(phone, membershipSetup);
   }
   async function logout() {
     setBusy(true); setError("");
@@ -47,7 +66,7 @@ export function CustomerAccess() {
     const fresh: Summary = await response.json();
     setSummary(current => current?.expiresAt === sessionExpiry ? fresh : current);
   }
-  return <main className={`${styles.portal} ${styles.memberPortal} ${!summary ? styles.entryPortal : ""}`}>
+  return <main className={`${styles.portal} ${styles.memberPortal} ${!summary ? styles.entryPortal : ""} ${membershipSetup ? styles.checkinPortal : ""}`}>
     <header className={styles.header}>
       <Link href={summary ? "#overview" : "/checkin"} className={styles.brand} aria-label={summary ? "Tibay Gym member overview" : "Tibay Gym check-in"}><Image src="/tibay-gym-mark-transparent.svg" alt="" width={60} height={42} className={styles.brandMark} /><span>TIBAY <span className={styles.brandAccent}>GYM</span><small>Member portal</small></span></Link>
       {summary ? <div className={styles.headerActions}><Link href="/checkin" className={styles.backLink}>Check-in ↗</Link><button className={styles.textButton} aria-label="Sign out / use a different number" disabled={busy} onClick={() => void logout()}>{busy ? "Signing out…" : "Sign out ↗"}</button></div> : <Link href="/checkin" className={styles.backLink} aria-label="Back to check-in">Check-in ↗</Link>}
@@ -63,10 +82,10 @@ export function CustomerAccess() {
           <button className={styles.primaryButton} disabled={busy}>{busy ? "Opening your profile…" : "View my membership"}<span aria-hidden="true">→</span></button>
         </form><p className={styles.privacyNote}>Limited profile access for 30 minutes. Membership changes take effect after gym approval.</p>
       </section>
-      <PromotionBanner />
+      {!membershipSetup && <PromotionBanner />}
     </div> : <div className={styles.memberWorkspace}>
       {error && <p className={styles.error} role="alert">{error}</p>}
-      <CustomerPurchases summary={summary} onRefreshMembership={refreshMembership} />
+      <CustomerPurchases summary={summary} onRefreshMembership={refreshMembership} checkin={membershipSetup} />
       <footer className={styles.sessionFooter}>30-minute access session</footer>
     </div>}
   </main>;
@@ -74,7 +93,7 @@ export function CustomerAccess() {
 const titleCase = (value: string) => value.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
 const formatDate = (value: number) => new Date(value).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: value % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(value / 100);
-interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; paymentAccountSnapshot?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
+interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; kind?: import("@/lib/finance/contracts").ChargeKind | null; paymentAccountSnapshot?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
 type PortalScreen = "overview" | "renew" | "history";
 const portalDestinations: { screen: PortalScreen; label: string; icon: string }[] = [
   { screen: "overview", label: "Overview", icon: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" },
@@ -84,9 +103,10 @@ const portalDestinations: { screen: PortalScreen; label: string; icon: string }[
 function screenFromHash(): PortalScreen {
   return window.location.hash === "#renew" ? "renew" : window.location.hash === "#history" ? "history" : "overview";
 }
-function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary; onRefreshMembership(): Promise<void> }) {
+function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { summary: Summary; onRefreshMembership(): Promise<void>; checkin?: boolean }) {
   const [screen, setScreen] = useState<PortalScreen>("overview");
   const [payments, setPayments] = useState<CustomerPayment[]>([]);
+  const [pendingMembership, setPendingMembership] = useState<CustomerPayment | null>(null);
   const [history, setHistory] = useState<CustomerPayment[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -131,7 +151,7 @@ function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary;
     fetch("/api/customer/payments", { signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error("Could not load payment status. Re-enter your phone number if the session expired.");
       const result = await response.json();
-      if (!controller.signal.aborted && requestVersion.current === 0) { setPayments(result.requests); setHistory(result.requests); setCursor(result.nextCursor); }
+      if (!controller.signal.aborted && requestVersion.current === 0) { setPayments(result.requests); setHistory(result.requests); setCursor(result.nextCursor); setPendingMembership(result.pendingMembership ?? null); }
     }).catch(reason => { if (!controller.signal.aborted) setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { mounted.current = false; controller.abort(); };
@@ -154,7 +174,7 @@ function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary;
       if (!mounted.current || version !== requestVersion.current) return;
       setHistory(result.requests); setCursor(result.nextCursor); setBrowsingOlder(Boolean(next));
       setLoading(false);
-      if (!next) { setPayments(result.requests); setUpdatedAt(Date.now()); await onRefreshMembership(); }
+      if (!next) { setPayments(result.requests); setPendingMembership(result.pendingMembership ?? null); setUpdatedAt(Date.now()); await onRefreshMembership(); }
     } catch (reason) {
       if (mounted.current && version === requestVersion.current) setError(reason instanceof Error ? reason.message : "Could not load payment status.");
     } finally {
@@ -198,6 +218,7 @@ function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary;
       <h1 ref={heading} tabIndex={-1}>{title}</h1>
     </div>
     {confirmation && <p className={styles.confirmation} role="status">{confirmation}</p>}
+    {checkin && screen === "overview" && pendingMembership && <p className={styles.pendingNote}>Membership-covered check-in is available after admin payment approval. Please approach the front desk. No daily charge or attendance was created by this membership request.</p>}
     {screen === "overview" && <>
       <section className={styles.memberPass} aria-label="Membership card" data-status={isMember ? summary.status ?? "review" : "guest"}>
         <span className={styles.passWatermark} aria-hidden="true">TG</span>
@@ -210,8 +231,16 @@ function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary;
       {allowPurchases && <a href="#renew" className={`${styles.primaryButton} ${styles.membershipCta}`} onClick={event => { event.preventDefault(); setPrevious(undefined); setConfirmation(""); navigate("renew"); }}><span aria-hidden="true">↻</span>{membershipAction}<span aria-hidden="true">›</span></a>}
       {(!isMember || summary.status !== "active") && <Link className={styles.actionLink} href="/checkin"><span>Daily check-in<small>Training for the day? Choose a daily session at check-in.</small></span><span aria-hidden="true">→</span></Link>}
     </>}
-    {screen !== "history" && !allowPurchases && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Ask the gym administrator to verify your profile before requesting a membership. You can still view your payment status and history.</p></div></div>}
+    {screen !== "history" && !allowPurchases && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Please ask the front desk to verify your account to start membership. You can still view your payment status and history.</p>
+      {checkin && <Link href="/checkin" className={styles.backLink}>Choose a daily session →</Link>}</div></div>}
     {screen === "renew" && allowPurchases && <>
+      {checkin && !previous && loading ? <LoadingSkeleton label="Checking existing membership requests…" /> : checkin && !previous && error ?
+        <button className={styles.secondaryButton} disabled={refreshing} onClick={() => void load()}>Retry payment status</button> : checkin && !previous && pendingMembership ?
+        <section className={styles.paymentPanel} aria-label="Pending membership request"><h2>Membership pending approval</h2>
+          {paymentRow(pendingMembership, false)}
+          <p className={styles.pendingNote}>Please approach the front desk to confirm your payment. Membership-covered check-in is available after approval. No daily charge or attendance is created here.</p>
+          <button className={styles.secondaryButton} disabled={refreshing} onClick={() => void load()}>{refreshing ? "Refreshing…" : "Refresh payment status"}</button>
+        </section> :
       <div id="customer-purchase" className={styles.purchasePanel}>
         <PurchaseForm portal heading="Review your request" key={previous ?? "new"} previousRequestId={previous} onSubmitted={() => {
           setPrevious(undefined);
@@ -219,7 +248,7 @@ function CustomerPurchases({ summary, onRefreshMembership }: { summary: Summary;
           navigate("overview");
           void load();
         }} />
-      </div>
+      </div>}
       {previous && <button className={styles.textButton} onClick={() => { setPrevious(undefined); navigate(returnScreen.current); }}>Cancel replacement</button>}
     </>}
     {(screen === "overview" || screen === "history") && <section className={screen === "history" ? styles.historyPanel : styles.paymentPanel} data-attention={screen === "overview" && needsAttention ? "true" : undefined} aria-labelledby="payments-title">

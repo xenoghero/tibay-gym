@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 const mocks = vi.hoisted(() => ({ api: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/attendance-api", () => ({ attendanceApi: mocks.api }));
 import { CheckInFlow } from "./checkin-flow";
 

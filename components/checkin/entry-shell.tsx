@@ -5,7 +5,7 @@ import { PromotionBanner } from "./promotion-banner";
 
 export function EntryShell({ children, mode = "welcome", name, phone, amount }: {
   children: ReactNode;
-  mode?: "welcome" | "register" | "phone" | "payment" | "complete";
+  mode?: "welcome" | "register" | "phone" | "choice" | "payment" | "complete";
   name?: string;
   phone?: string;
   amount?: number | null;
@@ -14,8 +14,8 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
   return <main className={styles.page}>
     <div className={styles.frame}>
       <div className={styles.workspace} data-mode={mode}>
-        <header className={styles.brand}><BrandLogo sidebar tagline="LAKAS.TIBAY.HUSAY" /><span>YOUR NEXT SESSION STARTS HERE</span></header>
-        {mode !== "welcome" && <aside className={styles.overview} aria-label="Visit overview">
+        <header className={styles.brand}><BrandLogo sidebar tagline="LAKAS.TIBAY.HUSAY" /></header>
+        {mode !== "welcome" && mode !== "choice" && <aside className={styles.overview} aria-label="Visit overview">
           <span className={styles.eyebrow}>TIBAY GYM · WELCOME IN</span>
           <h2>{mode === "complete" ? "All set.\nKeep showing up." : registering ? "Your first step.\nA stronger you." : "Show up.\nGet stronger."}</h2>
           <p>{registering ? "Create your profile today. Check in with your phone number whenever you’re ready to train." : "A quick check-in, then it’s time to train. Use your phone number to record your visit."}</p>
@@ -27,7 +27,7 @@ export function EntryShell({ children, mode = "welcome", name, phone, amount }: 
           <div className={styles.help}><span className={styles.helpMark} aria-hidden="true">i</span><div><strong>{registering ? "No payment to create an account" : "Need a hand?"}</strong><p>{registering ? "Registration saves your profile and does not record a visit." : "Ask the front desk if you need help with your profile, membership, or payment."}</p></div></div>
         </aside>}
         <section className={styles.content} aria-label={registering ? "Registration" : "Check-in desk"}>
-          {mode !== "welcome" && <div className={styles.step}><span>{mode === "complete" ? "✓" : registering ? "01" : mode === "payment" ? "02" : "01"}</span>{mode === "complete" ? "Confirmation" : registering ? "Your profile" : mode === "payment" ? "Session & payment" : "Find your profile"}</div>}
+          {mode !== "welcome" && mode !== "choice" && <div className={styles.step}><span>{mode === "complete" ? "✓" : registering ? "01" : mode === "payment" ? "02" : "01"}</span>{mode === "complete" ? "Confirmation" : registering ? "Your profile" : mode === "payment" ? "Session & payment" : "Find your profile"}</div>}
           {children}
         </section>
       </div>

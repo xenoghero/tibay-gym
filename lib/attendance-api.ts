@@ -50,8 +50,8 @@ export async function attendanceApi<T>(path: string, body: unknown, admin = fals
 }
 
 export interface QrRequest { eventId: string; requestedAt: number; personId?: string; guest?: { phone: string; name: string; address: string } & Partial<import("./registration").RegistrationFields>; intent?: "attendance" | "checkout"; expectedLogId?: string; paymentMethod?: PaymentMethod; paymentRevision?: number; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number }
-export interface QrLookupPerson { id: string; name: string; type: "member" | "guest"; status: "active" | "expired" | null; membershipExpiryMs: number | null; visitCount: number; unverified?: boolean }
-export interface DailyRates { studentDailyMinor: number; regularDailyMinor: number; gcashAvailable?: boolean; paymentRevision?: number; paymentAccounts?: import("./finance/payment-methods").PaymentAccount[] }
+export interface QrLookupPerson { id: string; name: string; type: "member" | "guest"; status: "active" | "expired" | null; membershipExpiryMs: number | null; visitCount: number; unverified?: boolean; rateCategory?: import("./finance/contracts").RateCategory | null }
+export interface DailyRates { studentDailyMinor: number; regularDailyMinor: number; studentMonthlyMinor?: number | null; regularMonthlyMinor?: number | null; gcashAvailable?: boolean; paymentRevision?: number; paymentAccounts?: import("./finance/payment-methods").PaymentAccount[] }
 export interface DailyPaymentDue { amountMinor: number | null; expiredMember: boolean; gcashAvailable: boolean; paymentRevision?: number; paymentAccounts?: import("./finance/payment-methods").PaymentAccount[] }
 export interface QrLookupResponse { person: QrLookupPerson | null; expectedLogId?: string | null; dailyRates?: DailyRates; paymentDue?: DailyPaymentDue }
 export interface QrResponse { action: "checked-in" | "checked-out"; personId: string; checkInAtMs: number; visitCount: number; unverified?: boolean }

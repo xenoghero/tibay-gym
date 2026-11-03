@@ -6,7 +6,9 @@ import type { PaymentAccount } from "@/lib/finance/payment-methods";
 import type { PaymentMethod } from "@/lib/finance/payment-methods";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import { EntryShell } from "./entry-shell";
+import { GuestSessionChoice } from "./guest-session-choice";
 import styles from "./entry.module.css";
 import { ImageUpload } from "./image-upload";
 import { Timestamp } from "firebase/firestore";
@@ -26,9 +28,9 @@ import type { DiscountQuote } from "@/lib/finance/vouchers";
 
 // Attendance requests go through the backend, with no page-load cleanup.
 const C = {
-  ink: "#0d0d0d", paper: "#ffffff", panel: "#faf8f0", muted: "#6f6f6d",
-  line: "#e7e2d2", accent: "#ffcc00", accentText: "#806000", onAccent: "#171400",
-  accentSoft: "rgba(255, 204, 0, 0.14)", green: "#1c6b3c", greenSoft: "rgba(28, 107, 60, 0.10)",
+  ink: "var(--rs-fg)", paper: "#1c1f16", panel: "var(--rs-panel)", muted: "var(--rs-muted)",
+  line: "var(--rs-line)", accent: "var(--rs-accent)", accentText: "var(--rs-accent-text)", onAccent: "var(--rs-on-accent)",
+  accentSoft: "var(--rs-accent-soft)", green: "#b9e4c3", greenSoft: "rgba(94, 166, 113, 0.16)",
 } as const;
 const displayFont = "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
 const bodyFont = "var(--font-geist-sans), system-ui, sans-serif";
@@ -46,6 +48,7 @@ interface Receipt {
 const ACCIDENTAL_RESCAN_MS = 15 * 1000;
 
 export function CheckInFlow({ registrationIntent = false, onBack }: { registrationIntent?: boolean; onBack?: () => void }) {
+  const router = useRouter();
   const [attempt] = useState(() => new CheckinAttempt({
     lookup: body => attendanceApi<QrLookupResponse>("/api/attendance/lookup", body),
     scan: body => attendanceApi<QrResponse>("/api/attendance/scan", body),
@@ -68,6 +71,9 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [registeredUnverified, setRegisteredUnverified] = useState(true);
   const [registrationPending, setRegistrationPending] = useState(false);
   const [checkinRequested, setCheckinRequested] = useState(false);
+  const [sessionChoice, setSessionChoice] = useState<"choose" | "daily">("choose");
+  const [membershipOpening, setMembershipOpening] = useState(false), [membershipError, setMembershipError] = useState("");
+  const membershipInFlight = useRef(false);
   const registrationRequest = useRef<Record<string, unknown> | null>(null);
   const registrationInFlight = useRef(false);
   const [registrationRetryAt, setRegistrationRetryAt] = useState<number | null>(null);
@@ -101,6 +107,8 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     setPaymentMethod("");
     setReceiptFile(null); setReceiptKey("");
     setVoucher(null);
+    setSessionChoice("choose");
+    setMembershipError("");
     setRegistered(false); setCheckinRequested(false); setRegistrationPending(false); registrationRequest.current = null;
   }
   async function createAccount() {
@@ -144,7 +152,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     if (registering) {
       void createAccount();
     }
-    else { setVoucher(null); void attempt.submitPhone(phone, "attendance"); }
+    else { setVoucher(null); setSessionChoice("choose"); void attempt.submitPhone(phone, "attendance"); }
   }
   async function applyVoucher(code: string) {
     setVoucherBusy(true);
@@ -157,10 +165,27 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
       setVoucher(result); setReceiptFile(null); setReceiptKey("");
     } finally { setVoucherBusy(false); }
   }
+  async function openMembership() {
+    if (membershipInFlight.current) return;
+    membershipInFlight.current = true; setMembershipOpening(true); setMembershipError("");
+    try {
+      const response = await fetch("/api/customer/session", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: state.phone }), signal: AbortSignal.timeout(20_000) });
+      if (!response.ok) {
+        setMembershipError(response.status === 429 ? "Too many attempts. Please wait before trying again." : "Could not open membership payment setup. Please retry or ask the front desk.");
+        setMembershipOpening(false); membershipInFlight.current = false; return;
+      }
+      router.push("/members#renew");
+    } catch {
+      setMembershipError("Could not open membership payment setup. Check your connection and retry.");
+      setMembershipOpening(false); membershipInFlight.current = false;
+    }
+  }
   const progress = registrationBusy ? "Creating your account…" : state.status === "lookup-pending" ? "Looking up your phone number…"
     : state.status === "upload-pending" ? "Saving your private receipt…"
     : state.status === "attendance-pending" ? "Confirming attendance…" : "";
   const person = state.person;
+  const choosingSession = state.stage === "payment" && person?.type === "guest" && state.paymentDue != null && sessionChoice !== "daily" && state.status !== "confirmed";
   const membershipExpiry = person?.membershipExpiryMs != null ? Timestamp.fromMillis(person.membershipExpiryMs) : null;
   const receipt: Receipt | null = state.result?.action === "checked-in" ? {
     name: state.displayName, type: person?.type ?? "guest",
@@ -170,9 +195,13 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   } : null;
 
   return (
-    <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : state.stage === "payment" ? "payment" : "phone"}
+    <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : choosingSession ? "choice" : state.stage === "payment" ? "payment" : "phone"}
       name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}>
-        {!registered && state.status !== "confirmed" && (
+        {choosingSession && person && state.paymentDue && <GuestSessionChoice person={person} rates={state.dailyRates} paymentDue={state.paymentDue}
+          busy={membershipOpening} error={membershipError} onDaily={() => setSessionChoice("daily")}
+          onMembership={() => void openMembership()}
+          onBack={reset} onWelcome={onBack ? () => { reset(); onBack(); } : undefined} />}
+        {!registered && !choosingSession && state.status !== "confirmed" && (
           <form onSubmit={submit} aria-busy={state.busy || registrationBusy}>
             <h1 style={headingStyle}>{registering ? "Create account" : state.stage === "payment" ? "Confirm your visit" : "Check in"}</h1>
             <p style={leadStyle}>{registering ? "No payment required. Create your gym profile." : state.stage === "payment" ? "Choose your payment method to complete your check-in." : "Enter your phone number to record your attendance."}</p>
@@ -235,6 +264,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
             {(state.stage === "name" || state.stage === "payment") && (
               <button type="button" onClick={reset} style={linkButton} disabled={locked}>← Use a different number</button>
             )}
+            {state.stage === "payment" && person?.type === "guest" && !locked && <button type="button" onClick={() => setSessionChoice("choose")} style={linkButton}>← Back to session choices</button>}
             {onBack && <button type="button" onClick={onBack} style={linkButton} disabled={locked}>← Back to welcome</button>}
           </form>
         )}
@@ -243,6 +273,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
           <p style={leadStyle}>{name}, {registeredUnverified ? "your account is awaiting admin verification." : "your account is verified and ready."} You can check in with your phone number whenever you are ready.</p>
           <button type="button" style={primaryButton(false)} onClick={() => {
             attempt.reset(); setRegistered(false); setCheckinRequested(true); setRegistrationError("");
+            setSessionChoice("choose"); void attempt.submitPhone(phone, "attendance");
           }}>Check in now</button>
           <button type="button" style={linkButton} onClick={() => { reset(); onBack?.(); }}>Done</button>
           <OptionalPhoto phone={phone} />

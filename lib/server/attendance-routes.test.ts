@@ -10,6 +10,8 @@ vi.mock("./rfid/rate-limit", () => ({ throttle: mocks.throttle }));
 vi.mock("./public-rate-limit", () => ({ publicCaller: () => "test-caller", publicRateLimiter: { consume: mocks.publicLimit } }));
 vi.mock("./attendance", () => ({ scanAttendance: mocks.scan }));
 vi.mock("./attendance-admin", () => ({ sweepStaleSessions: mocks.sweep }));
+vi.mock("./receipt-store", () => ({ receiptsAvailable: async () => false }));
+vi.mock("./payment-methods", () => ({ customerPaymentOptions: async () => ({ paymentAccounts: [], paymentRevision: 0 }) }));
 import { POST as lookup } from "@/app/api/attendance/lookup/route";
 import { POST as scan } from "@/app/api/attendance/scan/route";
 import { POST as sweep, GET as scheduledSweep } from "@/app/api/attendance/auto-close/route";
@@ -76,7 +78,7 @@ it("lookup preserves exact phone matching and allowlists the person response", a
   expect(response.status).toBe(200);
   expect(mocks.query).toHaveBeenCalledWith("phone", "==", "09123456789");
   expect(await response.json()).toEqual({ person: { id: "p1", name: "Member", type: "member", status: "active",
-    membershipExpiryMs: now + 1000, visitCount: 3 } });
+    membershipExpiryMs: now + 1000, visitCount: 3, rateCategory: null } });
   expect(mocks.publicLimit).toHaveBeenCalledWith("test-caller", "lookup");
 });
 it("lookup returns no match and rejects deleted people without leaking their fields", async () => {
@@ -84,6 +86,30 @@ it("lookup returns no match and rejects deleted people without leaking their fie
   expect(await (await lookup(request({ phone: "09123456789" }))).json()).toEqual({ person: null });
   mocks.found = true; mocks.person.deletingAt = stamp(now);
   expect((await lookup(request({ phone: "09123456789" }))).status).toBe(409);
+});
+it("returns configured monthly and daily rates plus the guest category without creating a charge", async () => {
+  mocks.person.type = "guest"; mocks.person.rateCategory = "student";
+  mocks.docs.delete("attendanceState/p1");
+  mocks.docs.set("gymSettings/finance", { financialCutoverAt: now - 1000, rateRevision: 3,
+    studentDailyMinor: 6500, regularDailyMinor: 8000, studentMonthlyMinor: 65000, regularMonthlyMinor: 75000 });
+  const response = await lookup(request({ phone: "09123456789" }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ person: { type: "guest", rateCategory: "student" },
+    dailyRates: { studentDailyMinor: 6500, regularDailyMinor: 8000, studentMonthlyMinor: 65000, regularMonthlyMinor: 75000 },
+    paymentDue: { amountMinor: 6500, expiredMember: false } });
+  expect(mocks.scan).not.toHaveBeenCalled();
+});
+it("preserves unset monthly pricing and skips the daily choice for an already-charged visit", async () => {
+  mocks.person.type = "guest"; mocks.person.rateCategory = "regular";
+  mocks.docs.set("gymSettings/finance", { financialCutoverAt: now - 1000, rateRevision: 1,
+    studentDailyMinor: 6000, regularDailyMinor: 7000, studentMonthlyMinor: null, regularMonthlyMinor: null });
+  const first = await (await lookup(request({ phone: "09123456789" }))).json();
+  expect(first.dailyRates).toMatchObject({ studentMonthlyMinor: null, regularMonthlyMinor: null });
+  const { dailyChargeId } = await import("./daily-charges");
+  mocks.docs.set(`charges/${dailyChargeId("p1", now)}`, { personId: "p1" });
+  const repeat = await (await lookup(request({ phone: "09123456789" }))).json();
+  expect(repeat.person.rateCategory).toBe("regular");
+  expect(repeat.paymentDue).toBeUndefined();
 });
 it("checkout-only lookup is supplies an expected session", async () => {
   expect(await (await lookup(request({ phone: "09123456789", intent: "checkout" }))).json()).toMatchObject({
