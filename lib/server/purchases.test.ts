@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from "@/lib/finance/rules";
 import type { PaymentAccount } from "@/lib/finance/payment-methods";
 import { voucherFixture } from "@/tests/voucher-fixture";
 const NOW = Date.parse("2026-10-25T03:00:00Z");
-const bank: PaymentAccount = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", enabled: true, qrImage: null };
+const gcash: PaymentAccount = { id: "account_gcash001", kind: "gcash", name: "GCash", accountHolder: "Tibay Gym", accountNumber: "0012345678", enabled: true, qrImage: null };
 let sequence = 0;
 const rows = (name: string) => [...state.store!.data].filter(([path]) => path.startsWith(`${name}/`));
 beforeEach(() => {
@@ -19,22 +19,22 @@ beforeEach(() => {
   state.store.data.set("gymSettings/finance", { ...DEFAULT_SETTINGS, financialCutoverAt: NOW - 1000, studentMonthlyMinor: 100000, regularMonthlyMinor: 120000 });
 });
 afterEach(() => vi.useRealTimers());
-it("binds a bank receipt to its account and requires reviewed evidence before renewal approval", async () => {
-  state.store!.data.set("gymSettings/payments", { revision: 1, accounts: [bank] });
+it("binds a GCash receipt to its account and requires reviewed evidence before renewal approval", async () => {
+  state.store!.data.set("gymSettings/payments", { revision: 1, accounts: [gcash] });
   const operation = "bank-renewal-operation-1", quote = await getPurchaseQuote("p1");
   const receiptId = "a".repeat(64), receiptToken = "b".repeat(43), id = purchaseRequestId("p1", operation);
   state.store!.data.set(`receiptIntents/${receiptId}`, { state: "ready", personId: "p1", chargeId: purchaseChargeId("p1", operation), amountMinor: quote.amountMinor,
-    paymentRequestId: id, paymentRevision: 1, paymentMethod: bank.id, tokenHash: createHash("sha256").update(receiptToken).digest("hex"), expiresAt: NOW + 10000, linked: false });
-  const body = { operationId: operation, quoteToken: quote.quoteToken, method: bank.id, paymentRevision: 1, receiptId, receiptToken };
+    paymentRequestId: id, paymentRevision: 1, paymentMethod: gcash.id, tokenHash: createHash("sha256").update(receiptToken).digest("hex"), expiresAt: NOW + 10000, linked: false });
+  const body = { operationId: operation, quoteToken: quote.quoteToken, method: gcash.id, paymentRevision: 1, receiptId, receiptToken };
   await expect(submitPurchase("customer:p1", "p1", { ...body, paymentRevision: 0 })).rejects.toMatchObject({ code: "payment-method-unavailable" });
   await submitPurchase("customer:p1", "p1", body);
-  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "pending", method: bank.id, paymentAccountSnapshot: { name: bank.name, accountNumber: bank.accountNumber } });
+  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "pending", method: gcash.id, paymentAccountSnapshot: { name: gcash.name, accountNumber: gcash.accountNumber } });
   await expect(decision(id)).rejects.toMatchObject({ code: "receipt-review-required" });
-  state.store!.data.set(`receiptReviews/${receiptId}`, { confirmedReference: "BPI-00AB1234", confirmedAmountMinor: quote.amountMinor, reviewRevision: 1 });
-  state.store!.data.set("gymSettings/payments", { revision: 2, accounts: [{ ...bank, enabled: false, name: "Old bank" }] });
+  state.store!.data.set(`receiptReviews/${receiptId}`, { confirmedReference: "1234567890123", confirmedAmountMinor: quote.amountMinor, reviewRevision: 1 });
+  state.store!.data.set("gymSettings/payments", { revision: 2, accounts: [{ ...gcash, enabled: false, name: "Old GCash details" }] });
   await decision(id);
-  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "approved", gcashReferenceSnapshot: "BPI00AB1234", paymentAccountSnapshot: { name: "BPI savings" } });
-  expect(rows("approvedPaymentReferences")).toHaveLength(1);
+  expect(state.store!.data.get(`paymentRequests/${id}`)).toMatchObject({ status: "approved", gcashReferenceSnapshot: "1234567890123", paymentAccountSnapshot: { name: "GCash" } });
+  expect(rows("approvedGcashReferences")).toHaveLength(1);
 });
 async function request(method: "cash" | "gcash" = "cash", extra = {}) {
   const quote = await getPurchaseQuote("p1"), body = { operationId: `membership-operation-${++sequence}`, quoteToken: quote.quoteToken, method, ...extra };

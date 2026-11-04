@@ -58,7 +58,9 @@ it.each([ ["student", "cash", 6000, 100000], ["regular", "gcash", 7000, 120000] 
   const [purchase, retry] = await Promise.all([submitPurchase(`customer:${personId}`, personId, payload), submitPurchase(`customer:${personId}`, personId, payload)]);
   expect(purchase).toEqual(retry); expect(rows("charges")).toHaveLength(2);
   expect(state.store!.data.get(`persons/${personId}`)?.type).toBe("guest");
-  expect((await (await customerPayments(customer(token))).json()).requests.find((row: { id: string }) => row.id === purchase.id).status).toBe("pending");
+  const pendingStatus = await (await customerPayments(customer(token))).json();
+  expect(pendingStatus.requests.find((row: { id: string }) => row.id === purchase.id)).toMatchObject({ status: "pending", kind: "new_membership" });
+  expect(pendingStatus.pendingMembership).toMatchObject({ id: purchase.id, status: "pending", kind: "new_membership" });
   if (method === "gcash") {
     await expect(decision(purchase.id)).rejects.toMatchObject({ code: "receipt-review-required" });
     await correctReceipt("admin", { receiptId, operationId: "correction-operation-0001", reference: "0001234567890", amountMinor: monthlyAmount, expectedRevision: 0, reason: "Synthetic evidence reviewed" });
@@ -67,7 +69,9 @@ it.each([ ["student", "cash", 6000, 100000], ["regular", "gcash", 7000, 120000] 
   await Promise.all([decision(purchase.id), decision(purchase.id)]);
   expect(rows("statusChanges")).toHaveLength(1); expect(rows("weightEntries")[0][1].weightKg).toBe(65.5);
   expect(state.store!.data.get(`persons/${personId}`)).toMatchObject({ type: "member", status: "active", visitCount: 1 });
-  expect((await (await customerPayments(customer(token))).json()).requests.find((row: { id: string }) => row.id === purchase.id).status).toBe("approved");
+  const approvedStatus = await (await customerPayments(customer(token))).json();
+  expect(approvedStatus.requests.find((row: { id: string }) => row.id === purchase.id).status).toBe("approved");
+  expect(approvedStatus.pendingMembership).toBeNull();
   vi.setSystemTime(NOW + 30_000);
   expect((await scan(request({ eventId: `checkout-event-${category}`, requestedAt: Date.now(), personId }))).status).toBe(200);
   vi.setSystemTime(NOW + 60_000);

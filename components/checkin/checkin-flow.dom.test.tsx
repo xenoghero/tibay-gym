@@ -6,6 +6,10 @@ import { PublicEntry } from "./public-entry";
 
 // Keep image/framework resources out of the request trace; attendance code is real.
 vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => <span role="img" aria-label={alt} /> }));
+// Promotional reads are tested independently; this trace is attendance requests only.
+vi.mock("./promotion-banner", () => ({ PromotionBanner: () => <aside aria-label="Gym promotions">Current gym promotions</aside> }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 let clock: number;
 let loseScan: boolean;
 let lookupMissing: boolean;
@@ -59,7 +63,7 @@ it("Create Account opens all profile fields directly without renewal or payment 
   expect(screen.queryByText("Renewal and payment status")).toBeNull();
   expect(screen.getByRole("group", { name: "Rate category" })).toBeDefined();
   expect(fetchMock).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /Back to welcome/ }));
+  fireEvent.click(screen.getByRole("link", { name: "Tibay Gym welcome" }));
   fireEvent.click(screen.getByRole("button", { name: "Check In" }));
   expect(screen.getByLabelText("Phone number")).toBeDefined();
   expect(screen.queryByLabelText("Name")).toBeNull();
@@ -78,9 +82,18 @@ it("creating an account saves it without a payment or attendance request", async
   expect(screen.getByText(/awaiting admin verification/i)).toBeDefined();
   expect(screen.queryByRole("group", { name: "Daily payment method" })).toBeNull();
   expect(screen.queryByText("Checked in")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Check in now" }));
-  expect(screen.getByLabelText<HTMLInputElement>("Phone number").value).toBe("09123456789");
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "pending-1", name: "Sam", type: "guest", rateCategory: "student", unverified: true, visitCount: 0 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, studentMonthlyMinor: 60000, regularMonthlyMinor: 70000 },
+    paymentDue: { amountMinor: 6000, expiredMember: false, gcashAvailable: false } }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Check in now" })); });
+  expect(screen.getByRole("heading", { name: /Want to be a new member/ })).toBeDefined();
+  expect(screen.getByRole("button", { name: /Daily session only/ }).textContent).toContain("₱60");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(String(fetchMock.mock.calls[1][0])).toBe("/api/attendance/lookup");
+  fireEvent.click(screen.getByRole("button", { name: "Step 1: Your number" }));
+  expect(screen.getByLabelText<HTMLInputElement>("Phone number").value).toBe("");
+  expect(screen.queryByLabelText("Name")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 it("shows an immediately verified account confirmation when verification is disabled", async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ personId: "official-1", unverified: false }));
@@ -110,6 +123,7 @@ it("daily payment keeps the amount visible and submits the selected cash method"
     paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: false },
   }));
   mount(); await submit();
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
   expect(screen.getAllByText("₱70.00")).toHaveLength(2);
   expect(screen.getByRole<HTMLInputElement>("radio", { name: /GCash/ }).disabled).toBe(true);
   expect(screen.queryByLabelText("GCash receipt")).toBeNull();
@@ -118,12 +132,97 @@ it("daily payment keeps the amount visible and submits the selected cash method"
   expect(outgoing.at(-1)).toMatchObject({ path: "/api/attendance/scan", body: { paymentMethod: "cash", expectedAmountMinor: 7000 } });
   expect(screen.getByText("Checked in")).toBeDefined();
 });
+it("highlights configured guest membership before any attendance or payment and carries identity into purchase", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({
+    person: { id: "p1", name: "Alex", type: "guest", rateCategory: "regular", visitCount: 2 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 8000, studentMonthlyMinor: 60000, regularMonthlyMinor: 75000 },
+    paymentDue: { amountMinor: 8000, expiredMember: false, gcashAvailable: false },
+  }));
+  mount(); await submit();
+  expect(screen.getByRole("heading", { name: /Want to be a new member/ })).toBeDefined();
+  expect(screen.getByText("₱750")).toBeDefined();
+  expect(screen.queryByText(/Your training/)).toBeNull();
+  expect(screen.queryByText("Choose how you want to train today.")).toBeNull();
+  expect(screen.getByText("Regular", { exact: true })).toBeDefined();
+  expect(screen.getByRole("button", { name: /Daily session only/ }).textContent).toContain("₱80");
+  expect(screen.queryByRole("group", { name: "Daily payment method" })).toBeNull();
+  expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual(["/api/attendance/lookup"]);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start membership/ })); });
+  expect(router.push).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert").textContent).toContain("Could not open membership payment setup");
+  expect(screen.getByRole("alert").textContent).not.toContain("Unexpected external");
+  fetchMock.mockResolvedValueOnce(Response.json({ expiresAt: NOW + 1800000 }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start membership/ })); });
+  const sessionCall = fetchMock.mock.calls.at(-1)!;
+  expect(String(sessionCall[0])).toBe("/api/customer/session");
+  expect(JSON.parse(String(sessionCall[1]?.body))).toEqual({ phone: "09123456789" });
+  expect(router.push).toHaveBeenCalledWith("/members#renew");
+  expect(screen.getByRole("status", { name: "Opening membership payment…" })).toBeDefined();
+  expect(fetchMock.mock.calls.some(call => String(call[0]) === "/api/attendance/scan")).toBe(false);
+});
+it("carries an unverified Student guest to members setup for server verification without recording attendance", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({
+    person: { id: "p1", name: "Alex", type: "guest", rateCategory: "student", unverified: true, visitCount: 0 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, studentMonthlyMinor: 60000, regularMonthlyMinor: 70000 },
+    paymentDue: { amountMinor: 6000, expiredMember: false, gcashAvailable: false },
+  }));
+  mount(); await submit();
+  expect(screen.getByText("₱600")).toBeDefined();
+  fetchMock.mockResolvedValueOnce(Response.json({ expiresAt: NOW + 1800000 }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start membership/ })); });
+  expect(router.push).toHaveBeenCalledWith("/members#renew");
+  expect(fetchMock.mock.calls.some(call => String(call[0]) === "/api/attendance/scan")).toBe(false);
+});
+it("daily choice can return to the membership choice before submitting attendance", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "p1", name: "Alex", type: "guest", rateCategory: "student" },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, studentMonthlyMinor: 60000, regularMonthlyMinor: 70000 },
+    paymentDue: { amountMinor: 6000, expiredMember: false, gcashAvailable: false } }));
+  mount(); await submit();
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
+  expect(screen.getByRole("group", { name: "Daily payment method" })).toBeDefined();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Step 2: Session" }));
+  expect(screen.getByRole("button", { name: /Start membership/ })).toBeDefined();
+});
+it("keeps daily sessions available when monthly pricing is unset", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({
+    person: { id: "p1", name: "Alex", type: "guest", rateCategory: "regular", visitCount: 0 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, studentMonthlyMinor: null, regularMonthlyMinor: null },
+    paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: false },
+  }));
+  mount(); await submit();
+  expect(screen.queryByRole("button", { name: /Start membership/ })).toBeNull();
+  expect(screen.getByText(/Ask the front desk about monthly membership pricing/)).toBeDefined();
+  expect(screen.getByRole("button", { name: /Daily session only/ }).textContent).toContain("₱70");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it("keeps expired member daily payment outside the guest membership choice", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({
+    person: { id: "p1", name: "Alex", type: "member", status: "expired", rateCategory: "regular", visitCount: 2 },
+    paymentDue: { amountMinor: 7000, expiredMember: true, gcashAvailable: false },
+  }));
+  mount(); await submit();
+  expect(screen.queryByRole("heading", { name: /Want to be a new member/ })).toBeNull();
+  expect(screen.getByRole("group", { name: "Daily payment method" })).toBeDefined();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it("keeps promotional banners on the first page and out of payment and registration", () => {
+  render(<PublicEntry />);
+  expect(screen.getByRole("complementary", { name: "Gym promotions" })).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Check In" }));
+  expect(screen.queryByRole("complementary", { name: "Gym promotions" })).toBeNull();
+  fireEvent.click(screen.getByRole("link", { name: "Tibay Gym welcome" }));
+  expect(screen.getByRole("complementary", { name: "Gym promotions" })).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
+  expect(screen.queryByRole("complementary", { name: "Gym promotions" })).toBeNull();
+});
 it("GCash reveals a required receipt and selecting cash removes that requirement", async () => {
   fetchMock.mockResolvedValueOnce(Response.json({
     person: { id: "p1", name: "Alex", type: "guest", visitCount: 2 },
     paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: true },
   }));
   mount(); await submit();
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
   fireEvent.click(screen.getByRole("radio", { name: /GCash/ }));
   expect(screen.getByLabelText<HTMLInputElement>("GCash receipt").required).toBe(true);
   expect(document.querySelector("form")!.checkValidity()).toBe(false);
@@ -131,19 +230,19 @@ it("GCash reveals a required receipt and selecting cash removes that requirement
   expect(screen.queryByLabelText("GCash receipt")).toBeNull();
   expect(document.querySelector("form")!.checkValidity()).toBe(true);
 });
-it("shows configured bank details and QR only for the selected daily payment account", async () => {
+it("shows configured GCash details and QR only for the selected daily payment account", async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "p1", name: "Alex", type: "guest", visitCount: 2 },
     paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: true, paymentRevision: 3, paymentAccounts: [
-      { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: "data:image/png;base64,AAAA", enabled: true },
+      { id: "account_bank0001", kind: "gcash", name: "GCash", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: "data:image/png;base64,AAAA", enabled: true },
     ] } }));
   mount(); await submit();
-  expect(screen.queryByRole("radio", { name: /GCash/ })).toBeNull();
-  fireEvent.click(screen.getByRole("radio", { name: /BPI savings/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /GCash/ }));
   expect(screen.getByText("0012345678")).toBeTruthy();
-  expect(screen.getByRole("img", { name: "BPI savings payment QR code" })).toBeTruthy();
+  expect(screen.getByRole("img", { name: "GCash payment QR code" })).toBeTruthy();
   expect(screen.getByLabelText<HTMLInputElement>("Payment receipt").required).toBe(true);
   fireEvent.click(screen.getByRole("radio", { name: /Cash Pay/ }));
-  expect(screen.queryByRole("img", { name: "BPI savings payment QR code" })).toBeNull();
+  expect(screen.queryByRole("img", { name: "GCash payment QR code" })).toBeNull();
   expect(screen.queryByLabelText("Payment receipt")).toBeNull();
 });
 it("an incomplete phone cannot submit attendance", async () => {
@@ -159,6 +258,40 @@ it("page mount/hydration starts no acquisition, attendance/sweep or direct Fires
   mount(); await act(async () => {});
   expect(fetchMock).not.toHaveBeenCalled(); expect(getPosition).not.toHaveBeenCalled();
   expect(screen.queryByRole("radio")).toBeNull();
+});
+it("places the compact progress strip above the form and keeps future steps disabled without a Welcome button", () => {
+  render(<PublicEntry />);
+  fireEvent.click(screen.getByRole("button", { name: "Check In" }));
+  const navigation = screen.getByRole("navigation", { name: "Check-in steps" });
+  expect(navigation.querySelector('[aria-current="step"]')?.textContent).toBe("1Number");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 2: Session" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 3: Payment" }).disabled).toBe(true);
+  expect(document.querySelector("header button")).toBeNull();
+  expect(screen.queryByRole("button", { name: /Back to welcome|different number|Back to session choices/ })).toBeNull();
+  const form = document.querySelector("form")!;
+  expect(navigation.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+it("locks completed steps and the brand link while a daily attendance result is uncertain", async () => {
+  fetchMock.mockResolvedValueOnce(Response.json({ person: { id: "p1", name: "Alex", type: "guest", rateCategory: "regular", visitCount: 2 },
+    dailyRates: { studentDailyMinor: 6000, regularDailyMinor: 7000, regularMonthlyMinor: 70000 },
+    paymentDue: { amountMinor: 7000, expiredMember: false, gcashAvailable: false } }));
+  render(<PublicEntry />);
+  fireEvent.click(screen.getByRole("button", { name: "Check In" }));
+  fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "09123456789" } });
+  await submit();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: /Daily session only/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /Cash Pay/ }));
+  loseScan = true; await submit();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 2: Session" }).disabled).toBe(true);
+  expect(screen.queryByRole("link", { name: "Tibay Gym welcome" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Step 1: Your number" }));
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await submit();
+  expect(outgoing[0].body).toEqual(outgoing[1].body);
+  expect(screen.getByText("Checked in")).toBeDefined();
 });
 it("known-person submission makes lookup + scan without requesting device position", async () => {
   mount(); await submit();
@@ -207,7 +340,7 @@ it("guest form delay preserves capture; uncertainty locks name, address and rese
   loseScan = true; await submit();
   expect(screen.getByLabelText<HTMLInputElement>("Name").disabled).toBe(true);
   expect(screen.getByLabelText<HTMLTextAreaElement>(/Address/).disabled).toBe(true);
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: /different number/ }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Step 1: Your number" }).disabled).toBe(true);
   expect(outgoing[1]).toMatchObject({ path: "/api/attendance/register", body: { phone: "09123456789", name: "Sam", address: "Street" } });
   await submit(); expect(outgoing[2].body).toEqual(outgoing[1].body);
   expect(screen.getByText("Account created")).toBeDefined();

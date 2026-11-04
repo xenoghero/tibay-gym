@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 const state = vi.hoisted(() => ({ store: null as ReturnType<typeof memoryFirestore> | null }));
 vi.mock("./firebase-admin", () => ({ adminDb: () => state.store!.db }));
 import { customerPaymentAccounts, getPaymentSettings, preparePaymentAccount, savePaymentSettings } from "./payment-methods";
-const bank = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
+const bank = { id: "account_bank0001", kind: "gcash", name: "GCash", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
 const body = () => ({ revision: 0, accounts: [bank], operationId: "payment-settings-operation-1" });
 beforeEach(() => { state.store = memoryFirestore(); });
 it("starts with cash only and exposes only enabled accounts", async () => {
@@ -16,7 +16,7 @@ it("starts with cash only and exposes only enabled accounts", async () => {
   const db = state.store!.db as unknown as Firestore;
   expect(await db.runTransaction(tx => preparePaymentAccount(tx, db, bank.id, 1))).toMatchObject({ name: bank.name, accountNumber: bank.accountNumber });
   await expect(db.runTransaction(tx => preparePaymentAccount(tx, db, bank.id, 0))).rejects.toMatchObject({ code: "payment-method-unavailable" });
-  await savePaymentSettings("admin", { revision: 1, accounts: [{ ...bank, enabled: false }], operationId: "payment-settings-operation-2" });
+  state.store!.data.set("gymSettings/payments", { revision: 2, accounts: [{ ...bank, enabled: false }] });
   expect(await customerPaymentAccounts()).toEqual([]);
   await expect(db.runTransaction(tx => preparePaymentAccount(tx, db, bank.id))).rejects.toMatchObject({ code: "payment-method-unavailable" });
   expect(await db.runTransaction(tx => preparePaymentAccount(tx, db, "cash"))).toBeNull();
@@ -26,7 +26,7 @@ it("replays saves safely and rejects stale or conflicting changes", async () => 
   expect(await savePaymentSettings("admin", body())).toEqual(first);
   await expect(savePaymentSettings("other", body())).rejects.toMatchObject({ code: "operation-conflict" });
   await expect(savePaymentSettings("admin", { ...body(), operationId: "payment-settings-operation-2" })).rejects.toMatchObject({ code: "settings-changed" });
-  await expect(savePaymentSettings("admin", { revision: 1, accounts: [], operationId: "payment-settings-operation-3" })).rejects.toMatchObject({ code: "disable-payment-account-instead" });
+  await expect(savePaymentSettings("admin", { revision: 1, accounts: [], operationId: "payment-settings-operation-3" })).rejects.toMatchObject({ code: "invalid-payment-accounts" });
 });
 it("rejects duplicate identities, missing details, oversized lists and invalid QR images", async () => {
   for (const accounts of [[bank, bank], [{ ...bank, accountHolder: " " }], Array.from({ length: 7 }, (_, n) => ({ ...bank, id: `account_bank000${n}` })), [{ ...bank, qrImage: "data:image/svg+xml;base64,AAAA" }]]) {
@@ -41,4 +41,23 @@ it("decodes and normalizes uploaded QR images before storing customer-visible PN
   expect(result.accounts[0].qrImage).toMatch(/^data:image\/png;base64,/);
   const metadata = await sharp(Buffer.from(result.accounts[0].qrImage!.split(",")[1], "base64")).metadata();
   expect(metadata).toMatchObject({ width: 20, height: 20, format: "png" });
+});
+
+it("exposes one GCash account and rejects removed methods even from stale clients", async () => {
+  const legacy = { ...bank, id: "account_legacy01", kind: "bank", name: "Old bank" };
+  state.store!.data.set("gymSettings/payments", { revision: 3, accounts: [legacy, bank, { ...bank, id: "account_gcash002" }] });
+  expect(await customerPaymentAccounts()).toEqual([bank]);
+  const db = state.store!.db as unknown as Firestore;
+  for (const method of [legacy.id, "account_gcash002"]) {
+    await expect(db.runTransaction(tx => preparePaymentAccount(tx, db, method, 3))).rejects.toMatchObject({ code: "payment-method-unavailable" });
+  }
+  const result = await savePaymentSettings("admin", { ...body(), revision: 3 });
+  expect(result.accounts).toEqual([bank]);
+});
+it("rejects extra wallets, bank methods, and replacement identities", async () => {
+  for (const kind of ["bank", "maya"]) {
+    await expect(savePaymentSettings("admin", { ...body(), accounts: [{ ...bank, kind }] })).rejects.toMatchObject({ code: "invalid-payment-accounts" });
+  }
+  await savePaymentSettings("admin", body());
+  await expect(savePaymentSettings("admin", { ...body(), revision: 1, operationId: "payment-settings-operation-2", accounts: [{ ...bank, id: "account_newgcash" }] })).rejects.toMatchObject({ code: "payment-account-identity-changed" });
 });

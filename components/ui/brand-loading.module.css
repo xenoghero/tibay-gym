@@ -5,6 +5,16 @@
   padding: 24px;
 }
 
+.fullscreen {
+  --rs-fg: #f7f7ee;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #12130f;
+  color: #f7f7ee;
+  color-scheme: dark;
+}
+
 .logo {
   animation: breathe 1.2s ease-in-out infinite;
 }
@@ -19,13 +29,13 @@
 }
 
 @media (max-width: 860px) {
-  .loading {
+  .loading:not(.fullscreen) {
     min-height: calc(100dvh - 68px - env(safe-area-inset-bottom));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Preserve cycle events without visible motion so the guard still resolves. */
+  /* Keep cycle events for the dashboard guard without visible motion. */
   .logo { animation-name: rest; }
 }
 

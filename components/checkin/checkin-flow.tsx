@@ -1,4 +1,5 @@
 "use client";
+import { availablePaymentAccounts } from "@/lib/finance/payment-methods";
 
 import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
 import type { PaymentAccount } from "@/lib/finance/payment-methods";
@@ -6,7 +7,11 @@ import type { PaymentAccount } from "@/lib/finance/payment-methods";
 import type { PaymentMethod } from "@/lib/finance/payment-methods";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import { EntryShell } from "./entry-shell";
+import { BrandLoading } from "@/components/ui/brand-loading";
+import { GuestSessionChoice } from "./guest-session-choice";
+import { CheckinSteps, type CheckinStep } from "./checkin-steps";
 import styles from "./entry.module.css";
 import { ImageUpload } from "./image-upload";
 import { Timestamp } from "firebase/firestore";
@@ -26,9 +31,9 @@ import type { DiscountQuote } from "@/lib/finance/vouchers";
 
 // Attendance requests go through the backend, with no page-load cleanup.
 const C = {
-  ink: "#0d0d0d", paper: "#ffffff", panel: "#faf8f0", muted: "#6f6f6d",
-  line: "#e7e2d2", accent: "#ffcc00", accentText: "#806000", onAccent: "#171400",
-  accentSoft: "rgba(255, 204, 0, 0.14)", green: "#1c6b3c", greenSoft: "rgba(28, 107, 60, 0.10)",
+  ink: "var(--rs-fg)", paper: "var(--rs-bg)", panel: "var(--rs-panel)", muted: "var(--rs-muted)",
+  line: "var(--rs-line)", accent: "var(--rs-accent)", accentText: "var(--rs-accent-text)", onAccent: "var(--rs-on-accent)",
+  accentSoft: "var(--rs-accent-soft)", green: "var(--entry-success)", greenSoft: "rgba(94, 166, 113, 0.16)",
 } as const;
 const displayFont = "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
 const bodyFont = "var(--font-geist-sans), system-ui, sans-serif";
@@ -46,6 +51,7 @@ interface Receipt {
 const ACCIDENTAL_RESCAN_MS = 15 * 1000;
 
 export function CheckInFlow({ registrationIntent = false, onBack }: { registrationIntent?: boolean; onBack?: () => void }) {
+  const router = useRouter();
   const [attempt] = useState(() => new CheckinAttempt({
     lookup: body => attendanceApi<QrLookupResponse>("/api/attendance/lookup", body),
     scan: body => attendanceApi<QrResponse>("/api/attendance/scan", body),
@@ -68,6 +74,9 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const [registeredUnverified, setRegisteredUnverified] = useState(true);
   const [registrationPending, setRegistrationPending] = useState(false);
   const [checkinRequested, setCheckinRequested] = useState(false);
+  const [sessionChoice, setSessionChoice] = useState<"choose" | "daily">("choose");
+  const [membershipOpening, setMembershipOpening] = useState(false), [membershipError, setMembershipError] = useState("");
+  const membershipInFlight = useRef(false);
   const registrationRequest = useRef<Record<string, unknown> | null>(null);
   const registrationInFlight = useRef(false);
   const [registrationRetryAt, setRegistrationRetryAt] = useState<number | null>(null);
@@ -95,13 +104,16 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   }, [attempt, requestedAt]);
 
   function reset() {
-    if (!attempt.reset()) return;
+    if (!attempt.reset()) return false;
     setPhone(""); setName(""); setAddress("");
     setCategory(""); setSource(""); setOther(""); setRegistrationError("");
     setPaymentMethod("");
     setReceiptFile(null); setReceiptKey("");
     setVoucher(null);
+    setSessionChoice("choose");
+    setMembershipError("");
     setRegistered(false); setCheckinRequested(false); setRegistrationPending(false); registrationRequest.current = null;
+    return true;
   }
   async function createAccount() {
     if (registrationInFlight.current || (registrationRetryAt ?? 0) > Date.now()) return;
@@ -144,7 +156,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     if (registering) {
       void createAccount();
     }
-    else { setVoucher(null); void attempt.submitPhone(phone, "attendance"); }
+    else { setVoucher(null); setSessionChoice("choose"); void attempt.submitPhone(phone, "attendance"); }
   }
   async function applyVoucher(code: string) {
     setVoucherBusy(true);
@@ -157,10 +169,42 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
       setVoucher(result); setReceiptFile(null); setReceiptKey("");
     } finally { setVoucherBusy(false); }
   }
+  async function openMembership() {
+    if (membershipInFlight.current) return;
+    membershipInFlight.current = true; setMembershipOpening(true); setMembershipError("");
+    try {
+      const response = await fetch("/api/customer/session", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: state.phone }), signal: AbortSignal.timeout(20_000) });
+      if (!response.ok) {
+        setMembershipError(response.status === 429 ? "Too many attempts. Please wait before trying again." : "Could not open membership payment setup. Please retry or ask the front desk.");
+        setMembershipOpening(false); membershipInFlight.current = false; return;
+      }
+      router.push("/members#renew");
+    } catch {
+      setMembershipError("Could not open membership payment setup. Check your connection and retry.");
+      setMembershipOpening(false); membershipInFlight.current = false;
+    }
+  }
   const progress = registrationBusy ? "Creating your account…" : state.status === "lookup-pending" ? "Looking up your phone number…"
     : state.status === "upload-pending" ? "Saving your private receipt…"
     : state.status === "attendance-pending" ? "Confirming attendance…" : "";
   const person = state.person;
+  const navigationLocked = locked || voucherBusy || membershipOpening;
+  function changeNumber() {
+    if (navigationLocked) return;
+    if (reset()) setCheckinRequested(true);
+  }
+  function chooseSession() {
+    if (!navigationLocked) setSessionChoice("choose");
+  }
+  function welcome() {
+    if (!navigationLocked && reset()) onBack?.();
+  }
+  const choosingSession = state.stage === "payment" && person?.type === "guest" && state.paymentDue != null && sessionChoice !== "daily" && state.status !== "confirmed";
+  const numberStep: CheckinStep = { label: "Number", accessibleLabel: "Your number", onSelect: changeNumber };
+  const steps: CheckinStep[] = registering ? (registrationIntent ? [{ label: "Profile" }] : [numberStep, { label: "Profile" }]) :
+    [numberStep, ...(person?.type === "member" ? [] : [{ label: "Session", onSelect: chooseSession }]), { label: "Payment" }];
+  const currentStep = registering ? steps.length - 1 : choosingSession ? 1 : state.stage === "payment" ? steps.length - 1 : 0;
   const membershipExpiry = person?.membershipExpiryMs != null ? Timestamp.fromMillis(person.membershipExpiryMs) : null;
   const receipt: Receipt | null = state.result?.action === "checked-in" ? {
     name: state.displayName, type: person?.type ?? "guest",
@@ -169,10 +213,17 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     paymentMethod: paymentMethod || undefined, paymentName: state.paymentDue?.paymentAccounts?.find(account => account.id === paymentMethod)?.name, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
   } : null;
 
+  if (membershipOpening) return <BrandLoading fullscreen />;
+
   return (
-    <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : state.stage === "payment" ? "payment" : "phone"}
-      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}>
-        {!registered && state.status !== "confirmed" && (
+    <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : choosingSession ? "choice" : state.stage === "payment" ? "payment" : "phone"}
+      name={state.displayName || (registered ? name : undefined)} phone={state.phone || (registered ? phone : undefined)} amount={voucher?.amountMinor ?? state.paymentDue?.amountMinor}
+      navigation={!registered && state.status !== "confirmed" ? <CheckinSteps steps={steps} current={currentStep} disabled={navigationLocked} /> : undefined}
+      onWelcome={onBack && !navigationLocked ? welcome : undefined}>
+        {choosingSession && person && state.paymentDue && <GuestSessionChoice person={person} rates={state.dailyRates} paymentDue={state.paymentDue}
+          busy={membershipOpening} error={membershipError} onDaily={() => setSessionChoice("daily")}
+          onMembership={() => void openMembership()} />}
+        {!registered && !choosingSession && state.status !== "confirmed" && (
           <form onSubmit={submit} aria-busy={state.busy || registrationBusy}>
             <h1 style={headingStyle}>{registering ? "Create account" : state.stage === "payment" ? "Confirm your visit" : "Check in"}</h1>
             <p style={leadStyle}>{registering ? "No payment required. Create your gym profile." : state.stage === "payment" ? "Choose your payment method to complete your check-in." : "Enter your phone number to record your attendance."}</p>
@@ -228,23 +279,20 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
             {waitSeconds > 0 && <p role="status" style={{ ...leadStyle, margin: "8px 0 0" }}>
               Try again in {waitSeconds} {waitSeconds === 1 ? "second" : "seconds"}.
             </p>}
-            <button type="submit" disabled={disabled} style={primaryButton(disabled)}>
+            <button type="submit" disabled={disabled} className={styles.primary}>
               {progress || (expired ? "Attendance unconfirmed" : waitSeconds > 0 ? "Please wait" : state.pending ? "Retry confirmation"
                 : state.status === "blocked" ? "Retry" : registering ? "Create account" : "Check in")}
             </button>
-            {(state.stage === "name" || state.stage === "payment") && (
-              <button type="button" onClick={reset} style={linkButton} disabled={locked}>← Use a different number</button>
-            )}
-            {onBack && <button type="button" onClick={onBack} style={linkButton} disabled={locked}>← Back to welcome</button>}
           </form>
         )}
         {registered && <div>
           <h1 style={headingStyle}>Account created</h1>
           <p style={leadStyle}>{name}, {registeredUnverified ? "your account is awaiting admin verification." : "your account is verified and ready."} You can check in with your phone number whenever you are ready.</p>
-          <button type="button" style={primaryButton(false)} onClick={() => {
+          <button type="button" className={styles.primary} onClick={() => {
             attempt.reset(); setRegistered(false); setCheckinRequested(true); setRegistrationError("");
+            setSessionChoice("choose"); void attempt.submitPhone(phone, "attendance");
           }}>Check in now</button>
-          <button type="button" style={linkButton} onClick={() => { reset(); onBack?.(); }}>Done</button>
+          <button type="button" className={styles.backButton} onClick={() => { reset(); onBack?.(); }}>Done</button>
           <OptionalPhoto phone={phone} />
         </div>}
         {state.status === "confirmed" && receipt && <ReceiptView receipt={receipt} onDone={reset} />}
@@ -259,7 +307,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
 }
 
 function PaymentChoice({ value, onChange, disabled, gcashAvailable, accounts }: { value: "" | PaymentMethod; onChange(value: PaymentMethod): void; disabled: boolean; gcashAvailable: boolean; accounts?: PaymentAccount[] }) {
-  const choices: { id: PaymentMethod; name: string }[] = [{ id: "cash", name: "Cash" }, ...(accounts ?? [{ id: "gcash" as const, name: "GCash" }])];
+  const choices: { id: PaymentMethod; name: string }[] = [{ id: "cash", name: "Cash" }, ...(accounts ? availablePaymentAccounts(accounts) : [{ id: "gcash" as const, name: "GCash" }])];
   return <fieldset className={styles.choices} disabled={disabled}>
     <legend>Daily payment method</legend><div className={styles.choiceGrid}>
       {choices.map(method => <label className={styles.choice} key={method.id}>
@@ -344,7 +392,7 @@ function ReceiptView({
         poster again on your next visit.
       </p>
 
-      <button type="button" onClick={onDone} style={primaryButton(false)}>
+      <button type="button" onClick={onDone} className={styles.primary}>
         Done
       </button>
     </div>
@@ -387,7 +435,7 @@ function CheckedOutView({
         </p>
       )}
 
-      <button type="button" onClick={onDone} style={primaryButton(false)}>
+      <button type="button" onClick={onDone} className={styles.primary}>
         Done
       </button>
     </div>
@@ -398,11 +446,11 @@ function CheckedOutView({
 
 const headingStyle: CSSProperties = {
   fontFamily: displayFont,
-  fontSize: 34,
+  fontSize: 40,
   lineHeight: 1,
-  fontWeight: 600,
+  fontWeight: 800,
   textTransform: "uppercase",
-  margin: "0 0 6px",
+  margin: "0 0 10px",
 };
 
 const leadStyle: CSSProperties = {
@@ -422,12 +470,12 @@ const labelStyle: CSSProperties = {
 function inputStyle(hasError: boolean): CSSProperties {
   return {
     width: "100%",
-    height: 50,
+    minHeight: 54,
     padding: "0 12px",
-    border: `1px solid ${hasError ? C.accentText : C.line}`,
+    border: `1px solid ${hasError ? "var(--rs-danger)" : C.line}`,
     background: C.paper,
     color: C.ink,
-    borderRadius: 6,
+    borderRadius: 7,
     outlineOffset: 3,
     fontFamily: bodyFont,
     fontSize: 16,
@@ -447,7 +495,7 @@ const textareaStyle: CSSProperties = {
   border: `1px solid ${C.line}`,
   background: C.paper,
   color: C.ink,
-  borderRadius: 6,
+  borderRadius: 7,
   outlineOffset: 3,
   resize: "vertical",
   fontFamily: bodyFont,
@@ -458,42 +506,10 @@ const textareaStyle: CSSProperties = {
 const errorStyle: CSSProperties = {
   margin: "8px 0 0",
   padding: "9px 11px",
-  background: C.accentSoft,
-  borderLeft: `2px solid ${C.accentText}`,
-  fontSize: 13,
-  color: C.accentText,
-};
-
-function primaryButton(busy: boolean): CSSProperties {
-  return {
-    width: "100%",
-    height: 48,
-    marginTop: 18,
-    border: "none",
-    borderRadius: 6,
-    background: C.accent,
-    color: C.onAccent,
-    fontFamily: displayFont,
-    fontSize: 17,
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    cursor: busy ? "wait" : "pointer",
-    opacity: busy ? 0.7 : 1,
-  };
-}
-
-const linkButton: CSSProperties = {
-  display: "block",
-  width: "100%",
-  marginTop: 14,
-  border: "none",
-  background: "transparent",
-  padding: 0,
-  fontSize: 13,
-  color: C.muted,
-  cursor: "pointer",
-  textAlign: "left",
+  background: "color-mix(in srgb, var(--rs-danger) 8%, transparent)",
+  borderLeft: "3px solid var(--rs-danger)",
+  fontSize: 12,
+  color: C.ink,
 };
 
 const badgeStyle: CSSProperties = {

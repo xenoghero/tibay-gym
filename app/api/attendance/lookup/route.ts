@@ -29,13 +29,15 @@ export async function POST(request: Request) {
     const enabled = settings?.financialCutoverAt && settings.financialCutoverAt <= Date.now();
     const gcashAvailable = enabled ? await receiptsAvailable() : false;
     const options = enabled ? await customerPaymentOptions() : { paymentAccounts: [], paymentRevision: 0 };
-    const pricing = enabled ? { dailyRates: { studentDailyMinor: settings.studentDailyMinor, regularDailyMinor: settings.regularDailyMinor, ...options, gcashAvailable } } : {};
+    const pricing = enabled ? { dailyRates: { studentDailyMinor: settings.studentDailyMinor, regularDailyMinor: settings.regularDailyMinor,
+      studentMonthlyMinor: settings.studentMonthlyMinor ?? null, regularMonthlyMinor: settings.regularMonthlyMinor ?? null, ...options, gcashAvailable } } : {};
     if (snapshot.empty) return json({ person: null, ...pricing });
     const doc = snapshot.docs[0];
     const person = doc.data();
     if (person.deletingAt != null) throw new ApiError(409, "person-unavailable");
     const result = { id: doc.id, name: person.name, type: person.type, status: person.status,
       membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, visitCount: person.visitCount,
+      rateCategory: person.rateCategory === "student" || person.rateCategory === "regular" ? person.rateCategory : null,
       ...(unverified ? { unverified: true } : {}) };
     // Recheck the expected session inside the checkout transaction.
     if (intent === "checkout") {

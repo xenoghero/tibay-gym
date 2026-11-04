@@ -1,5 +1,7 @@
 "use client";
+import { availablePaymentAccounts } from "@/lib/finance/payment-methods";
 import { FormSelect } from "@/components/ui/form-select";
+import { StyledSelect } from "@/components/ui/styled-select";
 
 import { PaymentMethodSelect } from "@/components/payments/payment-method-select";
 import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
@@ -10,19 +12,35 @@ import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { PurchaseQuote } from "@/lib/server/purchases";
 import styles from "./purchase-form.module.css";
 import { VoucherEntry, PriceBreakdown, voucherError } from "./voucher-entry";
 type Quote = PurchaseQuote & { paymentRevision?: number; paymentAccounts?: PaymentAccount[]; gcashAvailable?: boolean };
-export function PurchaseForm({ admin = false, portal = false, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
+const durations = [1, 2, 3, 4, 5, 12];
+const durationLabel = (months: number) => months === 12 ? "1 year" : `${months} ${months === 1 ? "month" : "months"}`;
+export function PurchaseForm({ admin = false, portal = false, heading, loadingFallback, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; heading?: string; loadingFallback?: ReactNode; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
   const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<PaymentMethod>("cash");
   const [file, setFile] = useState<File | null>(null), [fileKey, setFileKey] = useState("");
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedMonths, setSelectedMonths] = useState<number | null>(null);
+  const [changingDuration, setChangingDuration] = useState(false);
+  const durationRequest = useRef({ id: 0 });
+  const durationPending = useRef(false);
+  const displayedMonths = selectedMonths ?? quote?.coverage?.months ?? 1;
+  const durationIndex = durations.indexOf(displayedMonths);
+  const durationLocked = busy || (refreshing && !changingDuration);
   const receiptInput = useRef<HTMLInputElement>(null);
+  const messageTarget = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (portal && message) {
+      messageTarget.current?.scrollIntoView?.({ block: "center", behavior: "instant" });
+      messageTarget.current?.focus({ preventScroll: true });
+    }
+  }, [message, portal]);
   const attempt = useRef<{ key: string; id: string; proof?: { receiptId: string; receiptToken: string } } | null>(null);
   const endpoint = admin ? `/api/finance/purchases?personId=${encodeURIComponent(personId ?? "")}` : `/api/customer/purchase${previousRequestId ? `?previousRequestId=${encodeURIComponent(previousRequestId)}` : ""}`;
   function quoteEndpoint(code?: string, months = quote?.coverage?.months ?? 1) {
@@ -32,15 +50,26 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     return `${endpoint}${params.size ? `${endpoint.includes("?") ? "&" : "?"}${params}` : ""}`;
   }
   async function changeDuration(months: number) {
-    if (busy || refreshing || months === quote?.coverage?.months) return;
-    setRefreshing(true); setMessage("");
+    if (durationLocked || !durations.includes(months) || months === displayedMonths) return;
+    const request = ++durationRequest.current.id;
+    durationPending.current = true;
+    setSelectedMonths(months); setChangingDuration(true); setRefreshing(true); setMessage("");
+    attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = "";
     try {
       const response = await fetch(quoteEndpoint(quote?.voucherSnapshot?.code, months), { headers: await headers() });
       const result: Quote & { error?: string } = await response.json();
+      if (request !== durationRequest.current.id) return;
       if (!response.ok) throw new Error(result.error?.startsWith("voucher-") ? voucherError(result.error) : "Could not update the duration. Try again.");
-      setQuote(result); attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = "";
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not update the duration. Try again."); }
-    finally { setRefreshing(false); }
+      setQuote(result); setSelectedMonths(result.coverage?.months ?? null);
+    } catch (e) {
+      if (request !== durationRequest.current.id) return;
+      setSelectedMonths(quote?.coverage?.months ?? null);
+      setMessage(e instanceof Error ? e.message : "Could not update the duration. Try again.");
+    } finally {
+      if (request === durationRequest.current.id) {
+        durationPending.current = false; setChangingDuration(false); setRefreshing(false);
+      }
+    }
   }
   async function headers(): Promise<Record<string, string>> { return admin ? { Authorization: `Bearer ${await user?.getIdToken()}` } : {}; }
   async function refresh() {
@@ -51,18 +80,19 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     if (!response.ok) { setQuote(null); throw new Error("A purchase quote is unavailable. Ask the admin to verify the profile, rate category, and monthly price, then refresh."); }
     const refreshed: Quote = await response.json();
     if (refreshed.quoteToken !== quote?.quoteToken) { attempt.current = null; setFile(null); setFileKey(""); if (receiptInput.current) receiptInput.current.value = ""; }
-    setQuote(refreshed);
+    setQuote(refreshed); setSelectedMonths(refreshed.coverage?.months ?? null);
     setMessage("");
     } finally { setRefreshing(false); }
   }
   useEffect(() => {
     let active = true;
+    const sequence = durationRequest.current;
     const token = admin ? user?.getIdToken() : Promise.resolve(null);
     if (!token) return;
     token.then(value => fetch(endpoint, { headers: value ? { Authorization: `Bearer ${value}` } : {} }))
-      .then(async response => { if (!response.ok) throw new Error("A purchase quote is unavailable. Ask the admin to verify the profile, category, and monthly price."); const data = await response.json(); if (active) setQuote(data); })
+      .then(async response => { if (!response.ok) throw new Error("A purchase quote is unavailable. Ask the admin to verify the profile, category, and monthly price."); const data = await response.json(); if (active) { setQuote(data); setSelectedMonths(data.coverage?.months ?? null); durationPending.current = false; setChangingDuration(false); setRefreshing(false); } })
       .catch(e => { if (active) setMessage(e.message); });
-    return () => { active = false; };
+    return () => { active = false; ++sequence.id; };
   }, [user, admin, endpoint]);
   async function applyVoucher(code: string) {
     setRefreshing(true);
@@ -74,7 +104,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     } finally { setRefreshing(false); }
   }
   async function submit() {
-    if (!quote || busy || refreshing) return;
+    if (!quote || busy || refreshing || durationPending.current || (quote.coverage && displayedMonths !== quote.coverage.months)) return;
     setBusy(true); setMessage("");
     try {
       if (method !== "cash" && quote.paymentAccounts && !quote.paymentAccounts.some(account => account.id === method)) throw new Error("This payment account is no longer available. Select another method.");
@@ -96,31 +126,37 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not submit the request. Retry to recover it safely."); }
     finally { setBusy(false); }
   }
+  if (!quote && !message && loadingFallback) return <>{loadingFallback}</>;
   if (portal) return <section className={styles.purchase} aria-labelledby="purchase-title">
-    <div className={styles.heading}><h2 id="purchase-title">{previousRequestId ? "Correct your payment" : "Start or renew"}</h2><button type="button" disabled={busy || refreshing} onClick={() => refresh().catch(e => setMessage(e.message))}>{refreshing ? "Refreshing…" : "Refresh quote"}</button></div>
-    <p className={styles.description}>{previousRequestId ? "Review this replacement before sending it for approval." : "Review your price and payment details before submitting."}</p>
+    <div className={styles.heading}><h2 id="purchase-title" className={styles.srOnly}>{heading ?? (previousRequestId ? "Correct your payment" : "Start or renew")}</h2><button type="button" disabled={busy || refreshing} onClick={() => refresh().catch(e => setMessage(e.message))}><span aria-hidden="true">↻ </span>{refreshing ? "Refreshing…" : "Refresh quote"}</button></div>
     {!quote && !message && <LoadingSkeleton label="Loading your price and membership dates…" variant="form" />}
     {quote && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-      {quote.coverage && !previousRequestId && <fieldset className={styles.duration} disabled={busy || refreshing}>
-        <legend>Membership duration</legend>
-        <div className={styles.durationOptions}>{[1, 2, 3, 4, 5, 12].map(months => <label key={months} className={styles.durationOption}>
-          <input type="radio" name="membership-months" value={months} checked={quote.coverage?.months === months} onChange={() => void changeDuration(months)} />
-          <span>{months === 12 ? "1 year" : `${months} ${months === 1 ? "month" : "months"}`}</span>
-        </label>)}</div>
-        <p className={styles.hint}>Priced at your monthly rate × the number of months.</p>
+      {quote.coverage && !previousRequestId && <fieldset className={styles.duration} disabled={durationLocked}>
+        <legend><span className={styles.stepNumber} aria-hidden="true">1.</span> Choose duration</legend>
+        <div className={styles.durationStepper}>
+          <button type="button" className={styles.stepButton} aria-label="Shorter membership duration" disabled={durationLocked || durationIndex <= 0} onClick={() => void changeDuration(durations[durationIndex - 1])}><span aria-hidden="true">−</span></button>
+          <div className={styles.durationPicker}><StyledSelect label="Membership duration" value={String(displayedMonths)} options={durations.map(months => ({ value: String(months), name: durationLabel(months) }))} disabled={durationLocked} onChange={value => void changeDuration(Number(value))} /></div>
+          <button type="button" className={styles.stepButton} aria-label="Longer membership duration" disabled={durationLocked || durationIndex < 0 || durationIndex >= durations.length - 1} onClick={() => void changeDuration(durations[durationIndex + 1])}><span aria-hidden="true">+</span></button>
+        </div>
+        <p className={styles.durationHelp} role="status">{changingDuration ? "Updating price and dates…" : "Tap the duration to choose from all options."}</p>
       </fieldset>}
-      <div className={styles.quote} aria-live="polite" aria-busy={refreshing}><div><span>{quote.kind === "daily_session" ? "Daily session" : `${quote.coverage?.months ?? 1}-month membership`}</span><strong>{new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(quote.amountMinor / 100)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind.replaceAll("_", " ")}</span>
+      <h3 className={styles.stepHeading}><span className={styles.stepNumber} aria-hidden="true">{previousRequestId || !quote.coverage ? "1." : "2."}</span> Payment details</h3>
+      <div className={styles.quote} aria-live="polite" aria-busy={refreshing}><div><span>Amount</span><strong>{portalMoney(quote.amountMinor)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind === "daily_session" ? "Daily session" : `${quote.coverage?.months ?? 1}-month membership`}</span>
       {quote.coverage && <dl className={styles.coverage}><div><dt>Estimated start</dt><dd>{coverageDate(quote.coverage.startDate)}</dd></div><span aria-hidden="true">→</span><div><dt>Estimated expiry</dt><dd>{coverageDate(quote.coverage.expiryDate)}</dd></div></dl>}</div>
       {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
-      {!previousRequestId && <VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} />}
+      {!previousRequestId && <div className={styles.voucher}><VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} /></div>}
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
-      <PaymentMethodSelect value={method} accounts={quote.paymentAccounts} available={quote.gcashAvailable} disabled={busy || refreshing} onChange={value => { setMethod(value); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} />
+      <h3 className={styles.stepHeading}><span className={styles.stepNumber} aria-hidden="true">{previousRequestId || !quote.coverage ? "2." : "3."}</span> Payment method</h3>
+      <div className={styles.paymentChoice}><PaymentMethodSelect placement="top" value={method} accounts={quote.paymentAccounts} available={quote.gcashAvailable} disabled={busy || refreshing} onChange={value => { setMethod(value); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} /></div>
       {method === "cash" && <p className={styles.hint}>Pay at the gym. Your request stays pending until staff confirm receipt.</p>}
       {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
-      {method !== "cash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">{method === "gcash" ? "GCash receipt" : "Payment receipt"}</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s selected payment account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
-      <button className={styles.submit} disabled={busy || refreshing} type="submit">{busy ? "Submitting request…" : previousRequestId ? "Submit corrected payment" : "Submit payment request"}<span aria-hidden="true">→</span></button><p className={styles.approvalNote}>Reviewed by the gym before membership activation.</p>
+      {method !== "cash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">{method === "gcash" ? "GCash receipt" : "Payment receipt"}</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy || refreshing} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s selected payment account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
+      <div className={styles.submitDock}>
+        <button className={styles.submit} disabled={busy || refreshing} type="submit"><span>{busy ? "Submitting request…" : previousRequestId ? "Submit corrected payment" : "Submit payment request"}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></button>
+        <p className={styles.approvalNote}>Reviewed by the gym before membership activation.</p>
+      </div>
     </form>}
-    {message && <p className={styles.message} role="status">{message}</p>}
+    {message && <p ref={messageTarget} tabIndex={-1} className={styles.message} role="status">{message}</p>}
   </section>;
   return <section className="rs-financial-ui" style={{ display: "grid", gap: 14, marginBlock: 20 }}><h2>{previousRequestId ? "Replace rejected payment" : "Membership purchase / renewal"}</h2>
     <p>One month at the configured monthly rate.</p>
@@ -130,7 +166,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
       {quote.voucherSnapshot && <PriceBreakdown quote={quote} />}
       {quote.coverage && <p>Preview: {quote.coverage.startDate} to {quote.coverage.expiryDate}. Final dates are calculated at approval; active memberships extend from the current expiry.</p>}
       <label>Payment method<FormSelect aria-label="Purchase payment method" value={method} disabled={busy} onChange={e => { setMethod(e.target.value as PaymentMethod); setFile(null); setFileKey(""); attempt.current = null; if (receiptInput.current) receiptInput.current.value = ""; }} style={{ display: "block", minHeight: 44, fontSize: 16, width: "100%" }}>
-        <option value="cash">Cash — pending confirmation</option>{!admin && <>{quote.paymentAccounts ? quote.paymentAccounts.map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</>}
+        <option value="cash">Cash — pending confirmation</option>{!admin && <>{quote.paymentAccounts ? availablePaymentAccounts(quote.paymentAccounts).map(account => <option key={account.id} value={account.id} disabled={!quote.gcashAvailable}>{account.name}{!quote.gcashAvailable ? " — receipt upload unavailable" : ""}</option>) : <option value="gcash" disabled={!quote.gcashAvailable}>GCash{!quote.gcashAvailable ? " — currently unavailable" : ""}</option>}</>}
       </FormSelect></label>
       {method !== "cash" && <PaymentAccountDetails account={quote.paymentAccounts?.find(account => account.id === method)} />}
       {method !== "cash" && <label>{method === "gcash" ? "GCash receipt" : "Payment receipt"}<input aria-label="Purchase receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p>Submit evidence only for money already sent to the gym&apos;s selected payment account.</p><p>{RECEIPT_RETENTION_NOTICE}</p></label>}
@@ -140,6 +176,7 @@ export function PurchaseForm({ admin = false, portal = false, personId, previous
     {message && <p role="status">{message}</p>}
   </section>;
 }
+const portalMoney = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(minor / 100);
 function coverageDate(value: string) {
   return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 }

@@ -20,3 +20,13 @@ export function accountSnapshot(account: PaymentAccount): PaymentAccountSnapshot
   const { id, kind, name, accountHolder, accountNumber } = account;
   return { id, kind, name, accountHolder, accountNumber };
 }
+
+/** Keep the existing GCash identity so historical receipt bindings stay valid. */
+export function gcashAccount(accounts: PaymentAccount[]) {
+  return accounts.find(account => account.kind === "gcash" && account.enabled)
+    ?? accounts.find(account => account.kind === "gcash");
+}
+export function availablePaymentAccounts(accounts: PaymentAccount[]) {
+  const account = gcashAccount(accounts);
+  return account?.enabled ? [{ ...account, name: "GCash" }] : [];
+}

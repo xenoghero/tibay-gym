@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PaymentMethodSelect } from "./payment-method-select";
 import type { PaymentAccount } from "@/lib/finance/payment-methods";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const accounts: PaymentAccount[] = [
-  { id: "account_bank0001", kind: "bank" as const, name: "BDO", accountHolder: "Gym", accountNumber: "00123", qrImage: null, enabled: true },
+  { id: "account_bank0001", kind: "gcash" as const, name: "GCash", accountHolder: "Gym", accountNumber: "00123", qrImage: null, enabled: true },
 ];
 
 it("supports keyboard selection, Escape and dismissal outside the menu", () => {
@@ -15,7 +15,7 @@ it("supports keyboard selection, Escape and dismissal outside the menu", () => {
   const trigger = screen.getByRole("combobox", { name: "Payment method" });
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
   fireEvent.keyDown(trigger, { key: "End" });
-  expect(trigger.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: /BDO/ }).id);
+  expect(trigger.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: /GCash/ }).id);
   fireEvent.keyDown(trigger, { key: "Enter" });
   expect(change).toHaveBeenCalledWith("account_bank0001");
   expect(screen.queryByRole("listbox")).toBeNull();
@@ -32,9 +32,73 @@ it("prevents choosing unavailable electronic methods with a pointer or keyboard"
   render(<PaymentMethodSelect value="cash" accounts={accounts} available={false} onChange={change} />);
   const trigger = screen.getByRole("combobox");
   fireEvent.click(trigger);
-  fireEvent.click(screen.getByRole("option", { name: /BDO/ }));
+  fireEvent.click(screen.getByRole("option", { name: /GCash/ }));
   expect(change).not.toHaveBeenCalled();
   fireEvent.keyDown(trigger, { key: "End" });
   fireEvent.keyDown(trigger, { key: "Enter" });
   expect(change).toHaveBeenCalledWith("cash");
+});
+
+it("shows only Cash and one GCash choice when old settings contain other methods", () => {
+  render(<PaymentMethodSelect value="cash" accounts={[
+    { ...accounts[0], id: "account_oldbank1", kind: "bank", name: "Old bank" },
+    ...accounts,
+    { ...accounts[0], id: "account_wallet02", name: "Second wallet" },
+  ]} available onChange={() => {}} />);
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(screen.getAllByRole("option")).toHaveLength(2);
+  expect(screen.getByRole("option", { name: /GCash/ })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: /Old bank|Second wallet/ })).toBeNull();
+});
+
+it("switches the selected method from green Cash to blue GCash", () => {
+  const { rerender } = render(<PaymentMethodSelect value="cash" accounts={accounts} available onChange={() => {}} />);
+  expect(screen.getByRole("combobox").parentElement?.getAttribute("data-tone")).toBe("green");
+  rerender(<PaymentMethodSelect value={accounts[0].id} accounts={accounts} available onChange={() => {}} />);
+  expect(screen.getByRole("combobox").parentElement?.getAttribute("data-tone")).toBe("blue");
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(screen.getByRole("option", { name: /GCash/ }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("option", { name: /GCash/ }).getAttribute("data-tone")).toBe("blue");
+});
+
+it("keeps the closing menu only for its exit animation and removes it afterward", () => {
+  vi.useFakeTimers();
+  render(<PaymentMethodSelect value="cash" accounts={accounts} available onChange={() => {}} />);
+  const trigger = screen.getByRole("combobox");
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("listbox");
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(menu.isConnected).toBe(true);
+  expect(menu.getAttribute("data-closing")).toBe("true");
+  expect(menu.hasAttribute("inert")).toBe(true);
+  act(() => { vi.advanceTimersByTime(150); });
+  expect(menu.isConnected).toBe(false);
+});
+
+it("can reopen during the exit animation without an old close removing the menu", () => {
+  vi.useFakeTimers();
+  render(<PaymentMethodSelect value="cash" accounts={accounts} available onChange={() => {}} />);
+  const trigger = screen.getByRole("combobox");
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("listbox");
+  fireEvent.keyDown(trigger, { key: "Escape" });
+  fireEvent.click(trigger);
+  act(() => { vi.advanceTimersByTime(150); });
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("listbox")).toBe(menu);
+  expect(menu.hasAttribute("inert")).toBe(false);
+});
+
+it("does not wait for an exit animation when reduced motion is enabled", () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+  render(<PaymentMethodSelect value="cash" accounts={accounts} available onChange={() => {}} />);
+  const trigger = screen.getByRole("combobox");
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("listbox");
+  fireEvent.click(trigger);
+  act(() => { vi.advanceTimersByTime(0); });
+  expect(menu.isConnected).toBe(false);
 });
