@@ -50,3 +50,13 @@ it("shows only Cash and one GCash choice when old settings contain other methods
   expect(screen.getByRole("option", { name: /GCash/ })).toBeTruthy();
   expect(screen.queryByRole("option", { name: /Old bank|Second wallet/ })).toBeNull();
 });
+
+it("switches the selected method from green Cash to blue GCash", () => {
+  const { rerender } = render(<PaymentMethodSelect value="cash" accounts={accounts} available onChange={() => {}} />);
+  expect(screen.getByRole("combobox").parentElement?.getAttribute("data-tone")).toBe("green");
+  rerender(<PaymentMethodSelect value={accounts[0].id} accounts={accounts} available onChange={() => {}} />);
+  expect(screen.getByRole("combobox").parentElement?.getAttribute("data-tone")).toBe("blue");
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(screen.getByRole("option", { name: /GCash/ }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("option", { name: /GCash/ }).getAttribute("data-tone")).toBe("blue");
+});

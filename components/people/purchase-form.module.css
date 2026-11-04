@@ -33,7 +33,7 @@
 .voucher details[open] summary::after { content: "−"; }
 .paymentChoice { margin-bottom: 12px; }
 .paymentChoice > div > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.paymentChoice button[role="combobox"] { border: 1px solid var(--rs-accent); border-radius: 8px; min-height: 76px; background: var(--rs-accent-soft); }
+.paymentChoice button[role="combobox"] { border-radius: 8px; min-height: 76px; }
 .purchase label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
 .purchase select, .purchase input { width: 100%; max-width: 100%; font-size: 16px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--rs-line); border-radius: 6px; color: var(--rs-fg); background: var(--rs-bg); }
 .receipt { margin-top: 22px; }

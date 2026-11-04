@@ -10,6 +10,15 @@
 .chevron { width: 7px; height: 7px; flex: none; border-right: 1.5px solid var(--rs-muted); border-bottom: 1.5px solid var(--rs-muted); transform: rotate(45deg); margin: 0 3px 4px 8px; }
 .trigger[aria-expanded=true] .chevron { transform: rotate(225deg); margin-bottom: -4px; }
 .check { color: var(--rs-accent-text); padding-inline: 5px; }
+.root[data-tone=green], .tonedOption[data-tone=green] { --selection-color: light-dark(#167345, #71dda6); --selection-border: light-dark(#27915c, #3b9968); --selection-fill: color-mix(in srgb, #15945a 13%, var(--rs-panel)); }
+.root[data-tone=blue], .tonedOption[data-tone=blue] { --selection-color: light-dark(#0056cc, #86b8ff); --selection-border: light-dark(#0865de, #4b8fe8); --selection-fill: color-mix(in srgb, #0865de 14%, var(--rs-panel)); }
+.root[data-tone] .trigger { border-color: var(--selection-border); background: var(--selection-fill); }
+.root[data-tone] .trigger:hover, .root[data-tone] .trigger[aria-expanded=true] { border-color: var(--selection-color); }
+.root[data-tone] .trigger:focus-visible { outline-color: var(--selection-color); }
+.root[data-tone] .mark, .tonedOption .mark { border-color: var(--selection-border); color: var(--selection-color); }
+.root[data-tone] .copy strong, .tonedOption .check { color: var(--selection-color); }
+.tonedOption[aria-selected=true], .tonedOption[data-active=true] { background: var(--selection-fill); }
+.tonedOption[data-active=true] { outline-color: var(--selection-border); }
 .compact { margin-top: 0; min-width: 155px; max-width: 260px; }
 .compact .label { margin-bottom: 6px; color: var(--rs-muted); font-size: 11px; font-weight: 400; }
 .root.compact .trigger { min-height: 46px; padding: 10px 12px; background: var(--rs-bg); }

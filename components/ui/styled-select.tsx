@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { FieldPopover } from "./field-popover";
 import shared from "./field-controls.module.css";
 import styles from "./styled-select.module.css";
 
-export interface SelectOption { value: string; name: string; detail?: string; mark?: string; disabled?: boolean }
+export interface SelectOption { value: string; name: string; detail?: string; mark?: ReactNode; disabled?: boolean; tone?: "green" | "blue" }
 export function StyledSelect({ label, value, options, disabled, compact = false, placement = "auto", onChange }: {
   label: string; value: string; options: SelectOption[]; disabled?: boolean; compact?: boolean; placement?: "auto" | "top"; onChange(value: string): void;
 }) {
@@ -24,7 +24,7 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
     const option = options[index];
     if (option && !option.disabled) { onChange(option.value); setOpen(false); }
   }
-  return <div ref={root} className={`${styles.root} ${compact ? styles.compact : ""}`} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+  return <div ref={root} data-tone={selected?.tone} className={`${styles.root} ${compact ? styles.compact : ""}`} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <span id={`${id}-label`} className={styles.label}>{label}</span>
     <button type="button" role="combobox" aria-labelledby={`${id}-label`} aria-haspopup="listbox"
       aria-expanded={open && !disabled} aria-controls={`${id}-options`} aria-activedescendant={open && !disabled ? `${id}-${active}` : undefined}
@@ -50,7 +50,7 @@ export function StyledSelect({ label, value, options, disabled, compact = false,
     </button>
     {open && !disabled && anchor && <FieldPopover anchor={anchor} onClose={close} id={`${id}-options`} role="listbox" label={label} placement={placement}>
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={value === option.value}
-        aria-disabled={option.disabled} data-active={active === index} className={shared.option}
+        aria-disabled={option.disabled} data-active={active === index} data-tone={option.tone} className={`${shared.option} ${option.tone ? styles.tonedOption : ""}`}
         onPointerDown={event => event.preventDefault()} onPointerMove={() => { if (!option.disabled) setActive(index); }} onClick={() => choose(index)}>
         {option.mark && <span className={styles.mark} aria-hidden="true">{option.mark}</span>}
         <span className={styles.copy}><strong>{option.name}</strong>{option.detail && <small>{option.detail}</small>}</span>
