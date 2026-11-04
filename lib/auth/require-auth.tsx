@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { BrandLogo } from "@/components/brand-logo";
-import styles from "./require-auth.module.css";
+import { BrandLoading } from "@/components/ui/brand-loading";
 
 /**
  * Client-side route guard. Renders `children` only for a signed-in admin;
@@ -25,17 +24,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (loading || !user || finishingAnimation) {
     return (
-      <div role="status" aria-label="Loading your dashboard" className={styles.loading}>
-        <div
-          aria-hidden="true"
-          className={styles.logo}
-          onAnimationIteration={(event) => {
-            if (event.target === event.currentTarget && !loading) setFinishingAnimation(false);
-          }}
-        >
-          <BrandLogo sidebar />
-        </div>
-      </div>
+      <BrandLoading label="Loading your dashboard"
+        onAnimationIteration={(event) => {
+          if (event.target === event.currentTarget && !loading) setFinishingAnimation(false);
+        }}
+      />
     );
   }
 

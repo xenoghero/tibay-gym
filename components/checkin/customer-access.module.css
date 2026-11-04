@@ -118,9 +118,7 @@
 .passBrand > span { color: var(--rs-accent-text); }
 .passBrand small { display: block; font: 500 9px/1.5 var(--font-geist-sans), sans-serif; text-transform: uppercase; letter-spacing: .22em; margin-top: 6px; }
 .passStatus { display: flex; gap: 14px; align-items: center; margin: 28px 0 12px; font: 700 clamp(40px, 7vw, 62px)/.95 var(--font-barlow-condensed), sans-serif; letter-spacing: -.015em; text-transform: uppercase; }
-.passStatus > span { flex: 0 0 13px; width: 13px; height: 13px; border-radius: 50%; background: var(--rs-accent); }
 .memberPass[data-status="active"] .passStatus { color: #23794c; }
-.memberPass[data-status="expired"] .passStatus > span { background: #e38d6e; }
 .passName { margin: 0; font: 600 25px/1.25 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
 .passMeta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; font-size: 12px; color: var(--rs-muted); }
 .passExpiry { display: grid; gap: 4px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--rs-line); }
@@ -177,7 +175,6 @@
 .memberPass { padding: 24px; background: var(--rs-panel); border-color: var(--rs-line); }
 .passBrand { font-size: 24px; }
 .passStatus { font-size: 62px; margin: 24px 0 16px; gap: 14px; }
-.passStatus > span { width: 20px; height: 20px; flex-basis: 20px; }
 .passName { font-size: 27px; font-weight: 700; }
 .passExpiry { margin-top: 18px; padding-top: 14px; }
 .passExpiry > strong { font-size: 25px; font-weight: 700; }

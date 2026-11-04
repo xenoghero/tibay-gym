@@ -141,6 +141,8 @@ it("highlights configured guest membership before any attendance or payment and 
   mount(); await submit();
   expect(screen.getByRole("heading", { name: /Want to be a new member/ })).toBeDefined();
   expect(screen.getByText("₱750")).toBeDefined();
+  expect(screen.queryByText(/Your training/)).toBeNull();
+  expect(screen.queryByText("Choose how you want to train today.")).toBeNull();
   expect(screen.getByText("Regular", { exact: true })).toBeDefined();
   expect(screen.getByRole("button", { name: /Daily session only/ }).textContent).toContain("₱80");
   expect(screen.queryByRole("group", { name: "Daily payment method" })).toBeNull();
@@ -155,6 +157,7 @@ it("highlights configured guest membership before any attendance or payment and 
   expect(String(sessionCall[0])).toBe("/api/customer/session");
   expect(JSON.parse(String(sessionCall[1]?.body))).toEqual({ phone: "09123456789" });
   expect(router.push).toHaveBeenCalledWith("/members#renew");
+  expect(screen.getByRole("status", { name: "Opening membership payment…" })).toBeDefined();
   expect(fetchMock.mock.calls.some(call => String(call[0]) === "/api/attendance/scan")).toBe(false);
 });
 it("carries an unverified Student guest to members setup for server verification without recording attendance", async () => {

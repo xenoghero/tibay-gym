@@ -10,16 +10,13 @@ export function GuestSessionChoice({ person, rates, paymentDue, busy, error, onD
   person: QrLookupPerson; rates: DailyRates | null; paymentDue: DailyPaymentDue;
   busy: boolean; error: string; onDaily(): void; onMembership(): void;
 }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, []);
+  const visitor = useRef<HTMLDivElement>(null);
+  useEffect(() => { visitor.current?.focus(); }, []);
   const category = person.rateCategory === "student" ? "Student" : person.rateCategory === "regular" ? "Regular" : null;
   const monthly = category === "Student" ? rates?.studentMonthlyMinor : category === "Regular" ? rates?.regularMonthlyMinor : null;
   const monthlyAvailable = typeof monthly === "number" && Number.isSafeInteger(monthly) && monthly > 0;
   return <div aria-busy={busy}>
-    <p className={styles.choiceEyebrow}>Before you check in</p>
-    <h1 ref={heading} tabIndex={-1}>Your training.<br />Your choice.</h1>
-    <p className={styles.lead}>Choose how you want to train today.</p>
-    <div className={styles.visitor}>
+    <div ref={visitor} tabIndex={-1} className={styles.visitor}>
       <span className={styles.visitorInitial} aria-hidden="true">{person.name.trim().slice(0, 1).toUpperCase()}</span>
       <div><strong>{person.name}</strong><small>Guest account</small></div>
       <span className={styles.categoryTag}>{category ?? "Category required"}</span>

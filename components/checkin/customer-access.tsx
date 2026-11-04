@@ -3,6 +3,7 @@
 import { paymentLabel } from "@/lib/finance/payment-methods";
 
 import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { BrandLoading } from "@/components/ui/brand-loading";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -66,6 +67,8 @@ export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: 
     const fresh: Summary = await response.json();
     setSummary(current => current?.expiresAt === sessionExpiry ? fresh : current);
   }
+  if (membershipSetup && busy && !summary) return <BrandLoading fullscreen />;
+
   return <main className={`${styles.portal} ${styles.memberPortal} ${!summary ? styles.entryPortal : ""} ${membershipSetup ? styles.checkinPortal : ""}`}>
     <header className={styles.header}>
       <Link href={summary ? "#overview" : "/checkin"} className={styles.brand} aria-label={summary ? "Tibay Gym member overview" : "Tibay Gym check-in"}><Image src="/tibay-gym-mark-transparent.svg" alt="" width={60} height={42} className={styles.brandMark} /><span>TIBAY <span className={styles.brandAccent}>GYM</span><small>Member portal</small></span></Link>
@@ -104,7 +107,7 @@ function screenFromHash(): PortalScreen {
   return window.location.hash === "#renew" ? "renew" : window.location.hash === "#history" ? "history" : "overview";
 }
 function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { summary: Summary; onRefreshMembership(): Promise<void>; checkin?: boolean }) {
-  const [screen, setScreen] = useState<PortalScreen>("overview");
+  const [screen, setScreen] = useState<PortalScreen>(checkin ? "renew" : "overview");
   const [payments, setPayments] = useState<CustomerPayment[]>([]);
   const [pendingMembership, setPendingMembership] = useState<CustomerPayment | null>(null);
   const [history, setHistory] = useState<CustomerPayment[]>([]);
@@ -205,6 +208,8 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
     </article>;
   }
   const title = screen === "history" ? "Payment history" : screen === "renew" ? previous ? "Correct your payment" : membershipAction : "Your membership";
+  if (checkin && loading) return <BrandLoading fullscreen />;
+
   return <>
     <nav className={styles.portalNav} aria-label="Member navigation">
       {portalDestinations.map(destination => <a key={destination.screen} href={`#${destination.screen}`} aria-current={screen === destination.screen ? "page" : undefined} onClick={event => {
@@ -223,7 +228,7 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       <section className={styles.memberPass} aria-label="Membership card" data-status={isMember ? summary.status ?? "review" : "guest"}>
         <span className={styles.passWatermark} aria-hidden="true">TG</span>
         <div className={styles.passBrand}>TIBAY <span>GYM</span><small>Membership</small></div>
-        <h2 className={styles.passStatus}>{!(isMember && summary.status === "active") && <span aria-hidden="true" />}{membershipStatus}</h2>
+        <h2 className={styles.passStatus}>{membershipStatus}</h2>
         <p className={styles.passName}>{summary.name}</p>
         <div className={styles.passMeta}><span>{titleCase(summary.rateCategory ?? "Rate needs review")}</span><span>{summary.verified ? "✓ Verified profile" : "Awaiting verification"}</span></div>
         <div className={styles.passExpiry}><span>{isMember && summary.membershipExpiryMs ? summary.status === "expired" ? "Expired on" : "Valid until" : "Membership"}</span><strong>{isMember && summary.membershipExpiryMs ? formatDate(summary.membershipExpiryMs) : "No active membership"}</strong></div>
@@ -242,7 +247,7 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
           <button className={styles.secondaryButton} disabled={refreshing} onClick={() => void load()}>{refreshing ? "Refreshing…" : "Refresh payment status"}</button>
         </section> :
       <div id="customer-purchase" className={styles.purchasePanel}>
-        <PurchaseForm portal heading="Review your request" key={previous ?? "new"} previousRequestId={previous} onSubmitted={() => {
+        <PurchaseForm portal heading="Review your request" loadingFallback={checkin ? <BrandLoading fullscreen /> : undefined} key={previous ?? "new"} previousRequestId={previous} onSubmitted={() => {
           setPrevious(undefined);
           setConfirmation("Payment request submitted for gym review. Your membership updates only after approval.");
           navigate("overview");

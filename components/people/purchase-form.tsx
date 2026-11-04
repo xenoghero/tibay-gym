@@ -11,7 +11,7 @@ import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 import { RECEIPT_RETENTION_NOTICE } from "@/lib/receipt-retention";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { PurchaseQuote } from "@/lib/server/purchases";
 import styles from "./purchase-form.module.css";
@@ -19,7 +19,7 @@ import { VoucherEntry, PriceBreakdown, voucherError } from "./voucher-entry";
 type Quote = PurchaseQuote & { paymentRevision?: number; paymentAccounts?: PaymentAccount[]; gcashAvailable?: boolean };
 const durations = [1, 2, 3, 4, 5, 12];
 const durationLabel = (months: number) => months === 12 ? "1 year" : `${months} ${months === 1 ? "month" : "months"}`;
-export function PurchaseForm({ admin = false, portal = false, heading, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; heading?: string; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
+export function PurchaseForm({ admin = false, portal = false, heading, loadingFallback, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; heading?: string; loadingFallback?: ReactNode; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
   const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<PaymentMethod>("cash");
   const [file, setFile] = useState<File | null>(null), [fileKey, setFileKey] = useState("");
@@ -107,6 +107,7 @@ export function PurchaseForm({ admin = false, portal = false, heading, personId,
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not submit the request. Retry to recover it safely."); }
     finally { setBusy(false); }
   }
+  if (!quote && !message && loadingFallback) return <>{loadingFallback}</>;
   if (portal) return <section className={styles.purchase} aria-labelledby="purchase-title">
     <div className={styles.heading}><h2 id="purchase-title" className={styles.srOnly}>{heading ?? (previousRequestId ? "Correct your payment" : "Start or renew")}</h2><button type="button" disabled={busy || refreshing} onClick={() => refresh().catch(e => setMessage(e.message))}><span aria-hidden="true">↻ </span>{refreshing ? "Refreshing…" : "Refresh quote"}</button></div>
     {!quote && !message && <LoadingSkeleton label="Loading your price and membership dates…" variant="form" />}

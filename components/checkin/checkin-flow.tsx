@@ -8,6 +8,7 @@ import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { EntryShell } from "./entry-shell";
+import { BrandLoading } from "@/components/ui/brand-loading";
 import { GuestSessionChoice } from "./guest-session-choice";
 import { CheckinSteps, type CheckinStep } from "./checkin-steps";
 import styles from "./entry.module.css";
@@ -210,6 +211,8 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
     membershipExpiry, visitCount: state.result.visitCount, unverified: state.result.unverified,
     paymentMethod: paymentMethod || undefined, paymentName: state.paymentDue?.paymentAccounts?.find(account => account.id === paymentMethod)?.name, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
   } : null;
+
+  if (membershipOpening) return <BrandLoading fullscreen />;
 
   return (
     <EntryShell mode={registered || state.status === "confirmed" ? "complete" : registering ? "register" : choosingSession ? "choice" : state.stage === "payment" ? "payment" : "phone"}
