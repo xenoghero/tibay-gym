@@ -1,4 +1,5 @@
 "use client";
+import { availablePaymentAccounts } from "@/lib/finance/payment-methods";
 
 import { PaymentAccountDetails } from "@/components/payments/payment-account-details";
 import type { PaymentAccount } from "@/lib/finance/payment-methods";
@@ -306,7 +307,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
 }
 
 function PaymentChoice({ value, onChange, disabled, gcashAvailable, accounts }: { value: "" | PaymentMethod; onChange(value: PaymentMethod): void; disabled: boolean; gcashAvailable: boolean; accounts?: PaymentAccount[] }) {
-  const choices: { id: PaymentMethod; name: string }[] = [{ id: "cash", name: "Cash" }, ...(accounts ?? [{ id: "gcash" as const, name: "GCash" }])];
+  const choices: { id: PaymentMethod; name: string }[] = [{ id: "cash", name: "Cash" }, ...(accounts ? availablePaymentAccounts(accounts) : [{ id: "gcash" as const, name: "GCash" }])];
   return <fieldset className={styles.choices} disabled={disabled}>
     <legend>Daily payment method</legend><div className={styles.choiceGrid}>
       {choices.map(method => <label className={styles.choice} key={method.id}>

@@ -16,8 +16,8 @@ beforeEach(() => { posts.length = 0;
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it("uploads a bank renewal receipt with the selected account and settings revision", async () => {
-  const account = { id: "account_bank0001", kind: "bank", name: "BPI savings", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
+it("uploads a GCash renewal receipt with the selected account and settings revision", async () => {
+  const account = { id: "account_bank0001", kind: "gcash", name: "GCash", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
   let uploadHeaders: Headers | null = null;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/receipts/upload") { uploadHeaders = new Headers(init?.headers); return Response.json({ receiptId: "receipt-bank", receiptToken: "proof-bank" }); }
@@ -26,7 +26,7 @@ it("uploads a bank renewal receipt with the selected account and settings revisi
   }));
   await act(async () => { render(<PurchaseForm portal />); });
   fireEvent.click(screen.getByRole("combobox", { name: "Payment method" }));
-  fireEvent.click(screen.getByRole("option", { name: /BPI savings/ }));
+  fireEvent.click(screen.getByRole("option", { name: /GCash/ }));
   expect(screen.getByText(account.accountNumber)).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Payment receipt"), { target: { files: [new File(["receipt"], "receipt.png", { type: "image/png" })] } });
   await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
