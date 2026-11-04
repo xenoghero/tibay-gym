@@ -16,6 +16,61 @@ beforeEach(() => { posts.length = 0;
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it("updates duration immediately and permits more steps while the quote is loading", async () => {
+  const pending: Array<(response: Response) => void> = [];
+  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+    if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return Promise.resolve(Response.json({ id: "latest-duration" })); }
+    return url.includes("months=") ? new Promise<Response>(resolve => pending.push(resolve)) : Promise.resolve(Response.json(plain));
+  }));
+  await act(async () => { render(<PurchaseForm portal />); });
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("2 months");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Longer membership duration" }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("3 months");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Submit payment request/ }).disabled).toBe(true);
+  await act(async () => {});
+  await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
+  expect(posts).toHaveLength(0);
+  await act(async () => { pending[1](Response.json({ ...plain, amountMinor: 300000, quoteToken: "three", coverage: { ...plain.coverage, months: 3 } })); });
+  await act(async () => { pending[0](Response.json({ ...plain, amountMinor: 200000, quoteToken: "two", coverage: { ...plain.coverage, months: 2 } })); });
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("3 months");
+  expect(screen.getByText("Amount").parentElement?.textContent).toContain("₱3,000");
+  await act(async () => { fireEvent.submit(screen.getByRole("button", { name: /Submit payment request/ }).closest("form")!); });
+  expect(posts[0]).toMatchObject({ months: 3, quoteToken: "three" });
+});
+
+it("keeps waiting for the latest duration when an older request fails", async () => {
+  const pending: Array<(response: Response) => void> = [];
+  vi.stubGlobal("fetch", vi.fn((url: string) => url.includes("months=")
+    ? new Promise<Response>(resolve => pending.push(resolve)) : Promise.resolve(Response.json(plain))));
+  await act(async () => { render(<PurchaseForm portal />); });
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  await act(async () => {});
+  await act(async () => { pending[0](Response.json({ error: "unavailable" }, { status: 503 })); });
+  expect(screen.queryByText("Could not update the duration. Try again.")).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Submit payment request/ }).disabled).toBe(true);
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("3 months");
+  await act(async () => { pending[1](Response.json({ ...plain, coverage: { ...plain.coverage, months: 3 } })); });
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Submit payment request/ }).disabled).toBe(false);
+});
+
+it("restores the confirmed duration after the latest request fails and ignores late successes", async () => {
+  const pending: Array<(response: Response) => void> = [];
+  vi.stubGlobal("fetch", vi.fn((url: string) => url.includes("months=")
+    ? new Promise<Response>(resolve => pending.push(resolve)) : Promise.resolve(Response.json(plain))));
+  await act(async () => { render(<PurchaseForm portal />); });
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  fireEvent.click(screen.getByRole("button", { name: "Longer membership duration" }));
+  await act(async () => {});
+  await act(async () => { pending[1](Response.json({ error: "unavailable" }, { status: 503 })); });
+  await act(async () => { pending[0](Response.json({ ...plain, amountMinor: 200000, coverage: { ...plain.coverage, months: 2 } })); });
+  expect(screen.getByRole("combobox", { name: "Membership duration" }).textContent).toContain("1 month");
+  expect(screen.getByText("Amount").parentElement?.textContent).toContain("₱1,000");
+  expect(screen.getByText("Could not update the duration. Try again.")).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Submit payment request/ }).disabled).toBe(false);
+});
 it("uploads a GCash renewal receipt with the selected account and settings revision", async () => {
   const account = { id: "account_bank0001", kind: "gcash", name: "GCash", accountHolder: "Tibay Gym", accountNumber: "0012345678", qrImage: null, enabled: true };
   let uploadHeaders: Headers | null = null;

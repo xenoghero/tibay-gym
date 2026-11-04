@@ -1,15 +1,21 @@
 "use client";
 
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import styles from "./field-controls.module.css";
 
 /** Top-layer positioning keeps controls usable inside scrolling panels and dialogs. */
-export function FieldPopover({ anchor, onClose, children, id, role = "dialog", label, wide = false, placement = "auto" }: {
+export function FieldPopover({ anchor, onClose, children, id, role = "dialog", label, wide = false, placement = "auto", closing = false, onExited }: {
   anchor: HTMLElement; onClose(): void; children: ReactNode; id: string;
   role?: "dialog" | "listbox"; label: string; wide?: boolean; placement?: "auto" | "top";
+  closing?: boolean; onExited?(): void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!closing || !onExited) return;
+    const timeout = window.setTimeout(onExited, window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 150);
+    return () => window.clearTimeout(timeout);
+  }, [closing, onExited]);
   useLayoutEffect(() => {
     const element = panel.current!;
     element.showPopover?.();
@@ -24,6 +30,7 @@ export function FieldPopover({ anchor, onClose, children, id, role = "dialog", l
       const above = Math.max(0, rect.top - 14);
       const below = Math.max(0, window.innerHeight - rect.bottom - 14);
       const openAbove = placement === "top" ? above >= Math.min(120, measuredHeight) : rect.bottom + measuredHeight + 8 > window.innerHeight;
+      element.dataset.placement = openAbove ? "top" : "bottom";
       const maxHeight = placement === "top" ? Math.min(available, openAbove ? above : below) : available;
       element.style.maxHeight = `${maxHeight}px`;
       const height = Math.min(element.scrollHeight, maxHeight);
@@ -60,8 +67,9 @@ export function FieldPopover({ anchor, onClose, children, id, role = "dialog", l
       window.removeEventListener("scroll", position, true);
     };
   }, [anchor, onClose, wide, placement]);
-  return createPortal(<div ref={panel} data-field-popover popover={typeof HTMLElement.prototype.showPopover === "function" ? "manual" : undefined} id={id} role={role} aria-label={label}
+  return createPortal(<div ref={panel} data-field-popover data-closing={closing} inert={closing} aria-hidden={closing || undefined} popover={typeof HTMLElement.prototype.showPopover === "function" ? "manual" : undefined} id={id} role={role} aria-label={label}
     className={`${styles.popover} ${wide ? styles.calendar : ""}`}
+    onAnimationEnd={event => { if (closing && event.target === event.currentTarget) onExited?.(); }}
     onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
     {children}
   </div>, anchor.closest("[data-field-popover], dialog") ?? document.body);

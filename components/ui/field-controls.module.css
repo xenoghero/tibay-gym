@@ -1,4 +1,7 @@
 .popover {
+  --popover-offset: -6px;
+  transform-origin: top center;
+  animation: field-enter 180ms cubic-bezier(.2,.8,.2,1) both;
   position: fixed;
   inset: auto;
   z-index: 100;
@@ -15,6 +18,12 @@
   font-size: 14px;
   box-shadow: 0 12px 32px color-mix(in srgb, var(--rs-fg) 16%, transparent);
 }
+.popover[data-placement=top] { --popover-offset: 6px; transform-origin: bottom center; }
+.popover[role=listbox] { padding: 8px; border-radius: 12px; }
+.popover[data-closing=true] { pointer-events: none; animation: field-exit 130ms ease-in both; }
+@keyframes field-enter { from { opacity: 0; transform: translateY(var(--popover-offset)) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes field-exit { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(var(--popover-offset)) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .popover, .popover[data-closing=true] { animation: none; } }
 .option {
   display: flex;
   align-items: center;
