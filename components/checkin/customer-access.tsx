@@ -7,7 +7,7 @@ import { BrandLoading } from "@/components/ui/brand-loading";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { PortalHeader } from "./portal-header";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import { PromotionBanner } from "./promotion-banner";
 import styles from "./customer-access.module.css";
@@ -69,11 +69,11 @@ export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: 
   }
   if (membershipSetup && busy && !summary) return <BrandLoading fullscreen />;
 
-  return <main className={`${styles.portal} ${styles.memberPortal} ${!summary ? styles.entryPortal : ""} ${membershipSetup ? styles.checkinPortal : ""}`}>
-    <header className={styles.header}>
-      <Link href={summary ? "#overview" : "/checkin"} className={styles.brand} aria-label={summary ? "Tibay Gym member overview" : "Tibay Gym check-in"}><Image src="/tibay-gym-mark-transparent.svg" alt="" width={60} height={42} className={styles.brandMark} /><span>TIBAY <span className={styles.brandAccent}>GYM</span><small>Member portal</small></span></Link>
+  return <main className={`${styles.portal} ${styles.memberPortal} ${!summary ? styles.entryPortal : ""}`}>
+    <PortalHeader label="Member portal" href={summary ? "#overview" : "/checkin"}
+      brandLabel={summary ? "Tibay Gym member overview" : "Tibay Gym check-in"}>
       {summary ? <div className={styles.headerActions}><Link href="/checkin" className={styles.backLink}>Check-in ↗</Link><button className={styles.textButton} aria-label="Sign out / use a different number" disabled={busy} onClick={() => void logout()}>{busy ? "Signing out…" : "Sign out ↗"}</button></div> : <Link href="/checkin" className={styles.backLink} aria-label="Back to check-in">Check-in ↗</Link>}
-    </header>
+    </PortalHeader>
     {!summary ? <div className={styles.welcome}>
       <section className={styles.loginPanel} aria-labelledby="access-title">
         <span className={styles.accessWatermark} aria-hidden="true">TG</span>

@@ -30,9 +30,9 @@ import type { DiscountQuote } from "@/lib/finance/vouchers";
 
 // Attendance requests go through the backend, with no page-load cleanup.
 const C = {
-  ink: "var(--rs-fg)", paper: "#1c1f16", panel: "var(--rs-panel)", muted: "var(--rs-muted)",
+  ink: "var(--rs-fg)", paper: "var(--rs-bg)", panel: "var(--rs-panel)", muted: "var(--rs-muted)",
   line: "var(--rs-line)", accent: "var(--rs-accent)", accentText: "var(--rs-accent-text)", onAccent: "var(--rs-on-accent)",
-  accentSoft: "var(--rs-accent-soft)", green: "#b9e4c3", greenSoft: "rgba(94, 166, 113, 0.16)",
+  accentSoft: "var(--rs-accent-soft)", green: "var(--entry-success)", greenSoft: "rgba(94, 166, 113, 0.16)",
 } as const;
 const displayFont = "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
 const bodyFont = "var(--font-geist-sans), system-ui, sans-serif";
@@ -278,7 +278,7 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
             {waitSeconds > 0 && <p role="status" style={{ ...leadStyle, margin: "8px 0 0" }}>
               Try again in {waitSeconds} {waitSeconds === 1 ? "second" : "seconds"}.
             </p>}
-            <button type="submit" disabled={disabled} style={primaryButton(disabled)}>
+            <button type="submit" disabled={disabled} className={styles.primary}>
               {progress || (expired ? "Attendance unconfirmed" : waitSeconds > 0 ? "Please wait" : state.pending ? "Retry confirmation"
                 : state.status === "blocked" ? "Retry" : registering ? "Create account" : "Check in")}
             </button>
@@ -287,11 +287,11 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
         {registered && <div>
           <h1 style={headingStyle}>Account created</h1>
           <p style={leadStyle}>{name}, {registeredUnverified ? "your account is awaiting admin verification." : "your account is verified and ready."} You can check in with your phone number whenever you are ready.</p>
-          <button type="button" style={primaryButton(false)} onClick={() => {
+          <button type="button" className={styles.primary} onClick={() => {
             attempt.reset(); setRegistered(false); setCheckinRequested(true); setRegistrationError("");
             setSessionChoice("choose"); void attempt.submitPhone(phone, "attendance");
           }}>Check in now</button>
-          <button type="button" style={linkButton} onClick={() => { reset(); onBack?.(); }}>Done</button>
+          <button type="button" className={styles.backButton} onClick={() => { reset(); onBack?.(); }}>Done</button>
           <OptionalPhoto phone={phone} />
         </div>}
         {state.status === "confirmed" && receipt && <ReceiptView receipt={receipt} onDone={reset} />}
@@ -391,7 +391,7 @@ function ReceiptView({
         poster again on your next visit.
       </p>
 
-      <button type="button" onClick={onDone} style={primaryButton(false)}>
+      <button type="button" onClick={onDone} className={styles.primary}>
         Done
       </button>
     </div>
@@ -434,7 +434,7 @@ function CheckedOutView({
         </p>
       )}
 
-      <button type="button" onClick={onDone} style={primaryButton(false)}>
+      <button type="button" onClick={onDone} className={styles.primary}>
         Done
       </button>
     </div>
@@ -445,11 +445,11 @@ function CheckedOutView({
 
 const headingStyle: CSSProperties = {
   fontFamily: displayFont,
-  fontSize: 34,
+  fontSize: 40,
   lineHeight: 1,
-  fontWeight: 600,
+  fontWeight: 800,
   textTransform: "uppercase",
-  margin: "0 0 6px",
+  margin: "0 0 10px",
 };
 
 const leadStyle: CSSProperties = {
@@ -469,12 +469,12 @@ const labelStyle: CSSProperties = {
 function inputStyle(hasError: boolean): CSSProperties {
   return {
     width: "100%",
-    height: 50,
+    minHeight: 54,
     padding: "0 12px",
-    border: `1px solid ${hasError ? C.accentText : C.line}`,
+    border: `1px solid ${hasError ? "var(--rs-danger)" : C.line}`,
     background: C.paper,
     color: C.ink,
-    borderRadius: 6,
+    borderRadius: 7,
     outlineOffset: 3,
     fontFamily: bodyFont,
     fontSize: 16,
@@ -494,7 +494,7 @@ const textareaStyle: CSSProperties = {
   border: `1px solid ${C.line}`,
   background: C.paper,
   color: C.ink,
-  borderRadius: 6,
+  borderRadius: 7,
   outlineOffset: 3,
   resize: "vertical",
   fontFamily: bodyFont,
@@ -505,42 +505,10 @@ const textareaStyle: CSSProperties = {
 const errorStyle: CSSProperties = {
   margin: "8px 0 0",
   padding: "9px 11px",
-  background: C.accentSoft,
-  borderLeft: `2px solid ${C.accentText}`,
-  fontSize: 13,
-  color: C.accentText,
-};
-
-function primaryButton(busy: boolean): CSSProperties {
-  return {
-    width: "100%",
-    height: 48,
-    marginTop: 18,
-    border: "none",
-    borderRadius: 6,
-    background: C.accent,
-    color: C.onAccent,
-    fontFamily: displayFont,
-    fontSize: 17,
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    cursor: busy ? "wait" : "pointer",
-    opacity: busy ? 0.7 : 1,
-  };
-}
-
-const linkButton: CSSProperties = {
-  display: "block",
-  width: "100%",
-  marginTop: 14,
-  border: "none",
-  background: "transparent",
-  padding: 0,
-  fontSize: 13,
-  color: C.muted,
-  cursor: "pointer",
-  textAlign: "left",
+  background: "color-mix(in srgb, var(--rs-danger) 8%, transparent)",
+  borderLeft: "3px solid var(--rs-danger)",
+  fontSize: 12,
+  color: C.ink,
 };
 
 const badgeStyle: CSSProperties = {
