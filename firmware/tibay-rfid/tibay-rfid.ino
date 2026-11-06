@@ -23,7 +23,6 @@ constexpr uint32_t NORMAL_POLL_MS = 3000, ARMED_POLL_MS = 2000;
 constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
-constexpr uint8_t OLED_COLUMNS = 21;
 // 128x64 SSD1309 4-pin I2C module (internal reset and address 0x3C).
 U8G2_SSD1309_128X64_NONAME2_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE, 26, 25);
 MFRC522 reader(5, 27);
@@ -51,29 +50,293 @@ int64_t epochMs() {
 }
 bool clockReady() { return epochMs() > 1735689600000LL; }
 
-// Two 6x12 text lines per field fit the 128x64 OLED without truncating statuses.
-void screenField(const String &text, uint8_t firstRow) {
-  unsigned int offset = 0;
-  for (uint8_t row = firstRow; row < firstRow + 2; ++row) {
-    while (offset < text.length() && text[offset] == ' ') ++offset;
-    unsigned int end = min(offset + OLED_COLUMNS, text.length());
-    if (end < text.length() && text[end] != ' ') {
-      unsigned int space = end;
-      while (space > offset && text[space] != ' ') --space;
-      if (space > offset) end = space;
+// --- UI Drawing Helpers & Procedural Icons (128x64 OLED) ---
+
+void drawCentered(int16_t y, const String &text, const uint8_t *font) {
+  oled.setFont(font);
+  int16_t w = oled.getStrWidth(text.c_str());
+  int16_t x = (128 - w) / 2;
+  if (x < 0) x = 0;
+  oled.drawStr(x, y, text.c_str());
+}
+
+void drawTitle(int16_t y, const String &text) {
+  oled.setFont(u8g2_font_helvB10_tf);
+  if (oled.getStrWidth(text.c_str()) <= 114) {
+    drawCentered(y, text, u8g2_font_helvB10_tf);
+  } else {
+    oled.setFont(u8g2_font_helvB08_tf);
+    if (oled.getStrWidth(text.c_str()) <= 122) {
+      drawCentered(y, text, u8g2_font_helvB08_tf);
+    } else {
+      drawCentered(y, text, u8g2_font_6x12_tf);
     }
-    oled.setCursor(0, 12 + row * 16);
-    oled.print(text.substring(offset, end));
-    offset = end;
   }
+}
+
+void drawSubtitle(int16_t y, const String &text) {
+  oled.setFont(u8g2_font_6x12_tf);
+  if (oled.getStrWidth(text.c_str()) <= 122) {
+    drawCentered(y, text, u8g2_font_6x12_tf);
+  } else {
+    oled.setFont(u8g2_font_helvR08_tf);
+    if (oled.getStrWidth(text.c_str()) <= 124) {
+      drawCentered(y, text, u8g2_font_helvR08_tf);
+    } else {
+      drawCentered(y, text, u8g2_font_5x7_tf);
+    }
+  }
+}
+
+void drawDetail(int16_t y, const String &text) {
+  drawSubtitle(y, text);
+}
+
+void drawIconCheck(int16_t cx, int16_t cy) {
+  oled.drawCircle(cx, cy, 8);
+  oled.drawCircle(cx, cy, 7);
+  oled.drawLine(cx - 4, cy, cx - 1, cy + 3);
+  oled.drawLine(cx - 4, cy - 1, cx - 1, cy + 2);
+  oled.drawLine(cx - 1, cy + 3, cx + 4, cy - 3);
+  oled.drawLine(cx - 1, cy + 2, cx + 4, cy - 4);
+}
+
+void drawIconAlert(int16_t cx, int16_t cy) {
+  oled.drawCircle(cx, cy, 8);
+  oled.drawCircle(cx, cy, 7);
+  oled.drawBox(cx - 1, cy - 4, 3, 5);
+  oled.drawBox(cx - 1, cy + 2, 3, 2);
+}
+
+void drawIconDenied(int16_t cx, int16_t cy) {
+  oled.drawCircle(cx, cy, 8);
+  oled.drawCircle(cx, cy, 7);
+  oled.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
+  oled.drawLine(cx - 3, cy - 4, cx + 4, cy + 3);
+  oled.drawLine(cx - 3, cy + 3, cx + 3, cy - 3);
+  oled.drawLine(cx - 3, cy + 4, cx + 4, cy - 3);
+}
+
+void drawIconNfcTap(int16_t cx, int16_t cy) {
+  oled.drawRFrame(cx - 15, cy - 8, 22, 16, 2);
+  oled.drawBox(cx - 11, cy - 4, 4, 6);
+  oled.drawCircle(cx + 9, cy - 1, 5, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
+  oled.drawCircle(cx + 9, cy - 1, 8, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
+}
+
+void drawIconMemberCard(int16_t cx, int16_t cy) {
+  oled.drawRFrame(cx - 16, cy - 9, 32, 18, 2);
+  oled.drawDisc(cx - 8, cy - 3, 3);
+  oled.drawCircle(cx - 8, cy + 5, 5, U8G2_DRAW_UPPER_LEFT | U8G2_DRAW_UPPER_RIGHT);
+  oled.drawHLine(cx - 1, cy - 4, 12);
+  oled.drawHLine(cx - 1, cy, 12);
+  oled.drawHLine(cx - 1, cy + 4, 8);
+}
+
+void drawIconCardLift(int16_t cx, int16_t cy) {
+  oled.drawRFrame(cx - 13, cy + 1, 26, 8, 2);
+  oled.drawLine(cx, cy - 8, cx, cy - 1);
+  oled.drawLine(cx, cy - 8, cx - 3, cy - 5);
+  oled.drawLine(cx, cy - 8, cx + 3, cy - 5);
+}
+
+void renderScreen(const String &title, const String &detail) {
+  // 1. Standby / Welcome Screen
+  if (title == "Tap RFID") {
+    drawCentered(12, "WELCOME TO TIBAY GYM", u8g2_font_6x12_tf);
+    oled.drawHLine(6, 16, 116);
+    drawIconNfcTap(64, 32);
+    drawCentered(58, "TAP YOUR CARD", u8g2_font_helvB10_tf);
+    return;
+  }
+
+  // 2. Member Enrollment Screen (Pairing card to member profile)
+  if (title == "Tap RFID to assign") {
+    oled.drawBox(0, 0, 128, 13);
+    oled.setDrawColor(0);
+    drawCentered(10, "MEMBER ENROLLMENT", u8g2_font_6x12_tf);
+    oled.setDrawColor(1);
+    drawIconMemberCard(64, 27);
+    drawCentered(48, "TAP MEMBER CARD", u8g2_font_helvB08_tf);
+    drawCentered(61, "Link to gym member", u8g2_font_6x12_tf);
+    return;
+  }
+
+  // 3. Card Removal Latch
+  if (title == "Getting ready") {
+    drawIconCardLift(64, 14);
+    drawTitle(36, "PLEASE LIFT CARD");
+    int idx = detail.indexOf("Wait ");
+    String timeStr = (idx >= 0) ? detail.substring(idx + 5) : detail;
+    drawCentered(54, String("Ready in ") + timeStr, u8g2_font_6x12_tf);
+    return;
+  }
+
+  // 4. In-flight Tap Verification
+  if (title == "Confirming") {
+    oled.drawRFrame(12, 8, 104, 24, 3);
+    drawCentered(25, "VERIFYING...", u8g2_font_helvB10_tf);
+    drawCentered(46, "Contacting server", u8g2_font_6x12_tf);
+    drawCentered(58, "Please hold still", u8g2_font_5x7_tf);
+    return;
+  }
+
+  // 5. Successful Attendance Check-in
+  if (title == "Checked in") {
+    drawIconCheck(64, 11);
+    drawCentered(33, "CHECKED IN", u8g2_font_helvB10_tf);
+    drawCentered(47, "Enjoy your workout!", u8g2_font_6x12_tf);
+    if (detail.indexOf("Next tap") >= 0) {
+      int idx = detail.indexOf("Next tap in ");
+      String sec = (idx >= 0) ? detail.substring(idx + 12, detail.indexOf('s', idx)) : "3";
+      drawCentered(59, String("Ready in ") + sec + "s • Lift card", u8g2_font_5x7_tf);
+    } else {
+      drawCentered(59, "Tibay Gym entrance", u8g2_font_5x7_tf);
+    }
+    return;
+  }
+
+  // 6. Successful Attendance Check-out
+  if (title == "Checked out") {
+    drawIconCheck(64, 11);
+    drawCentered(33, "CHECKED OUT", u8g2_font_helvB10_tf);
+    drawSubtitle(47, "Great workout! See you!");
+    if (detail.indexOf("Next tap") >= 0) {
+      int idx = detail.indexOf("Next tap in ");
+      String sec = (idx >= 0) ? detail.substring(idx + 12, detail.indexOf('s', idx)) : "3";
+      drawCentered(59, String("Ready in ") + sec + "s • Lift card", u8g2_font_5x7_tf);
+    } else {
+      drawCentered(59, "Tibay Gym exit", u8g2_font_5x7_tf);
+    }
+    return;
+  }
+
+  // 7. Successful Card Assignment
+  if (title == "RFID assigned") {
+    drawIconCheck(64, 10);
+    drawCentered(29, "CARD ASSIGNED!", u8g2_font_helvB10_tf);
+    drawCentered(42, "Linked to gym member", u8g2_font_6x12_tf);
+    if (detail.indexOf("Next tap in ") >= 0 || detail.indexOf("Next card in ") >= 0) {
+      int idx = detail.indexOf("Next tap in ");
+      if (idx < 0) idx = detail.indexOf("Next card in ");
+      int numStart = idx >= 0 ? detail.indexOf("in ", idx) + 3 : -1;
+      String sec = (numStart >= 3) ? detail.substring(numStart, detail.indexOf('s', numStart)) : "60";
+      oled.drawRFrame(12, 47, 104, 16, 3);
+      drawCentered(59, String("Next card in ") + sec + "s", u8g2_font_6x12_tf);
+    } else {
+      drawCentered(58, "Member card ready", u8g2_font_5x7_tf);
+    }
+    return;
+  }
+
+  // 8. Offline Mode
+  if (title == "Offline") {
+    drawIconAlert(64, 12);
+    drawCentered(35, "OFFLINE MODE", u8g2_font_helvB10_tf);
+    drawSubtitle(50, "Please use QR check-in");
+    drawCentered(61, "Wi-Fi disconnected", u8g2_font_5x7_tf);
+    return;
+  }
+
+  // 9. Membership Expired
+  if (title == "Membership expired") {
+    drawIconAlert(64, 12);
+    drawTitle(34, "EXPIRED MEMBER");
+    drawSubtitle(49, "Please renew at desk");
+    drawCentered(61, "Tibay membership expired", u8g2_font_5x7_tf);
+    return;
+  }
+
+  // 10. Card already owned by another member
+  if (title == "Card already owned") {
+    drawIconAlert(64, 12);
+    drawTitle(34, "CARD ALREADY IN USE");
+    drawSubtitle(49, "Belongs to another member");
+    drawCentered(61, "Use an unassigned card", u8g2_font_5x7_tf);
+    return;
+  }
+
+  // 11. Unknown / Unregistered Card
+  if (title == "Unknown card") {
+    drawIconAlert(64, 12);
+    drawTitle(34, "CARD UNREGISTERED");
+    drawSubtitle(49, "Register at front desk");
+    drawCentered(61, "Card not found in system", u8g2_font_5x7_tf);
+    return;
+  }
+
+  // 12. Card already assigned to this person (replace required)
+  if (title == "Use Replace Card") {
+    drawIconAlert(64, 12);
+    drawTitle(34, "CARD ALREADY LINKED");
+    drawSubtitle(49, "Use 'Replace Card' in admin");
+    return;
+  }
+
+  // 13. Unsupported card (UID != 4 bytes)
+  if (title == "Unsupported card") {
+    drawIconDenied(64, 12);
+    drawTitle(34, "UNSUPPORTED CARD");
+    drawSubtitle(49, "4-byte Mifare required");
+    return;
+  }
+
+  // 14. Device unauthorized
+  if (title == "Device unauthorized") {
+    drawIconDenied(64, 12);
+    drawTitle(34, "DEVICE LOCKED");
+    drawSubtitle(49, "Check provisioning");
+    return;
+  }
+
+  // 15. Connecting
+  if (title == "Connecting") {
+    drawCentered(12, "TIBAY GYM", u8g2_font_6x12_tf);
+    oled.drawHLine(10, 16, 108);
+    drawCentered(36, "CONNECTING...", u8g2_font_helvB10_tf);
+    drawDetail(54, detail.isEmpty() ? "Wi-Fi and HTTPS" : detail);
+    return;
+  }
+
+  // 16. In-flight tap retry / unconfirmed tap
+  if (title == "Could not confirm") {
+    drawIconAlert(64, 12);
+    drawTitle(34, "SYNCING TAP");
+    drawDetail(50, detail.isEmpty() ? "Retrying connection..." : detail);
+    return;
+  }
+
+  // 17. Assignment timeout or cancelled or ended
+  if (title == "Assignment timeout" || title == "Assignment ended" || title == "Assignment cancelled") {
+    drawIconAlert(64, 12);
+    String t = (title == "Assignment timeout") ? "ENROLLMENT TIMEOUT" :
+               (title == "Assignment cancelled" ? "ENROLL CANCELLED" : "ENROLLMENT ENDED");
+    drawTitle(34, t);
+    drawDetail(50, detail.isEmpty() ? "Returned to attendance" : detail);
+    return;
+  }
+
+  // 18. Hardware / Storage / Setup faults
+  if (title == "RFID error" || title == "Recovery storage error" || title == "Setup required") {
+    drawIconDenied(64, 12);
+    String t = (title == "RFID error") ? "RFID ERROR" :
+               (title == "Recovery storage error" ? "STORAGE FAULT" : "SETUP REQUIRED");
+    drawTitle(34, t);
+    drawDetail(50, detail);
+    return;
+  }
+
+  // 19. Generic fallback layout (for backend unavailable, request rejected, etc.)
+  drawIconAlert(64, 12);
+  drawTitle(34, title);
+  if (!detail.isEmpty()) drawDetail(50, detail);
 }
 
 void screen(const String &title, const String &detail = "") {
   if (title == screenTitle && detail == screenDetail) return;
   screenTitle = title; screenDetail = detail;
   oled.clearBuffer();
-  screenField(title, 0);
-  screenField(detail, 2);
+  renderScreen(title, detail);
   oled.sendBuffer();
   // Do not print request bodies, card UIDs, credentials, or person information.
   Serial.println(title);
@@ -123,7 +386,8 @@ void idleScreen() {
   int32_t scanRemaining = static_cast<int32_t>(scanWaitUntil - millis());
   if (scanWaiting && scanRemaining > 0) {
     uint32_t seconds = (static_cast<uint32_t>(scanRemaining) + 999) / 1000;
-    screen(scanWaitTitle, String("Next tap in ") + seconds + "s / Remove card");
+    String prefix = (scanWaitTitle == "RFID assigned") ? "Next card in " : "Next tap in ";
+    screen(scanWaitTitle, prefix + seconds + "s / Remove card");
     return;
   }
   if (!healthy) { screen(backendFailed ? "Backend unavailable" : "Connecting", backendDetail); return; }
