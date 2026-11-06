@@ -1,3 +1,7 @@
+# Coding workflow
+
+Always read and apply the `ponytail` skill before any coding task, including writing, fixing, refactoring, reviewing code, or choosing dependencies. Use its default `full` level unless the user specifies another level or explicitly disables it.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

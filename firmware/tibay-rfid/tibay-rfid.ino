@@ -7,8 +7,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <hd44780.h>
-#include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <U8g2lib.h>
 #include <esp_system.h>
 #include <time.h>
 #include <sys/time.h>
@@ -20,13 +19,13 @@
 
 constexpr uint32_t REMOVAL_MS = 3000, RESULT_MS = 3000;
 constexpr uint32_t ATTENDANCE_RETRY_MS = 30000, ENROLLMENT_RETRY_MS = 600000;
-constexpr uint32_t NORMAL_POLL_MS = 15000, ARMED_POLL_MS = 2000;
+constexpr uint32_t NORMAL_POLL_MS = 3000, ARMED_POLL_MS = 2000;
 constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
-constexpr uint8_t LCD_COLUMNS = 20, LCD_ROWS = 4;
-// Auto-detect the I2C backpack address and LCD pin mapping.
-hd44780_I2Cexp lcd;
+constexpr uint8_t OLED_COLUMNS = 21;
+// 128x64 SSD1309 4-pin I2C module (internal reset and address 0x3C).
+U8G2_SSD1309_128X64_NONAME2_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE, 26, 25);
 MFRC522 reader(5, 27);
 Preferences storage;
 
@@ -52,20 +51,19 @@ int64_t epochMs() {
 }
 bool clockReady() { return epochMs() > 1735689600000LL; }
 
-// Reserve two physical rows per field; never rely on LCD DDRAM auto-wrapping.
+// Two 6x12 text lines per field fit the 128x64 OLED without truncating statuses.
 void screenField(const String &text, uint8_t firstRow) {
   unsigned int offset = 0;
   for (uint8_t row = firstRow; row < firstRow + 2; ++row) {
     while (offset < text.length() && text[offset] == ' ') ++offset;
-    unsigned int end = min(offset + LCD_COLUMNS, text.length());
+    unsigned int end = min(offset + OLED_COLUMNS, text.length());
     if (end < text.length() && text[end] != ' ') {
       unsigned int space = end;
       while (space > offset && text[space] != ' ') --space;
       if (space > offset) end = space;
     }
-    lcd.setCursor(0, row);
-    lcd.print(text.substring(offset, end));
-    for (unsigned int column = end - offset; column < LCD_COLUMNS; ++column) lcd.print(' ');
+    oled.setCursor(0, 12 + row * 16);
+    oled.print(text.substring(offset, end));
     offset = end;
   }
 }
@@ -73,8 +71,10 @@ void screenField(const String &text, uint8_t firstRow) {
 void screen(const String &title, const String &detail = "") {
   if (title == screenTitle && detail == screenDetail) return;
   screenTitle = title; screenDetail = detail;
+  oled.clearBuffer();
   screenField(title, 0);
   screenField(detail, 2);
+  oled.sendBuffer();
   // Do not print request bodies, card UIDs, credentials, or person information.
   Serial.println(title);
 }
@@ -348,7 +348,7 @@ void scan() {
   readBeep();
   if (!uid[0]) { message("Unsupported card", "Only verified 4 bytes"); return; }
   if (assignmentId.isEmpty()) {
-    // The admin may have reserved enrollment since the last 15-second idle poll.
+    // The admin may have reserved enrollment since the last 3-second idle poll.
     // Refresh before choosing the mode for this same physical tap.
     poll();
     if (!healthy || !authorized) return;
@@ -373,9 +373,13 @@ void scan() {
 void setup() {
   Serial.begin(115200); pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, HIGH);
   Wire.begin(25, 26);
-  if (lcd.begin(LCD_COLUMNS, LCD_ROWS) != 0) {
-    Serial.println("LCD initialization failed: check wiring / run I2CexpDiag"); return;
+  oled.setI2CAddress(0x3C << 1);
+  oled.begin();
+  Wire.beginTransmission(0x3C);
+  if (Wire.endTransmission() != 0) {
+    Serial.println("OLED not detected at 0x3C: check I2C mode / wiring / reset"); return;
   }
+  oled.setFont(u8g2_font_6x12_tf);
   SPI.begin(18, 19, 23, 5); reader.PCD_Init();
   byte version = reader.PCD_ReadRegister(MFRC522::VersionReg);
   if (version == 0 || version == 0xFF) { screen("RFID error", "Check wiring"); return; }
