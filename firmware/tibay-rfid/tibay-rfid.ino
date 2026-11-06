@@ -11,16 +11,21 @@
 #include <esp_system.h>
 #include <time.h>
 #include <sys/time.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include "tap_flow.h"
+#include "tibay_logo.h"
 #if __has_include("scanner_config.h")
 #include "scanner_config.h"
 #else
 #include "scanner_config.example.h"
 #endif
 
-constexpr uint32_t REMOVAL_MS = 3000, RESULT_MS = 3000;
+constexpr uint32_t REMOVAL_MS = 400, RESULT_MS = 3000;
 constexpr uint32_t ATTENDANCE_RETRY_MS = 30000, ENROLLMENT_RETRY_MS = 600000;
 constexpr uint32_t NORMAL_POLL_MS = 3000, ARMED_POLL_MS = 2000;
-constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;
+constexpr uint32_t ASSIGNMENT_WAIT_MS = 3000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
 // 128x64 SSD1309 4-pin I2C module (internal reset and address 0x3C).
@@ -41,6 +46,18 @@ bool storageReady = false, storageFault = false;
 bool backendFailed = false;
 String backendDetail = "Refreshing backend";
 String screenTitle, screenDetail;
+CardHold cardHold;
+String tapUid;
+uint32_t tapStarted = 0, lastFrame = 0;
+bool tapActive = false, confirmationDelayed = false, networkBusy = false;
+QueueHandle_t networkDone = nullptr;
+// The UI owns this job until launch; the worker owns it until queue completion.
+struct NetworkJob {
+  bool capture = false;
+  String body, detail;
+  JsonDocument response;
+  int status = -1;
+} networkJob;
 
 bool due(uint32_t deadline) { return static_cast<int32_t>(millis() - deadline) >= 0; }
 int64_t epochMs() {
@@ -117,13 +134,6 @@ void drawIconDenied(int16_t cx, int16_t cy) {
   oled.drawLine(cx - 3, cy + 4, cx + 4, cy - 3);
 }
 
-void drawIconNfcTap(int16_t cx, int16_t cy) {
-  oled.drawRFrame(cx - 15, cy - 8, 22, 16, 2);
-  oled.drawBox(cx - 11, cy - 4, 4, 6);
-  oled.drawCircle(cx + 9, cy - 1, 5, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
-  oled.drawCircle(cx + 9, cy - 1, 8, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
-}
-
 void drawIconMemberCard(int16_t cx, int16_t cy) {
   oled.drawRFrame(cx - 16, cy - 9, 32, 18, 2);
   oled.drawDisc(cx - 8, cy - 3, 3);
@@ -143,9 +153,12 @@ void drawIconCardLift(int16_t cx, int16_t cy) {
 void renderScreen(const String &title, const String &detail) {
   // 1. Standby / Welcome Screen
   if (title == "Tap RFID") {
-    drawCentered(12, "WELCOME TO TIBAY GYM", u8g2_font_6x12_tf);
-    oled.drawHLine(6, 16, 116);
-    drawIconNfcTap(64, 32);
+    drawCentered(10, "WELCOME TO TIBAY GYM", u8g2_font_6x12_tf);
+    oled.drawHLine(6, 13, 116);
+    oled.drawXBMP((128 - TIBAY_LOGO_WIDTH) / 2, 16, TIBAY_LOGO_WIDTH, TIBAY_LOGO_HEIGHT, TIBAY_LOGO_BITS);
+    uint8_t accentWidth = 4 + (millis() / 350) % 3;
+    oled.drawHLine(32 - accentWidth, 32, accentWidth);
+    oled.drawHLine(96, 32, accentWidth);
     drawCentered(58, "TAP YOUR CARD", u8g2_font_helvB10_tf);
     return;
   }
@@ -172,10 +185,18 @@ void renderScreen(const String &title, const String &detail) {
     return;
   }
 
+  if (title == "Welcome back") {
+    oled.drawHLine(16, 10, 96);
+    drawCentered(29, "WELCOME BACK,", u8g2_font_helvB10_tf);
+    drawCentered(48, "KA-TIBAY!", u8g2_font_helvB10_tf);
+    oled.drawHLine(16, 58, 96);
+    return;
+  }
+
   // 4. In-flight Tap Verification
   if (title == "Confirming") {
     oled.drawRFrame(12, 8, 104, 24, 3);
-    drawCentered(25, "VERIFYING...", u8g2_font_helvB10_tf);
+    drawCentered(25, String("VERIFYING") + String("...").substring(0, 1 + (millis() / 300) % 3), u8g2_font_helvB10_tf);
     drawCentered(46, "Contacting server", u8g2_font_6x12_tf);
     drawCentered(58, "Please hold still", u8g2_font_5x7_tf);
     return;
@@ -184,8 +205,8 @@ void renderScreen(const String &title, const String &detail) {
   // 5. Successful Attendance Check-in
   if (title == "Checked in") {
     drawIconCheck(64, 11);
-    drawCentered(33, "CHECKED IN", u8g2_font_helvB10_tf);
-    drawCentered(47, "Enjoy your workout!", u8g2_font_6x12_tf);
+    drawCentered(33, "CHECKED IN!", u8g2_font_helvB10_tf);
+    drawCentered(47, "Tara buhat na!", u8g2_font_6x12_tf);
     if (detail.indexOf("Next tap") >= 0) {
       int idx = detail.indexOf("Next tap in ");
       String sec = (idx >= 0) ? detail.substring(idx + 12, detail.indexOf('s', idx)) : "3";
@@ -220,7 +241,7 @@ void renderScreen(const String &title, const String &detail) {
       int idx = detail.indexOf("Next tap in ");
       if (idx < 0) idx = detail.indexOf("Next card in ");
       int numStart = idx >= 0 ? detail.indexOf("in ", idx) + 3 : -1;
-      String sec = (numStart >= 3) ? detail.substring(numStart, detail.indexOf('s', numStart)) : "60";
+      String sec = (numStart >= 3) ? detail.substring(numStart, detail.indexOf('s', numStart)) : "3";
       oled.drawRFrame(12, 47, 104, 16, 3);
       drawCentered(59, String("Next card in ") + sec + "s", u8g2_font_6x12_tf);
     } else {
@@ -298,11 +319,25 @@ void renderScreen(const String &title, const String &detail) {
     return;
   }
 
+  if (title == "Confirmation delayed") {
+    drawIconAlert(64, 11);
+    drawTitle(32, "TAKING LONGER");
+    drawDetail(48, "Please ask front desk");
+    drawCentered(61, "No need to tap again", u8g2_font_5x7_tf);
+    return;
+  }
+
   // 16. In-flight tap retry / unconfirmed tap
   if (title == "Could not confirm") {
     drawIconAlert(64, 12);
-    drawTitle(34, "SYNCING TAP");
-    drawDetail(50, detail.isEmpty() ? "Retrying connection..." : detail);
+    if (detail == "Checking your card") {
+      drawTitle(32, "PLEASE WAIT");
+      drawDetail(48, "Checking your card");
+      drawCentered(61, "No need to tap again", u8g2_font_5x7_tf);
+    } else {
+      drawTitle(34, "NOT CONFIRMED");
+      drawDetail(50, detail.isEmpty() ? "Please ask front desk" : detail);
+    }
     return;
   }
 
@@ -333,13 +368,16 @@ void renderScreen(const String &title, const String &detail) {
 }
 
 void screen(const String &title, const String &detail = "") {
-  if (title == screenTitle && detail == screenDetail) return;
+  bool changed = title != screenTitle || detail != screenDetail;
+  bool animated = title == "Tap RFID" || title == "Confirming";
+  if (!changed && (!animated || millis() - lastFrame < 120)) return;
+  lastFrame = millis();
   screenTitle = title; screenDetail = detail;
   oled.clearBuffer();
   renderScreen(title, detail);
   oled.sendBuffer();
   // Do not print request bodies, card UIDs, credentials, or person information.
-  Serial.println(title);
+  if (changed) Serial.println(title);
 }
 void message(const String &title, const String &detail = "") {
   screen(title, detail); resultUntil = millis() + RESULT_MS;
@@ -376,7 +414,15 @@ void idleScreen() {
   if (resultUntil && !due(resultUntil)) return;
   if (storageFault) { screen("Recovery storage error", "Service scanner"); return; }
   if (!authorized && healthy) { screen("Device unauthorized", "Check provisioning"); return; }
-  if (!pendingBody.isEmpty()) { screen("Could not confirm", "Recovering same tap"); return; }
+  if (tapActive) {
+    screen(tapPhase(millis() - tapStarted) == TapPhase::Greeting ? "Welcome back" : "Confirming");
+    return;
+  }
+  if (!pendingBody.isEmpty()) {
+    if (confirmationDelayed) screen("Confirmation delayed");
+    else screen("Could not confirm", "Checking your card");
+    return;
+  }
   if (WiFi.status() != WL_CONNECTED) {
     if (!due(connectingUntil)) screen("Connecting", "Wi-Fi and HTTPS");
     else screen("Offline", "Use QR check-in");
@@ -389,6 +435,10 @@ void idleScreen() {
     String prefix = (scanWaitTitle == "RFID assigned") ? "Next card in " : "Next tap in ";
     screen(scanWaitTitle, prefix + seconds + "s / Remove card");
     return;
+  }
+  if (scanWaiting) {
+    scanWaiting = false;
+    scanWaitTitle = "";
   }
   if (!healthy) { screen(backendFailed ? "Backend unavailable" : "Connecting", backendDetail); return; }
   if (!assignmentId.isEmpty() && epochMs() >= assignmentDeadline) {
@@ -412,6 +462,7 @@ bool clearPending() {
     storageFault = true; screen("Recovery storage error", "Service scanner"); return false;
   }
   pendingBody = ""; pendingMode = ""; pendingAt = 0;
+  confirmationDelayed = false;
   return true;
 }
 
@@ -426,14 +477,14 @@ void restorePending() {
     storageFault = true; screen("Recovery storage error", "Service scanner"); return;
   }
   pendingMode = saved["mode"].as<String>(); pendingAt = saved["requestedAt"].as<int64_t>();
-  screen("Could not confirm", "Recovering same tap");
+  screen("Could not confirm", "Checking your card");
 }
 
 void failure(bool throttled = false) {
   healthy = false; backendFailed = true;
   nextNetwork = millis() + (throttled ? 60000 : backoff);
   backoff = min(backoff * 2, static_cast<uint32_t>(60000));
-  if (!pendingBody.isEmpty()) screen("Could not confirm", "Recovering same tap");
+  if (tapActive || !pendingBody.isEmpty()) idleScreen();
   else screen("Backend unavailable", backendDetail);
 }
 
@@ -445,13 +496,13 @@ void networkDiagnostic(bool capture, uint32_t startedAt, int status, const char 
 }
 
 // Strict HTTPS, host validation, CA trust, no redirects that could leak headers.
-int requestJson(const char *path, const String *body, JsonDocument &response) {
+int requestJson(const char *path, const String *body, JsonDocument &response, String &detail) {
   uint32_t startedAt = millis();
   WiFiClientSecure tls; tls.setCACert(BACKEND_ROOT_CA); tls.setHandshakeTimeout(5);
   HTTPClient http; http.setConnectTimeout(5000); http.setTimeout(5000);
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
   if (!http.begin(tls, String(BACKEND_ORIGIN) + path)) {
-    backendDetail = "HTTPS setup failed";
+    detail = "HTTPS setup failed";
     networkDiagnostic(body != nullptr, startedAt, -1, "https-setup");
     return -1;
   }
@@ -468,23 +519,23 @@ int requestJson(const char *path, const String *body, JsonDocument &response) {
   int tlsError = tls.lastError(tlsMessage, sizeof(tlsMessage));
   http.end();
   if (status <= 0) {
-    backendDetail = status == HTTPC_ERROR_READ_TIMEOUT ? "Request timed out" :
+    detail = status == HTTPC_ERROR_READ_TIMEOUT ? "Request timed out" :
       (tlsError ? "TLS connection error" : "Connection failed");
     networkDiagnostic(body != nullptr, startedAt, status, "transport-error", tlsError);
     return status;
   }
   if (status != 200) {
-    backendDetail = status == 429 ? "Rate limited / retry" : String("HTTP ") + status + " / retry";
+    detail = status == 429 ? "Rate limited / retry" : String("HTTP ") + status + " / retry";
     networkDiagnostic(body != nullptr, startedAt, status, "http-error");
     if (status == 401 || status == 403 || status == 429 || status >= 500) return status;
   }
   if (responseSize > 2048 || payload.length() > 2048) {
-    backendDetail = "Response too large";
+    detail = "Response too large";
     networkDiagnostic(body != nullptr, startedAt, status, "oversized-response");
     return -1;
   }
   if (deserializeJson(response, payload)) {
-    if (status == 200) backendDetail = "Invalid response";
+    if (status == 200) detail = "Invalid response";
     networkDiagnostic(body != nullptr, startedAt, status, "invalid-json");
     return -1;
   }
@@ -492,9 +543,33 @@ int requestJson(const char *path, const String *body, JsonDocument &response) {
   return status;
 }
 
-void poll() {
-  JsonDocument response;
-  int status = requestJson("/api/rfid/device/commands", nullptr, response);
+void networkWorker(void *) {
+  networkJob.status = requestJson(networkJob.capture ? "/api/rfid/device/capture" : "/api/rfid/device/commands",
+    networkJob.capture ? &networkJob.body : nullptr, networkJob.response, networkJob.detail);
+  uint8_t done = 1;
+  xQueueSend(networkDone, &done, portMAX_DELAY);
+  vTaskDelete(nullptr);
+}
+
+void startNetwork(bool capture) {
+  if (networkBusy) return;
+  networkJob.capture = capture;
+  networkJob.body = capture ? pendingBody : "";
+  networkJob.response.clear();
+  networkJob.detail = backendDetail;
+  networkBusy = true;
+  if (xTaskCreate(networkWorker, "rfid-https", 12288, nullptr, 1, nullptr) != pdPASS) {
+    networkBusy = false;
+    backendDetail = "Network task unavailable";
+    if (pendingBody.isEmpty()) { tapActive = false; tapUid = ""; }
+    failure();
+  }
+}
+
+void poll() { startNetwork(false); }
+void submit() { startNetwork(true); }
+
+void handlePoll(int status, JsonDocument &response) {
   if (status == 401 || status == 403) {
     authorized = false; healthy = true; nextNetwork = millis() + 60000;
     message("Device unauthorized", "Check provisioning"); return;
@@ -521,13 +596,12 @@ void poll() {
     // An attendance command is authoritative. A local deadline alone cannot switch modes.
     assignmentId = ""; assignmentDeadline = 0; nextNetwork = millis() + NORMAL_POLL_MS;
   }
-  idleScreen();
+  if (!tapActive) idleScreen();
 }
 
-void submit() {
-  JsonDocument response;
-  int status = requestJson("/api/rfid/device/capture", &pendingBody, response);
+void handleSubmit(int status, JsonDocument &response) {
   if (status == 401 || status == 403) {
+    tapActive = false; tapUid = "";
     authorized = false; healthy = true; nextNetwork = millis() + 60000;
     message("Device unauthorized", "Check provisioning"); return;
   }
@@ -547,6 +621,7 @@ void submit() {
   bool attendanceSucceeded = pendingMode == "attendance" && status == 200 &&
     (code == "checked-in" || code == "checked-out");
   if (!clearPending()) return;
+  tapActive = false; tapUid = "";
   healthy = true; authorized = true; backoff = 5000; backendFailed = false;
   backendDetail = "Refreshing backend";
   message(feedback(code), code == "retry-expired" ? "Check admin / use QR" : "Remove card");
@@ -560,7 +635,7 @@ void submit() {
     scanWaitTitle = feedback(code);
     scanWaiting = true;
     scanWaitUntil = millis() + (attendanceSucceeded ? NORMAL_POLL_MS : ASSIGNMENT_WAIT_MS);
-    resultUntil = 0; healthy = false; nextNetwork = scanWaitUntil;
+    resultUntil = 0; nextNetwork = scanWaitUntil + NORMAL_POLL_MS;
     idleScreen();
     return;
   }
@@ -576,6 +651,51 @@ String eventId() {
   return String(value);
 }
 
+void prepareCapture() {
+  if (!assignmentId.isEmpty() && epochMs() >= assignmentDeadline) {
+    tapActive = false; tapUid = "";
+    message("Assignment timeout", "Waiting for backend"); nextNetwork = millis(); return;
+  }
+  JsonDocument capture;
+  pendingMode = assignmentId.isEmpty() ? "attendance" : "enrollment";
+  pendingAt = epochMs();
+  capture["mode"] = pendingMode; capture["deviceId"] = DEVICE_ID;
+  capture["uid"] = tapUid; capture["eventId"] = eventId(); capture["requestedAt"] = pendingAt;
+  if (pendingMode == "enrollment") capture["assignmentId"] = assignmentId;
+  serializeJson(capture, pendingBody);
+  // Write-ahead persistence: a power loss after POST must retain exact identity.
+  if (storage.putString("pending", pendingBody) != pendingBody.length() ||
+      storage.getString("pending", "") != pendingBody) {
+    storageFault = true; screen("Recovery storage error", "Service scanner");
+  } else {
+    nextNetwork = millis();
+    submit();
+  }
+}
+
+void serviceNetwork() {
+  if (tapActive && tapPhase(millis() - tapStarted) == TapPhase::Delayed) {
+    tapActive = false; tapUid = ""; confirmationDelayed = true;
+    if (pendingBody.isEmpty()) message("Could not confirm", "Please ask front desk");
+    else idleScreen();
+  }
+  // Let a fast response wait only for the greeting; HTTPS already ran concurrently.
+  if (networkJob.capture && tapActive && tapPhase(millis() - tapStarted) == TapPhase::Greeting) return;
+  uint8_t done;
+  if (!networkBusy || xQueueReceive(networkDone, &done, 0) != pdTRUE) return;
+  networkBusy = false;
+  backendDetail = networkJob.detail;
+  if (networkJob.capture) {
+    handleSubmit(networkJob.status, networkJob.response);
+  } else {
+    handlePoll(networkJob.status, networkJob.response);
+    if (tapActive && !tapUid.isEmpty()) {
+      if (healthy && authorized) prepareCapture();
+      else { tapActive = false; tapUid = ""; }
+    }
+  }
+}
+
 void scan() {
   if (!due(nextPresence)) return;
   nextPresence = millis() + PRESENCE_MS;
@@ -585,8 +705,7 @@ void scan() {
   // Wake halted cards: IsNewCardPresent() alone cannot prove physical removal.
   MFRC522::StatusCode presence = reader.PICC_WakeupA(atqa, &size);
   if (presence == MFRC522::STATUS_TIMEOUT) {
-    // Count only observed removal time. A blocking HTTPS request is not evidence
-    // that the card remained absent during that unobserved interval.
+    cardHold.reset();
     if (absenceStarted && sampleGap <= 250) absenceMs += sampleGap;
     absenceStarted = true;
     if (absenceMs >= REMOVAL_MS) latched = false;
@@ -594,44 +713,36 @@ void scan() {
   }
   absenceStarted = false; // Errors/collisions do not count as removal.
   absenceMs = 0;
-  bool read = (presence == MFRC522::STATUS_OK || presence == MFRC522::STATUS_COLLISION) && reader.PICC_ReadCardSerial();
+  bool read = presence == MFRC522::STATUS_OK && reader.PICC_ReadCardSerial();
   bool canAccept = read && !latched && pendingBody.isEmpty() && !storageFault &&
-    !scanWaiting &&
+    !scanWaiting && !tapActive &&
     healthy && authorized && clockReady() && WiFi.status() == WL_CONNECTED &&
     (!resultUntil || due(resultUntil));
-  // Taps encountered offline or during recovery are discarded, never queued.
-  latched = true;
-  char uid[12] = {};
-  if (canAccept && reader.uid.size == 4) {
-    snprintf(uid, sizeof(uid), "%02X:%02X:%02X:%02X", reader.uid.uidByte[0],
-      reader.uid.uidByte[1], reader.uid.uidByte[2], reader.uid.uidByte[3]);
-  }
   if (read) reader.PICC_HaltA();
   reader.PCD_StopCrypto1();
-  if (!canAccept) return;
+  if (!canAccept) { cardHold.reset(); latched = true; return; }
+  // Wait out an idle poll without treating its duration as observed card presence.
+  if (networkBusy) { cardHold.reset(); return; }
+  if (reader.uid.size != 4) {
+    latched = true; cardHold.reset();
+    message("Unsupported card", "Only verified 4 bytes"); return;
+  }
+  uint32_t card = 0;
+  for (uint8_t i = 0; i < 4; ++i) card = (card << 8) | reader.uid.uidByte[i];
+  if (!cardHold.observe(millis(), card)) return;
+  latched = true; cardHold.reset();
+  char uid[12];
+  snprintf(uid, sizeof(uid), "%02X:%02X:%02X:%02X", reader.uid.uidByte[0],
+    reader.uid.uidByte[1], reader.uid.uidByte[2], reader.uid.uidByte[3]);
+  tapUid = uid; tapStarted = millis(); tapActive = true; confirmationDelayed = false;
+  screen("Welcome back");
   readBeep();
-  if (!uid[0]) { message("Unsupported card", "Only verified 4 bytes"); return; }
   if (assignmentId.isEmpty()) {
-    // The admin may have reserved enrollment since the last 3-second idle poll.
-    // Refresh before choosing the mode for this same physical tap.
+    // Refresh the mode for this same held card before creating its capture.
     poll();
-    if (!healthy || !authorized) return;
+  } else {
+    prepareCapture();
   }
-  if (!assignmentId.isEmpty() && epochMs() >= assignmentDeadline) {
-    message("Assignment timeout", "Waiting for backend"); nextNetwork = millis(); return;
-  }
-  JsonDocument capture;
-  pendingMode = assignmentId.isEmpty() ? "attendance" : "enrollment";
-  pendingAt = epochMs();
-  capture["mode"] = pendingMode; capture["deviceId"] = DEVICE_ID;
-  capture["uid"] = uid; capture["eventId"] = eventId(); capture["requestedAt"] = pendingAt;
-  if (pendingMode == "enrollment") capture["assignmentId"] = assignmentId;
-  serializeJson(capture, pendingBody);
-  // Write-ahead persistence: a power loss after POST must retain exact identity.
-  if (storage.putString("pending", pendingBody) != pendingBody.length() ||
-      storage.getString("pending", "") != pendingBody) {
-    storageFault = true; screen("Recovery storage error", "Service scanner");
-  } else { screen("Confirming", "Please wait"); nextNetwork = millis(); }
 }
 
 void setup() {
@@ -650,6 +761,8 @@ void setup() {
   // Keep the existing NVS namespace so renaming the sketch preserves pending taps.
   storageReady = storage.begin("reshape-rfid", false);
   if (!storageReady) { screen("Recovery storage error", "Service scanner"); return; }
+  networkDone = xQueueCreate(1, sizeof(uint8_t));
+  if (!networkDone) { screen("Setup required", "Network memory error"); return; }
   restorePending(); hardwareReady = true;
   String origin(BACKEND_ORIGIN);
   configured = strlen(WIFI_SSID) && strlen(DEVICE_CREDENTIAL) == 43 &&
@@ -667,13 +780,15 @@ void setup() {
 void loop() {
   if (buzzerUntil && due(buzzerUntil)) { digitalWrite(BUZZER_PIN, HIGH); buzzerUntil = 0; }
   if (!hardwareReady || !configured || storageFault) { delay(10); return; }
+  serviceNetwork();
   scan();
   // Preserve deadlines across restarts using original UTC timestamp, not uptime.
-  if (!pendingBody.isEmpty() && clockReady()) {
+  if (!networkBusy && !pendingBody.isEmpty() && clockReady()) {
     int64_t age = epochMs() - pendingAt;
     int64_t limit = pendingMode == "enrollment" ? ENROLLMENT_RETRY_MS : ATTENDANCE_RETRY_MS;
     if (age > limit || age < -5000) {
       if (!clearPending()) return;
+      tapActive = false; tapUid = "";
       healthy = false; nextNetwork = millis();
       message("Could not confirm", "Check admin / use QR");
     }
@@ -688,7 +803,11 @@ void loop() {
     wasConnected = true; healthy = false; nextNetwork = millis();
     configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
   }
-  if (clockReady() && due(nextNetwork) && (!scanWaiting || due(scanWaitUntil))) {
+  if (scanWaiting && due(scanWaitUntil)) {
+    scanWaiting = false;
+    scanWaitTitle = "";
+  }
+  if (clockReady() && due(nextNetwork) && !scanWaiting && !networkBusy && !cardHold.tracking) {
     if (!pendingBody.isEmpty()) submit(); else poll();
   }
   idleScreen(); delay(5);
