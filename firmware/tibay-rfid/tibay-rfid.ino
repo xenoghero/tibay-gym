@@ -24,8 +24,8 @@
 
 constexpr uint32_t REMOVAL_MS = 400, RESULT_MS = 3000;
 constexpr uint32_t ATTENDANCE_RETRY_MS = 30000, ENROLLMENT_RETRY_MS = 600000;
-constexpr uint32_t NORMAL_POLL_MS = 3000, ARMED_POLL_MS = 2000;
-constexpr uint32_t ASSIGNMENT_WAIT_MS = 3000;
+constexpr uint32_t COMMAND_POLL_MS = 60000, ATTENDANCE_WAIT_MS = 3000;
+constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
 // 128x64 SSD1309 4-pin I2C module (internal reset and address 0x3C).
@@ -36,9 +36,11 @@ Preferences storage;
 String assignmentId, pendingBody, pendingMode;
 int64_t assignmentDeadline = 0, pendingAt = 0;
 uint32_t nextNetwork = 0, nextWifi = 0, nextPresence = 0, connectingUntil = 0;
-uint32_t backoff = 5000, absenceMs = 0, lastPresence = 0, resultUntil = 0, buzzerUntil = 0;
+uint32_t backoff = 5000, absenceMs = 0, lastPresence = 0, resultUntil = 0, buzzerStarted = 0;
+bool successBeeping = false;
 uint32_t scanWaitUntil = 0;
 bool scanWaiting = false;
+bool assignmentCooldown = false;
 String scanWaitTitle;
 bool healthy = false, authorized = false, latched = true, absenceStarted = false;
 bool hardwareReady = false, configured = false, wasConnected = false;
@@ -167,11 +169,11 @@ void renderScreen(const String &title, const String &detail) {
   if (title == "Tap RFID to assign") {
     oled.drawBox(0, 0, 128, 13);
     oled.setDrawColor(0);
-    drawCentered(10, "MEMBER ENROLLMENT", u8g2_font_6x12_tf);
+    drawCentered(10, "LINK MEMBER CARD", u8g2_font_6x12_tf);
     oled.setDrawColor(1);
     drawIconMemberCard(64, 27);
     drawCentered(48, "TAP MEMBER CARD", u8g2_font_helvB08_tf);
-    drawCentered(61, "Link to gym member", u8g2_font_6x12_tf);
+    drawCentered(61, "Hold card steady", u8g2_font_6x12_tf);
     return;
   }
 
@@ -190,6 +192,24 @@ void renderScreen(const String &title, const String &detail) {
     drawCentered(29, "WELCOME BACK,", u8g2_font_helvB10_tf);
     drawCentered(48, "KA-TIBAY!", u8g2_font_helvB10_tf);
     oled.drawHLine(16, 58, 96);
+    return;
+  }
+
+  if (title == "Card detected" || title == "Linking card") {
+    drawIconMemberCard(64, 12);
+    drawTitle(35, title == "Card detected" ? "CARD DETECTED" : "LINKING CARD...");
+    drawDetail(49, "Please wait");
+    drawCentered(61, "No need to tap again", u8g2_font_5x7_tf);
+    uint8_t dot = (millis() / 250) % 5;
+    oled.drawBox(50 + dot * 6, 20, 3, 2);
+    return;
+  }
+
+  if (title == "Assignment cooldown") {
+    drawIconCardLift(64, 10);
+    drawTitle(31, "PLEASE REMOVE CARD");
+    drawDetail(47, detail);
+    drawCentered(61, "All RFID taps paused", u8g2_font_5x7_tf);
     return;
   }
 
@@ -235,8 +255,8 @@ void renderScreen(const String &title, const String &detail) {
   // 7. Successful Card Assignment
   if (title == "RFID assigned") {
     drawIconCheck(64, 10);
-    drawCentered(29, "CARD ASSIGNED!", u8g2_font_helvB10_tf);
-    drawCentered(42, "Linked to gym member", u8g2_font_6x12_tf);
+    drawCentered(29, "CARD LINKED!", u8g2_font_helvB10_tf);
+    drawCentered(42, "Ready for gym visits", u8g2_font_6x12_tf);
     if (detail.indexOf("Next tap in ") >= 0 || detail.indexOf("Next card in ") >= 0) {
       int idx = detail.indexOf("Next tap in ");
       if (idx < 0) idx = detail.indexOf("Next card in ");
@@ -369,7 +389,7 @@ void renderScreen(const String &title, const String &detail) {
 
 void screen(const String &title, const String &detail = "") {
   bool changed = title != screenTitle || detail != screenDetail;
-  bool animated = title == "Tap RFID" || title == "Confirming";
+  bool animated = title == "Tap RFID" || title == "Confirming" || title == "Linking card";
   if (!changed && (!animated || millis() - lastFrame < 120)) return;
   lastFrame = millis();
   screenTitle = title; screenDetail = detail;
@@ -382,8 +402,8 @@ void screen(const String &title, const String &detail = "") {
 void message(const String &title, const String &detail = "") {
   screen(title, detail); resultUntil = millis() + RESULT_MS;
 }
-void beep() { digitalWrite(BUZZER_PIN, LOW); buzzerUntil = millis() + 150; }
-// A short physical-read acknowledgement is distinct from the later success beep.
+void beep() { buzzerStarted = millis(); successBeeping = true; digitalWrite(BUZZER_PIN, LOW); }
+// A short physical-read acknowledgement is distinct from the later double beep.
 // Finish it before HTTPS so a slow request cannot leave the buzzer sounding.
 void readBeep() { digitalWrite(BUZZER_PIN, LOW); delay(45); digitalWrite(BUZZER_PIN, HIGH); }
 
@@ -415,7 +435,9 @@ void idleScreen() {
   if (storageFault) { screen("Recovery storage error", "Service scanner"); return; }
   if (!authorized && healthy) { screen("Device unauthorized", "Check provisioning"); return; }
   if (tapActive) {
-    screen(tapPhase(millis() - tapStarted) == TapPhase::Greeting ? "Welcome back" : "Confirming");
+    bool greeting = tapPhase(millis() - tapStarted) == TapPhase::Greeting;
+    if (!assignmentId.isEmpty()) screen(greeting ? "Card detected" : "Linking card");
+    else screen(greeting ? "Welcome back" : "Confirming");
     return;
   }
   if (!pendingBody.isEmpty()) {
@@ -432,13 +454,13 @@ void idleScreen() {
   int32_t scanRemaining = static_cast<int32_t>(scanWaitUntil - millis());
   if (scanWaiting && scanRemaining > 0) {
     uint32_t seconds = (static_cast<uint32_t>(scanRemaining) + 999) / 1000;
+    if (assignmentCooldown && due(resultUntil)) {
+      screen("Assignment cooldown", String("Next tap in ") + seconds + "s");
+      return;
+    }
     String prefix = (scanWaitTitle == "RFID assigned") ? "Next card in " : "Next tap in ";
     screen(scanWaitTitle, prefix + seconds + "s / Remove card");
     return;
-  }
-  if (scanWaiting) {
-    scanWaiting = false;
-    scanWaitTitle = "";
   }
   if (!healthy) { screen(backendFailed ? "Backend unavailable" : "Connecting", backendDetail); return; }
   if (!assignmentId.isEmpty() && epochMs() >= assignmentDeadline) {
@@ -590,11 +612,11 @@ void handlePoll(int status, JsonDocument &response) {
   if (mode == "enrollment") {
     assignmentId = response["assignmentId"].as<String>();
     assignmentDeadline = response["expiresAt"].as<int64_t>();
-    nextNetwork = millis() + ARMED_POLL_MS;
+    nextNetwork = millis() + COMMAND_POLL_MS;
   } else {
     if (!assignmentId.isEmpty()) message(epochMs() >= assignmentDeadline ? "Assignment timeout" : "Assignment ended", "See admin profile");
     // An attendance command is authoritative. A local deadline alone cannot switch modes.
-    assignmentId = ""; assignmentDeadline = 0; nextNetwork = millis() + NORMAL_POLL_MS;
+    assignmentId = ""; assignmentDeadline = 0; nextNetwork = millis() + COMMAND_POLL_MS;
   }
   if (!tapActive) idleScreen();
 }
@@ -634,8 +656,11 @@ void handleSubmit(int status, JsonDocument &response) {
     assignmentId = ""; assignmentDeadline = 0;
     scanWaitTitle = feedback(code);
     scanWaiting = true;
-    scanWaitUntil = millis() + (attendanceSucceeded ? NORMAL_POLL_MS : ASSIGNMENT_WAIT_MS);
-    resultUntil = 0; nextNetwork = scanWaitUntil + NORMAL_POLL_MS;
+    assignmentCooldown = !attendanceSucceeded;
+    scanWaitUntil = millis() + (attendanceSucceeded ? ATTENDANCE_WAIT_MS : ASSIGNMENT_WAIT_MS);
+    resultUntil = 0; nextNetwork = assignmentCooldown ? scanWaitUntil : millis() + COMMAND_POLL_MS;
+    // Show enrollment outcome briefly before the full-reader lockout countdown.
+    if (assignmentCooldown) resultUntil = millis() + RESULT_MS;
     idleScreen();
     return;
   }
@@ -735,7 +760,7 @@ void scan() {
   snprintf(uid, sizeof(uid), "%02X:%02X:%02X:%02X", reader.uid.uidByte[0],
     reader.uid.uidByte[1], reader.uid.uidByte[2], reader.uid.uidByte[3]);
   tapUid = uid; tapStarted = millis(); tapActive = true; confirmationDelayed = false;
-  screen("Welcome back");
+  screen(assignmentId.isEmpty() ? "Welcome back" : "Card detected");
   readBeep();
   if (assignmentId.isEmpty()) {
     // Refresh the mode for this same held card before creating its capture.
@@ -778,7 +803,11 @@ void setup() {
 }
 
 void loop() {
-  if (buzzerUntil && due(buzzerUntil)) { digitalWrite(BUZZER_PIN, HIGH); buzzerUntil = 0; }
+  if (successBeeping) {
+    uint32_t elapsed = millis() - buzzerStarted;
+    digitalWrite(BUZZER_PIN, successBeepOn(elapsed) ? LOW : HIGH);
+    if (elapsed >= SUCCESS_BEEP_MS) successBeeping = false;
+  }
   if (!hardwareReady || !configured || storageFault) { delay(10); return; }
   serviceNetwork();
   scan();
@@ -804,7 +833,9 @@ void loop() {
     configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
   }
   if (scanWaiting && due(scanWaitUntil)) {
+    if (assignmentCooldown) healthy = false;
     scanWaiting = false;
+    assignmentCooldown = false;
     scanWaitTitle = "";
   }
   if (clockReady() && due(nextNetwork) && !scanWaiting && !networkBusy && !cardHold.tracking) {

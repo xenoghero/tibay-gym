@@ -2,6 +2,10 @@
 #include <stdint.h>
 
 constexpr uint32_t CARD_HOLD_MS = 400, GREETING_MS = 600, VERIFY_LIMIT_MS = 10000;
+constexpr uint32_t SUCCESS_BEEP_MS = 210;
+constexpr bool successBeepOn(uint32_t elapsed) {
+  return elapsed < 70 || (elapsed >= 140 && elapsed < SUCCESS_BEEP_MS);
+}
 
 struct CardHold {
   uint32_t uid = 0, observedMs = 0, lastSample = 0;

@@ -206,12 +206,13 @@ it.each(["cancel", "expire", "delete"])("rejects late enrollment for %s and rele
 });
 it("throttles heartbeat writes, expires commands on polling, and returns sanitized idle state", async () => {
   const id = (await begin()).assignmentId!;
+  expect(await pollCommand(request)).toMatchObject({ mode: "enrollment", pollAfterMs: 60_000 });
   vi.setSystemTime(now + 59_999); await pollCommand(request);
   expect(device().lastSeenAt).toEqual(stamp(now));
   vi.setSystemTime(now + 60_000); await pollCommand(request);
   expect(device().lastSeenAt).toEqual(stamp(now + 60_000));
   vi.setSystemTime(now + 120_000);
-  expect(await pollCommand(request)).toEqual({ mode: "attendance", pollAfterMs: 3_000 });
+  expect(await pollCommand(request)).toEqual({ mode: "attendance", pollAfterMs: 60_000 });
   expect(store.data.get(`rfidAssignments/${id}`)?.status).toBe("expired");
   expect(store.data.get("rfidDeviceStatus/entrance-01")).not.toHaveProperty("credentialHash");
 });
@@ -250,7 +251,7 @@ it("expires an old reservation when another tab starts and never lets the old ca
 it("polling cancels enrollment for a missing target and does not deliver its identity", async () => {
   const id = (await begin()).assignmentId!;
   store.data.delete("persons/p1");
-  expect(await pollCommand(request)).toEqual({ mode: "attendance", pollAfterMs: 3_000 });
+  expect(await pollCommand(request)).toEqual({ mode: "attendance", pollAfterMs: 60_000 });
   expect(store.data.get(`rfidAssignments/${id}`)).toMatchObject({ status: "cancelled", lastErrorCode: "person-unavailable" });
   expect(device().activeAssignmentId).toBeNull();
 });

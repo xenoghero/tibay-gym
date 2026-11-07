@@ -11,7 +11,7 @@ const submit = block("void handleSubmit(", "\nString eventId() {");
 describe("physical card tap flow", () => {
   it("requires a stable card before the greeting, read beep, or network capture", () => {
     const hold = scan.indexOf("if (!cardHold.observe(millis(), card)) return;");
-    const greeting = scan.indexOf('screen("Welcome back");');
+    const greeting = scan.indexOf('screen(assignmentId.isEmpty() ? "Welcome back" : "Card detected");');
     const beep = scan.indexOf("readBeep();");
     expect(hold).toBeGreaterThan(scan.indexOf("reader.PICC_ReadCardSerial()"));
     expect(greeting).toBeGreaterThan(hold);
@@ -62,14 +62,32 @@ describe("physical card tap flow", () => {
     expect(submit).toContain('if (status == 200 && (code == "rfid-assigned" || code == "checked-in" || code == "checked-out")) beep();');
     expect(source).toContain('"CHECKED IN!"');
     expect(source).toContain('"Tara buhat na!"');
-    expect(submit).toContain("scanWaitUntil = millis() + (attendanceSucceeded ? NORMAL_POLL_MS : ASSIGNMENT_WAIT_MS);");
+    expect(submit).toContain("scanWaitUntil = millis() + (attendanceSucceeded ? ATTENDANCE_WAIT_MS : ASSIGNMENT_WAIT_MS);");
     expect(submit).not.toContain("healthy = false; nextNetwork = scanWaitUntil;");
   });
 
-  it("preserves responsive removal and the existing three-second result countdown", () => {
+  it("pauses all card taps and routine requests during assignment cooldown only", () => {
+    expect(source).toContain("constexpr uint32_t COMMAND_POLL_MS = 60000, ATTENDANCE_WAIT_MS = 3000;");
+    expect(submit).toContain("assignmentCooldown = !attendanceSucceeded;");
+    expect(submit).toContain("nextNetwork = assignmentCooldown ? scanWaitUntil : millis() + COMMAND_POLL_MS;");
+    expect(scan).toContain("!scanWaiting && !tapActive");
+    expect(source).toContain("due(nextNetwork) && !scanWaiting && !networkBusy");
+    expect(source).toContain('screen("Assignment cooldown", String("Next tap in ") + seconds + "s");');
+    expect(source).toContain('"All RFID taps paused"');
+  });
+
+  it("plays a nonblocking double beep only for confirmed successes", () => {
+    expect(submit).toContain('if (status == 200 && (code == "rfid-assigned" || code == "checked-in" || code == "checked-out")) beep();');
+    expect(source).toContain("digitalWrite(BUZZER_PIN, successBeepOn(elapsed) ? LOW : HIGH);");
+    expect(source).toContain("if (elapsed >= SUCCESS_BEEP_MS) successBeeping = false;");
+    const beep = block("void beep() {", "// A short physical-read");
+    expect(beep).not.toContain("delay(");
+  });
+
+  it("preserves responsive removal and the existing three-second attendance countdown", () => {
     expect(source).toContain("constexpr uint32_t REMOVAL_MS = 400, RESULT_MS = 3000;");
-    expect(source).toContain("constexpr uint32_t ASSIGNMENT_WAIT_MS = 3000;");
-    expect(source).toContain('if (scanWaiting && due(scanWaitUntil)) {\n    scanWaiting = false;\n    scanWaitTitle = "";\n  }');
+    expect(source).toContain("constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;");
+    expect(source).toContain('if (scanWaiting && due(scanWaitUntil)) {\n    if (assignmentCooldown) healthy = false;\n    scanWaiting = false;\n    assignmentCooldown = false;\n    scanWaitTitle = "";\n  }');
     expect(source).toContain("if (!networkBusy && !pendingBody.isEmpty() && clockReady())");
   });
 });

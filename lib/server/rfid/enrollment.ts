@@ -107,7 +107,7 @@ export async function pollCommand(request: Request) {
     }
     return current.active && !unavailable ? { mode: "enrollment", assignmentId: current.ref!.id,
       operation: current.assignment!.operation, expiresAt: current.assignment!.expiresAt.toMillis(),
-      lastErrorCode: current.assignment!.lastErrorCode, pollAfterMs: 2_000 } : { mode: "attendance", pollAfterMs: 3_000 };
+      lastErrorCode: current.assignment!.lastErrorCode, pollAfterMs: 60_000 } : { mode: "attendance", pollAfterMs: 60_000 };
   });
   if (heartbeatWritten) console.info(JSON.stringify({ metric: "rfid-heartbeat", documentWrites: 2 }));
   return result;

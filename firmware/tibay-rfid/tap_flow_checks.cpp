@@ -17,3 +17,7 @@ static_assert(stableCardChecks(), "Card hold must require 400 ms of the same obs
 static_assert(tapPhase(0) == TapPhase::Greeting && tapPhase(599) == TapPhase::Greeting);
 static_assert(tapPhase(600) == TapPhase::Verifying && tapPhase(9999) == TapPhase::Verifying);
 static_assert(tapPhase(10000) == TapPhase::Delayed);
+static_assert(successBeepOn(0) && successBeepOn(69));
+static_assert(!successBeepOn(70) && !successBeepOn(139));
+static_assert(successBeepOn(140) && successBeepOn(209));
+static_assert(!successBeepOn(210) && !successBeepOn(10000));
