@@ -3,6 +3,10 @@
 
 constexpr uint32_t CARD_HOLD_MS = 400, GREETING_MS = 600, VERIFY_LIMIT_MS = 10000;
 constexpr uint32_t SUCCESS_BEEP_MS = 210;
+constexpr uint32_t EXPIRED_BEEP_MS = 490;
+constexpr bool expiredBeepOn(uint32_t elapsed) {
+  return elapsed < EXPIRED_BEEP_MS && elapsed % 140 < 70;
+}
 constexpr bool successBeepOn(uint32_t elapsed) {
   return elapsed < 70 || (elapsed >= 140 && elapsed < SUCCESS_BEEP_MS);
 }

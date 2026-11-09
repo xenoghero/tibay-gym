@@ -9,6 +9,29 @@ const service = block("void serviceNetwork() {", "\nvoid scan() {");
 const submit = block("void handleSubmit(", "\nString eventId() {");
 
 describe("physical card tap flow", () => {
+  it("holds and animates an expired rejection for five seconds without accepting taps", () => {
+    const message = block("void message(", "\nvoid beep()");
+    const idle = block("void idleScreen() {", "\nbool clearPending()");
+    const display = block("void screen(", "\nvoid message(");
+    expect(source).toContain("constexpr uint32_t EXPIRED_RESULT_MS = 5000;");
+    expect(message).toContain('title == "Membership expired" ? EXPIRED_RESULT_MS : RESULT_MS');
+    expect(idle).toContain('if (resultUntil && !due(resultUntil)) {\n    screen(screenTitle, screenDetail);\n    return;');
+    expect(display).toContain('title == "Membership expired"');
+    expect(display).toContain('if (title != screenTitle) screenStarted = lastFrame;');
+    expect(scan).toContain("(!resultUntil || due(resultUntil))");
+    expect(scan).toContain("!latched");
+    expect(submit).toContain('if (code == "expired-member") expiredBeep();');
+    expect(submit.indexOf('expiredBeep();')).toBeGreaterThan(submit.indexOf("if (!clearPending()) return;"));
+    const expiredScreen = block('if (title == "Membership expired") {', '// 10.');
+    expect(expiredScreen).toContain('"Attendance not recorded"');
+    expect(expiredScreen).toContain("millis() - screenStarted");
+    expect(expiredScreen).not.toContain("delay(");
+    const expiredSound = block("if (expiredBeeping) {", "if (successBeeping)");
+    expect(expiredSound).toContain("expiredBeepOn(elapsed) ? LOW : HIGH");
+    expect(expiredSound).toContain("if (elapsed >= EXPIRED_BEEP_MS) expiredBeeping = false;");
+    expect(expiredSound).not.toContain("delay(");
+  });
+
   it("requires a stable card before the greeting, read beep, or network capture", () => {
     const hold = scan.indexOf("if (!cardHold.observe(millis(), card)) return;");
     const greeting = scan.indexOf('screen(assignmentId.isEmpty() ? "Welcome back" : "Card detected");');

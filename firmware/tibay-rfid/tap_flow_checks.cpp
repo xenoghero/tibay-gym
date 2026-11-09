@@ -21,3 +21,12 @@ static_assert(successBeepOn(0) && successBeepOn(69));
 static_assert(!successBeepOn(70) && !successBeepOn(139));
 static_assert(successBeepOn(140) && successBeepOn(209));
 static_assert(!successBeepOn(210) && !successBeepOn(10000));
+constexpr bool expiredBeepChecks() {
+  for (uint32_t elapsed = 0; elapsed < 1000; ++elapsed) {
+    bool expected = elapsed < 70 || (elapsed >= 140 && elapsed < 210) ||
+      (elapsed >= 280 && elapsed < 350) || (elapsed >= 420 && elapsed < 490);
+    if (expiredBeepOn(elapsed) != expected) return false;
+  }
+  return !expiredBeepOn(UINT32_MAX);
+}
+static_assert(expiredBeepChecks(), "Expired membership must sound exactly four 70 ms beeps");

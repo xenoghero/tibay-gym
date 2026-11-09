@@ -26,6 +26,7 @@ constexpr uint32_t REMOVAL_MS = 400, RESULT_MS = 3000;
 constexpr uint32_t ATTENDANCE_RETRY_MS = 30000, ENROLLMENT_RETRY_MS = 600000;
 constexpr uint32_t COMMAND_POLL_MS = 60000, ATTENDANCE_WAIT_MS = 3000;
 constexpr uint32_t ASSIGNMENT_WAIT_MS = 60000;
+constexpr uint32_t EXPIRED_RESULT_MS = 5000;
 constexpr uint32_t WIFI_RECONNECT_MS = 15000, PRESENCE_MS = 100;
 constexpr uint8_t BUZZER_PIN = 32;
 // 128x64 SSD1309 4-pin I2C module (internal reset and address 0x3C).
@@ -38,6 +39,7 @@ int64_t assignmentDeadline = 0, pendingAt = 0;
 uint32_t nextNetwork = 0, nextWifi = 0, nextPresence = 0, connectingUntil = 0;
 uint32_t backoff = 5000, absenceMs = 0, lastPresence = 0, resultUntil = 0, buzzerStarted = 0;
 bool successBeeping = false;
+bool expiredBeeping = false;
 uint32_t scanWaitUntil = 0;
 bool scanWaiting = false;
 bool assignmentCooldown = false;
@@ -51,6 +53,7 @@ String screenTitle, screenDetail;
 CardHold cardHold;
 String tapUid;
 uint32_t tapStarted = 0, lastFrame = 0;
+uint32_t screenStarted = 0;
 bool tapActive = false, confirmationDelayed = false, networkBusy = false;
 QueueHandle_t networkDone = nullptr;
 // The UI owns this job until launch; the worker owns it until queue completion.
@@ -281,10 +284,14 @@ void renderScreen(const String &title, const String &detail) {
 
   // 9. Membership Expired
   if (title == "Membership expired") {
-    drawIconAlert(64, 12);
-    drawTitle(34, "EXPIRED MEMBER");
-    drawSubtitle(49, "Please renew at desk");
-    drawCentered(61, "Tibay membership expired", u8g2_font_5x7_tf);
+    uint32_t elapsed = millis() - screenStarted;
+    int16_t offset = elapsed < 120 ? -3 : elapsed < 240 ? 3 : elapsed < 360 ? -1 : 0;
+    drawIconAlert(64 + offset, 10);
+    if (elapsed >= 480) oled.drawCircle(64, 10, 9 + (elapsed / 600) % 2);
+    drawCentered(28, "MEMBERSHIP", u8g2_font_helvB08_tf);
+    drawCentered(41, "EXPIRED", u8g2_font_helvB10_tf);
+    drawCentered(52, "Please renew at desk", u8g2_font_5x7_tf);
+    drawCentered(62, "Attendance not recorded", u8g2_font_5x7_tf);
     return;
   }
 
@@ -389,9 +396,10 @@ void renderScreen(const String &title, const String &detail) {
 
 void screen(const String &title, const String &detail = "") {
   bool changed = title != screenTitle || detail != screenDetail;
-  bool animated = title == "Tap RFID" || title == "Confirming" || title == "Linking card";
+  bool animated = title == "Tap RFID" || title == "Confirming" || title == "Linking card" || title == "Membership expired";
   if (!changed && (!animated || millis() - lastFrame < 120)) return;
   lastFrame = millis();
+  if (title != screenTitle) screenStarted = lastFrame;
   screenTitle = title; screenDetail = detail;
   oled.clearBuffer();
   renderScreen(title, detail);
@@ -400,9 +408,11 @@ void screen(const String &title, const String &detail = "") {
   if (changed) Serial.println(title);
 }
 void message(const String &title, const String &detail = "") {
-  screen(title, detail); resultUntil = millis() + RESULT_MS;
+  screen(title, detail);
+  resultUntil = millis() + (title == "Membership expired" ? EXPIRED_RESULT_MS : RESULT_MS);
 }
 void beep() { buzzerStarted = millis(); successBeeping = true; digitalWrite(BUZZER_PIN, LOW); }
+void expiredBeep() { buzzerStarted = millis(); expiredBeeping = true; digitalWrite(BUZZER_PIN, LOW); }
 // A short physical-read acknowledgement is distinct from the later double beep.
 // Finish it before HTTPS so a slow request cannot leave the buzzer sounding.
 void readBeep() { digitalWrite(BUZZER_PIN, LOW); delay(45); digitalWrite(BUZZER_PIN, HIGH); }
@@ -431,7 +441,10 @@ String feedback(const String &code) {
 }
 
 void idleScreen() {
-  if (resultUntil && !due(resultUntil)) return;
+  if (resultUntil && !due(resultUntil)) {
+    screen(screenTitle, screenDetail);
+    return;
+  }
   if (storageFault) { screen("Recovery storage error", "Service scanner"); return; }
   if (!authorized && healthy) { screen("Device unauthorized", "Check provisioning"); return; }
   if (tapActive) {
@@ -648,6 +661,7 @@ void handleSubmit(int status, JsonDocument &response) {
   backendDetail = "Refreshing backend";
   message(feedback(code), code == "retry-expired" ? "Check admin / use QR" : "Remove card");
   if (status == 200 && (code == "rfid-assigned" || code == "checked-in" || code == "checked-out")) beep();
+  if (code == "expired-member") expiredBeep();
   if (assignmentSucceeded || assignmentRejected || attendanceSucceeded) {
     // Keep the result visible during its wait interval. Do not accept
     // another tap until the wait ends and an authoritative command is fetched.
@@ -803,6 +817,11 @@ void setup() {
 }
 
 void loop() {
+  if (expiredBeeping) {
+    uint32_t elapsed = millis() - buzzerStarted;
+    digitalWrite(BUZZER_PIN, expiredBeepOn(elapsed) ? LOW : HIGH);
+    if (elapsed >= EXPIRED_BEEP_MS) expiredBeeping = false;
+  }
   if (successBeeping) {
     uint32_t elapsed = millis() - buzzerStarted;
     digitalWrite(BUZZER_PIN, successBeepOn(elapsed) ? LOW : HIGH);
