@@ -29,7 +29,7 @@ export type CheckInSource = "qr" | "rfid";
 
 /**
  * How an open session ended. `null` while the session is still open.
- * - "auto"     — 4-hour no-activity auto-close job
+ * - "auto"     — 2.5-hour no-activity auto-close job
  * - "implicit" — a new check-in scan for the same person closed the old session
  * - "manual"   — admin force-close from the Person Profile
  */
@@ -79,7 +79,7 @@ export const attendanceLogDoc = (
  * A session with no further activity for this long auto-closes. Also the window
  * the dashboard's "currently inside" count trusts an open row for.
  */
-export const AUTO_CLOSE_AFTER_MS = 4 * 60 * 60 * 1000; // 4 hours
+export const AUTO_CLOSE_AFTER_MS = 2.5 * 60 * 60 * 1000; // 2.5 hours; keep in sync with STALE_SESSION_MS
 
 /**
  * Safety cap on a single stale-session sweep. The concurrently-open count at one
@@ -124,7 +124,7 @@ export function watchTodaysLogs(
 /**
  * Every currently-open session (`checkOutAt == null`), regardless of when it
  * opened. Drives the Overview "currently inside" count. Callers should also
- * kick `closeStaleSessions()` on mount so a session past the 4-hour window that
+ * kick `closeStaleSessions()` on mount so a session past the 2.5-hour window that
  * no traffic has swept yet isn't counted as still inside.
  */
 export function watchOpenSessions(

@@ -82,7 +82,7 @@
 .currentStep::after { background: var(--rs-accent); }
 .stepNumber { flex-shrink: 0; font-size: 10px; }
 .progressSteps button:hover:not(:disabled) { background: var(--rs-accent-soft); border-radius: 4px; color: var(--rs-fg); }
-@media (prefers-color-scheme: dark) { .page { --entry-success: #35bd78; color-scheme: dark; } }
+.page { --entry-success: #35bd78; color-scheme: dark; }
 @media (max-width: 650px) {
   .workspace { padding-block: 22px; }
   .content { padding: 26px 24px 24px; }

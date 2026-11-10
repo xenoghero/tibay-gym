@@ -1,3 +1,11 @@
+# Coding workflow
+
+Always read and apply the `ponytail` skill before any coding task, including writing, fixing, refactoring, reviewing code, or choosing dependencies. Use its default `full` level unless the user specifies another level or explicitly disables it.
+
+# Commits
+
+Commit as the repository's configured git user (Adrian Luna <reinieradrianluna@gmail.com>) so every commit counts toward the owner's GitHub profile. Do not add `Co-Authored-By` or any other AI attribution trailer to commit messages or PR descriptions, and do not override the author or committer.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

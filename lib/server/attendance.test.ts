@@ -142,6 +142,21 @@ it.each([false, true])("rejects expired RFID before session cleanup (stale=%s), 
   expect(tap.retainUntil).toEqual(stamp(Date.now() + 90 * 86_400_000));
   expect(await scanAttendance(rfid())).toEqual(result);
 });
+it.each(["expired-status", "expiry-boundary", "past-expiry"])("rejects %s RFID check-in and repeat taps without attendance writes", async (kind) => {
+  const person = store.data.get("persons/p1")!;
+  if (kind === "expired-status") person.status = "expired";
+  else person.membershipExpiry = stamp(now - (kind === "past-expiry" ? 1 : 0));
+  const before = new Map(store.data);
+  const request = rfid();
+  const result = await scanAttendance(request);
+  expect(result).toMatchObject({ resultCode: "expired-member", action: null, logId: null });
+  expect(await scanAttendance(request)).toEqual(result);
+  expect((await scanAttendance(rfid("repeat-expired-001"))).resultCode).toBe("expired-member");
+  expect(logs()).toHaveLength(0);
+  for (const path of ["persons/p1", "attendanceState/p1", "rfidCards/09:70:65:20"])
+    expect(store.data.get(path)).toEqual(before.get(path));
+});
+
 it("accepts assigned guests and retains QR's expired-member policy", async () => {
   store.data.get("persons/p1")!.type = "guest";
   store.data.get("persons/p1")!.status = null;

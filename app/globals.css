@@ -117,7 +117,7 @@
   --foreground: #171717;
 
   /* Tibay Gym palette — yellow from the supplied logo, with readable gold text.
-     Light values here; dark overrides in the media query below. */
+     Light values here are overridden by the always-on dark block below. */
   --rs-bg: #ffffff;
   --rs-panel: #faf8f0;
   --rs-fg: #0d0d0d;
@@ -126,6 +126,7 @@
   --rs-accent: #ffcc00;
   --rs-accent-text: #806000;
   --rs-danger: #a92d2d;
+  --rs-success: #2e7d32;
   --rs-accent-soft: rgba(255, 204, 0, 0.14);
   --rs-on-accent: #171400;
   /* "inverse" tokens: text sitting on the dark (--rs-fg) login panel */
@@ -153,24 +154,24 @@
   --color-rs-inv-faint: var(--rs-inv-faint);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --foreground: #ededed;
 
-    --rs-bg: #0c0c0c;
-    --rs-panel: #191810;
-    --rs-fg: #f3f2f0;
-    --rs-muted: #9a9a97;
-    --rs-line: #343022;
-    --rs-accent: #ffcc00;
-    --rs-accent-text: #ffda47;
-    --rs-danger: #ef9990;
-    --rs-accent-soft: rgba(255, 204, 0, 0.12);
-    --rs-on-accent: #171400;
-    --rs-inv-muted: rgba(12, 12, 12, 0.66);
-    --rs-inv-faint: rgba(12, 12, 12, 0.48);
-  }
+  --rs-bg: #0c0c0c;
+  --rs-panel: #191810;
+  --rs-fg: #f3f2f0;
+  --rs-muted: #9a9a97;
+  --rs-line: #343022;
+  --rs-accent: #ffcc00;
+  --rs-accent-text: #ffda47;
+  --rs-danger: #ef9990;
+  --rs-success: #7fd48a;
+  --rs-accent-soft: rgba(255, 204, 0, 0.12);
+  --rs-on-accent: #171400;
+  --rs-inv-muted: rgba(12, 12, 12, 0.66);
+  --rs-inv-faint: rgba(12, 12, 12, 0.48);
 }
 
 body {
@@ -190,7 +191,7 @@ input[data-form-input] {
 }
 
 input:is([type="date"], [type="datetime-local"], [type="time"]) {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 input[data-form-input]:is([type="date"], [type="datetime-local"], [type="time"]):not(:disabled):not([readonly]) {
@@ -439,6 +440,11 @@ input[data-form-input]:focus-visible {
 .rs-ov-tile > span { color: var(--rs-muted); font-size: 11px; margin-top: auto; }
 .rs-ov-tile-hero { background: var(--rs-accent); color: var(--rs-on-accent); }
 .rs-ov-tile-hero h2, .rs-ov-tile-hero > span { color: var(--rs-on-accent); }
+.rs-ov-tile strong i { font-style: normal; font-size: .6em; color: var(--rs-muted); margin: 0 3px; }
+.rs-ov-tile strong b { font-weight: inherit; }
+.rs-ov-active { color: var(--rs-success); }
+.rs-ov-expired { color: var(--rs-danger); }
+.rs-ov-tile-short { display: none; }
 .rs-ov-workspace { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 24px; flex: 1; min-height: 0; }
 .rs-ov-panel-selector { display: none; }
 .rs-ov-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -491,7 +497,9 @@ input[data-form-input]:focus-visible {
 .rs-ov-error, .rs-ov-alert { padding: 14px; background: var(--rs-accent-soft); border-left: 3px solid var(--rs-accent); display: flex; align-items: center; gap: 14px; font-size: 13px; }
 .rs-ov-error { flex: none; justify-content: space-between; }
 .rs-ov-error button, .rs-ov-alert button { padding: 7px 12px; min-height: 36px; color: var(--rs-fg); background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 4px; cursor: pointer; }
-.rs-ov-alerts { display: grid; flex: 0 1 auto; min-height: 0; max-height: 20%; overflow-y: auto; overscroll-behavior: contain; gap: 10px; }
+/* RFID alerts float as toasts (z below the mobile header/drawer at 60+) instead of taking layout space. */
+.rs-ov-alerts { position: fixed; top: 20px; right: 20px; z-index: 50; width: min(400px, calc(100vw - 32px)); display: grid; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; gap: 10px; }
+.rs-ov-alerts .rs-ov-alert { background: linear-gradient(var(--rs-accent-soft), var(--rs-accent-soft)), var(--rs-panel); border: 1px solid var(--rs-accent); border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
 .rs-ov-alert-body { display: grid; gap: 4px; flex: 1; min-width: 0; text-decoration: none; color: var(--rs-fg); }
 .rs-ov-alert-body > span, .rs-ov-alert > a:not(.rs-ov-alert-body) { color: var(--rs-accent-text); }
 .rs-ov-alert-body > small { color: var(--rs-muted); }
@@ -501,20 +509,34 @@ input[data-form-input]:focus-visible {
   .rs-ov-tile { padding: 16px 14px; }
 }
 @media (max-width: 860px) {
-  .rs-ov { height: 100%; padding: 18px 16px; gap: 16px; }
+  /* Mobile: the page flows inside .rs-dashboard-content's scroller instead of
+     fitting one viewport — on short or zoomed screens the fixed fit squeezed
+     the check-in list to zero height. The pagination footer sticks instead. */
+  .rs-ov, .rs-ov-content { height: auto; overflow: visible; }
+  /* min-height fills the scroller so the feed grows and the footer sits at the bottom even with few rows. */
+  .rs-ov { padding: 18px 16px; gap: 16px; }
+  /* Beats the shell's `.rs-dashboard-content main { min-height: 0 !important }`. */
+  .rs-dashboard-content main.rs-ov { min-height: 100% !important; }
+  .rs-ov-alerts { top: 76px; right: 16px; max-height: 40dvh; }
+  .rs-ov-feed-scroll, .rs-ov-collections-scroll { overflow: visible; }
+  .rs-ov-feed-footer { position: sticky; bottom: 0; z-index: 1; padding-bottom: 8px; }
   .rs-ov-title { font-size: 42px; }
   .rs-ov-kicker { font-size: 10px; letter-spacing: .06em; }
   .rs-ov-live { font-size: 10px; text-align: right; max-width: 110px; }
-  .rs-ov-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
+  .rs-ov-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 14px; }
   .rs-ov-panel-selector { display: flex; flex: none; padding: 4px; gap: 4px; background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 8px; }
   .rs-ov-panel-selector button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 0; border-radius: 5px; background: transparent; color: var(--rs-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
   .rs-ov-panel-selector button[aria-pressed="true"] { background: var(--rs-accent); color: var(--rs-on-accent); }
   .rs-ov-panel[data-selected="false"] { display: none; }
-  .rs-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rs-ov-tile { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; }
-  .rs-ov-tile strong { grid-column: 2; grid-row: 1 / 3; font-size: 30px; }
-  .rs-ov-tile h2 { font-size: 11px; }
-  .rs-ov-tile > span { grid-column: 1; font-size: 10px; margin-top: 0; }
+  /* One row of four even tiles. */
+  .rs-ov-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); container-type: inline-size; }
+  .rs-ov-tile { padding: 10px 8px; gap: 6px; }
+  .rs-ov-tile h2 { font-size: 10px; line-height: 1.25; white-space: nowrap; }
+  /* All numbers share one size: 40px, or smaller so the longest stat (--ov-chars, ~0.5em per char) fits a quarter-width tile. */
+  .rs-ov-tile strong { font-size: min(40px, ((100cqi - 3px) / 4 - 16px) / (var(--ov-chars, 3) * 0.5)); line-height: 1; white-space: nowrap; margin-top: auto; }
+  .rs-ov-tile > span { display: none; }
+  .rs-ov-tile-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .rs-ov-tile-short { display: inline; }
   .rs-ov-content { gap: 20px; }
   .rs-ov-feed-head { padding: 10px 0; }
   .rs-ov-feed-footer { gap: 6px; padding-top: 6px; }
@@ -1959,9 +1981,7 @@ input[data-form-input]:focus-visible {
   width: 100%;
   margin-inline: auto;
 }
-@media (prefers-color-scheme: dark) {
-  .rs-st-finance { --rs-panel: #18191b; --rs-line: #303235; --rs-muted: #adb0b5; }
-}
+.rs-st-finance { --rs-panel: #18191b; --rs-line: #303235; --rs-muted: #adb0b5; }
 .rs-st-finance [hidden] { display: none !important; }
 .rs-stat-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--rs-line); flex-shrink: 0; }
 .rs-stat-tabs button { position: relative; min-height: 48px; padding: 0 2px 14px; color: var(--rs-muted); font-size: 15px; font-weight: 500; cursor: pointer; }
@@ -1983,7 +2003,7 @@ input[data-form-input]:focus-visible {
 .rs-collection-toolbar { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 10px; padding: 14px 18px; }
 .rs-collection-toolbar .rs-finance-filters { margin: 0; gap: 12px; align-items: center; }
 .rs-collection-toolbar label { flex-direction: row; align-items: center; color: var(--rs-muted); gap: 10px; }
-.rs-collections-report :is(input, select) { font-size: 14px; color-scheme: light dark; }
+.rs-collections-report :is(input, select) { font-size: 14px; color-scheme: dark; }
 .rs-collections-report button { border-radius: 7px; font-size: 13px; cursor: pointer; }
 .rs-collection-refresh { display: flex; gap: 12px; align-items: center; margin-left: auto; }
 .rs-collection-date-trigger { display: none; }
@@ -2046,7 +2066,7 @@ input[data-form-input]:focus-visible {
 .rs-report-sheet h2 { font-size: 22px; font-weight: 600; }
 .rs-report-sheet-grabber { width: 36px; height: 4px; background: var(--rs-muted); opacity: .5; border-radius: 2px; margin: 0 auto; }
 .rs-report-sheet .rs-finance-filters { display: flex; flex-direction: column; align-items: stretch; margin: 0; }
-.rs-report-sheet :is(input,select) { width: 100%; min-width: 0; font-size: 16px; min-height: 44px; color-scheme: light dark; }
+.rs-report-sheet :is(input,select) { width: 100%; min-width: 0; font-size: 16px; min-height: 44px; color-scheme: dark; }
 .rs-report-sheet .rs-report-range-fields { flex-direction: column; align-items: stretch; }
 .rs-report-range-fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; color: var(--rs-muted); }
 .rs-report-sheet-done { min-height: 46px; background: var(--rs-accent) !important; color: var(--rs-on-accent) !important; border: 0 !important; border-radius: 8px; cursor: pointer; }

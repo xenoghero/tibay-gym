@@ -28,12 +28,26 @@ export function RfidCardControls({ personId, personName }: { personId: string; p
   useEffect(() => {
     mounted.current = true;
     const initial = window.setTimeout(() => void refresh(), 0);
-    // Only open, visible profiles poll; no background hardware monitor.
-    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 5_000);
     const onVisible = () => { if (!document.hidden) void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { mounted.current = false; window.clearTimeout(initial); window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+    return () => { mounted.current = false; window.clearTimeout(initial); document.removeEventListener("visibilitychange", onVisible); };
   }, [refresh]);
+
+  const activeDeadline = status?.active?.expiresAt ?? 0;
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number;
+    const schedule = () => {
+      // Faster feedback is bounded by the assignment's authoritative expiry.
+      const delay = activeDeadline > Date.now() ? 5_000 : 60_000;
+      timer = window.setTimeout(async () => {
+        if (!document.hidden) await refresh();
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [refresh, activeDeadline]);
 
   async function act(operation: "assign" | "replace" | "remove" | "cancel") {
     if (!status) return;
@@ -66,6 +80,7 @@ export function RfidCardControls({ personId, personName }: { personId: string; p
       </div>
       <p style={{ fontFamily: "var(--font-geist-mono)", overflowWrap: "anywhere" }}>{error ? "Card status unavailable" : !status ? <span role="status" aria-label="Loading card…"><Skeleton width={160} /></span> : status.uid ?? "No card assigned"}</p>
       <p style={hint}>Cards are optional for members and guests. Enrollment assigns a card and never records a visit.</p>
+      <p style={hint}>After a card is linked or rejected as already owned, all RFID taps pause for 60 seconds. Follow the scanner countdown before tapping another card. Normal attendance keeps its 3-second wait.</p>
       {error && <div role="alert"><p>{error}</p><button style={button} onClick={() => void refresh()}>Retry card controls</button></div>}
       {status && !error && <>
         {!status.scanner.online && <p style={hint}>Reconnect the scanner to assign or replace cards. Removal and QR attendance remain available.</p>}
@@ -76,7 +91,7 @@ export function RfidCardControls({ personId, personName }: { personId: string; p
         </div>
         {status.active ? <div role="status" style={feedback}>
           <strong>Assignment mode — {status.active.personName}</strong>
-          <p>Tap a card to {status.active.operation === "replace" ? "replace their current card" : "assign it"}. This shared request ends at {new Date(status.active.expiresAt).toLocaleTimeString("en-PH", { timeZone: GYM_TIME_ZONE })}. Attendance taps are blocked until enrollment ends.</p>
+          <p>Wait for LINK MEMBER CARD on the scanner, then hold the card steady to {status.active.operation === "replace" ? "replace their current card" : "assign it"}. The scanner checks for new requests every 60 seconds. This shared request ends at {new Date(status.active.expiresAt).toLocaleTimeString("en-PH", { timeZone: GYM_TIME_ZONE })}. Attendance taps are blocked during enrollment and the following 60-second cooldown after a card is linked or rejected as already owned.</p>
           {status.active.personId !== personId && <p><Link href={`/dashboard/people/${status.active.personId}`}>View {status.active.personName}&apos;s profile</Link></p>}
           {status.active.lastErrorCode && <p role="alert">{cardError(status.active.lastErrorCode)} The request remains pending.</p>}
           <button style={button} disabled={busy} onClick={() => void act("cancel")}>{busy ? "Working…" : `Cancel enrollment for ${status.active.personName}`}</button>
