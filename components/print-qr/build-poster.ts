@@ -69,7 +69,11 @@ export async function buildPosterCanvas(
 
   const logo = new Image();
   logo.src = "/tibay-gym-mark-transparent.svg";
-  await logo.decode();
+  // Some Android Chrome builds refuse to decode this SVG; the QR matters, the logo doesn't.
+  const logoOk = await logo.decode().then(() => true, (err) => {
+    console.warn("[print-qr] logo decode failed, drawing poster without it", err);
+    return false;
+  });
   const badgeSize = 144;
   const logoW = 108;
   const logoH = logoW * 429 / 628;
@@ -83,7 +87,7 @@ export async function buildPosterCanvas(
   ctx.beginPath();
   ctx.arc(brandX + badgeSize / 2, brandY, badgeSize / 2, 0, Math.PI * 2);
   ctx.fill();
-  ctx.drawImage(logo, brandX + (badgeSize - logoW) / 2, brandY - logoH / 2, logoW, logoH);
+  if (logoOk) ctx.drawImage(logo, brandX + (badgeSize - logoW) / 2, brandY - logoH / 2, logoW, logoH);
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   ctx.fillStyle = "#20211d";

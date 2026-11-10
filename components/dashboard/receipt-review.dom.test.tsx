@@ -1,56 +1,31 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-vi.mock("@/lib/auth/auth-context", () => ({ useAuth: () => ({ user: stableUser }) }));
 vi.mock("./receipt-retention", () => ({ ReceiptRetentionControls: () => null }));
-const stableUser = { getIdToken: async () => "synthetic-token" };
+vi.mock("./receipt-image", () => ({ ReceiptImage: ({ onImage }: { onImage?: (blob: Blob) => void }) => <button onClick={() => onImage?.(new Blob(["x"]))}>load image</button> }));
+const ocr = vi.hoisted(() => ({ result: { reference: "ITO261110060130002" as string | null, amountMinor: 70000 as number | null } }));
+vi.mock("@/lib/receipt-ocr", () => ({ readReceipt: async () => ocr.result }));
 import { ReceiptReview } from "./receipt-review";
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it("extracts only the opened receipt and fills the reference and amount without a queue worker", async () => {
-  let extracted = false;
-  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.includes("/image")) return new Response(null, { status: 404 });
-    if (init?.method === "POST") { extracted = true; return Response.json({ status: "extracted" }); }
-    return Response.json({ canExtract: true, receipt: { processed_at: extracted ? new Date().toISOString() : null, ocr_status: extracted ? "extracted" : "queued", extracted_reference: extracted ? "0001234567890" : null, extracted_amount_minor: extracted ? 6000 : null, confidence: extracted ? 95 : null, raw_text: null }, review: { reviewRevision: 0 }, referenceAlreadyClaimed: false, otherReceiptsUsingReference: 0 });
-  });
-  vi.stubGlobal("fetch", fetcher);
-  await act(async () => { render(<ReceiptReview receiptId="receipt-1" expectedAmountMinor={6000} />); });
-  expect(fetcher).toHaveBeenCalledWith("/api/receipts/review", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "extract", receiptId: "receipt-1" }) }));
-  expect((screen.getByLabelText("GCash reference") as HTMLInputElement).value).toBe("0001234567890");
-  expect((screen.getByLabelText("Reviewed amount (PHP)") as HTMLInputElement).value).toBe("60.00");
-  expect(fetcher.mock.calls.some(([url]) => url.includes("/worker"))).toBe(false);
+afterEach(cleanup);
+function Harness() {
+  const [reference, setReference] = useState("");
+  return <ReceiptReview receiptId="r1" expectedAmountMinor={70000} reference={reference} onReference={setReference} />;
+}
+it("reads the receipt in the browser and pre-fills the reference", async () => {
+  render(<Harness />);
+  await act(async () => { fireEvent.click(screen.getByText("load image")); });
+  expect((screen.getByLabelText(/Payment reference/) as HTMLInputElement).value).toBe("ITO261110060130002");
+  expect((screen.getByLabelText(/Amount on receipt/) as HTMLInputElement).value).toBe("700.00");
+  expect(screen.getByText(/amount matches/)).toBeTruthy();
 });
-it("reuses a completed extraction on reopening and refreshing", async () => {
-  const fetcher = vi.fn(async (url: string, init?: RequestInit) => init?.method ? Response.json({}, { status: 503 }) : url.includes("/image") ? new Response(null, { status: 404 }) : Response.json({
-    canExtract: true, receipt: { ocr_status: "extracted", processed_at: "2026-10-28T01:00:00Z", extracted_reference: "0001234567890", extracted_amount_minor: 6000, confidence: 95, raw_text: null },
-    review: { reviewRevision: 0 }, referenceAlreadyClaimed: false, otherReceiptsUsingReference: 0,
-  }));
-  vi.stubGlobal("fetch", fetcher);
-  await act(async () => { render(<ReceiptReview receiptId="receipt-1" expectedAmountMinor={6000} />); });
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh receipt" })); });
-  expect((screen.getByLabelText("GCash reference") as HTMLInputElement).value).toBe("0001234567890");
-  expect(fetcher.mock.calls.every(([, init]) => !(init as RequestInit | undefined)?.method)).toBe(true);
-});
-it("preserves saved manual corrections instead of automatically scanning again", async () => {
-  const fetcher = vi.fn(async (url: string, init?: RequestInit) => init?.method ? Response.json({}, { status: 503 }) : url.includes("/image") ? new Response(null, { status: 404 }) : Response.json({
-    canExtract: true, receipt: { ocr_status: "queued", processed_at: null, extracted_reference: null, extracted_amount_minor: null, confidence: null, raw_text: null },
-    review: { confirmedReference: "9991234567890", confirmedAmountMinor: 6500, reviewRevision: 3 }, referenceAlreadyClaimed: false, otherReceiptsUsingReference: 0,
-  }));
-  vi.stubGlobal("fetch", fetcher);
-  await act(async () => { render(<ReceiptReview receiptId="receipt-1" expectedAmountMinor={6500} />); });
-  expect((screen.getByLabelText("GCash reference") as HTMLInputElement).value).toBe("9991234567890");
-  expect((screen.getByLabelText("Reviewed amount (PHP)") as HTMLInputElement).value).toBe("65.00");
-  expect(fetcher.mock.calls.every(([, init]) => !(init as RequestInit | undefined)?.method)).toBe(true);
-});
-it("keeps manual entry available when automatic extraction fails", async () => {
-  const fetcher = vi.fn(async (url: string, init?: RequestInit) => url.includes("/image") ? new Response(null, { status: 404 }) : init?.method === "POST" ? Response.json({}, { status: 503 }) : Response.json({
-    canExtract: true, receipt: { ocr_status: "queued", processed_at: null, extracted_reference: null, extracted_amount_minor: null, confidence: null, raw_text: null },
-    review: { reviewRevision: 0 }, referenceAlreadyClaimed: false, otherReceiptsUsingReference: 0,
-  }));
-  vi.stubGlobal("fetch", fetcher);
-  await act(async () => { render(<ReceiptReview receiptId="receipt-1" expectedAmountMinor={6000} />); });
-  expect(screen.getByText(/Could not scan this receipt/)).toBeTruthy();
-  expect((screen.getByLabelText("GCash reference") as HTMLInputElement).disabled).toBe(false);
-  fireEvent.change(screen.getByLabelText("GCash reference"), { target: { value: "0001234567890" } });
-  expect((screen.getByLabelText("GCash reference") as HTMLInputElement).value).toBe("0001234567890");
+it("shows a skeleton until the receipt is read, then flags an unexpected amount", async () => {
+  ocr.result = { reference: "103052", amountMinor: 50000 };
+  render(<Harness />);
+  expect(screen.queryByLabelText(/Payment reference/)).toBeNull();
+  expect(screen.getByText("Reading the receipt…")).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByText("load image")); });
+  expect((screen.getByLabelText(/Payment reference/) as HTMLInputElement).value).toBe("103052");
+  expect((screen.getByLabelText(/Amount on receipt/) as HTMLInputElement).value).toBe("500.00");
+  expect(screen.getByRole("alert").textContent).toContain("differs from the expected PHP 700.00");
 });

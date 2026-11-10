@@ -3,6 +3,9 @@ import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit"
 import { attendancePhone } from "@/lib/server/attendance-request";
 import { handleApi, json, readBody } from "@/lib/server/rfid/http";
 import { effectiveMemberStatusAt } from "@/lib/member-status";
+import { philippineDate } from "@/lib/finance/rules";
+import { adminDb } from "@/lib/server/firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   return handleApi(async () => {
@@ -24,7 +27,11 @@ export async function DELETE(request: Request) {
 export async function GET(request: Request) {
   return handleApi(async () => {
     const { person, official, session } = await requireCustomer(request);
-    return json({ name: person.name, rateCategory: person.rateCategory ?? null, type: person.type,
+    const monthStart = Date.parse(`${philippineDate(Date.now()).slice(0, 7)}-01T00:00:00+08:00`);
+    const visits = await adminDb().collection("attendanceLogs").where("personId", "==", session.personId)
+      // desc matches the existing (personId, checkInAt DESC) index in firestore.indexes.json
+      .where("checkInAt", ">=", Timestamp.fromMillis(monthStart)).orderBy("checkInAt", "desc").count().get();
+    return json({ visitsThisMonth: visits.data().count, name: person.name, rateCategory: person.rateCategory ?? null, type: person.type,
       status: effectiveMemberStatusAt({ type: person.type, status: person.status, membershipExpiry: person.membershipExpiry ?? null }, Date.now()),
       membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, verified: official, expiresAt: session.expiresAt });
   });

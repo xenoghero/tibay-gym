@@ -15,7 +15,6 @@ import { approveUnverified } from "@/lib/server/unverified";
 import { createCustomerSession, requireCustomer } from "@/lib/server/customer-session";
 import { getPurchaseQuote, submitPurchase, paymentReviewPreview, decidePayment, purchaseChargeId, purchaseRequestId } from "@/lib/server/purchases";
 import { mutateAdmin } from "@/lib/server/admin-mutations";
-import { correctReceipt } from "@/lib/server/receipt-review";
 import { financeReport } from "@/lib/server/finance-report";
 import { deleteProfile } from "@/lib/server/attendance-admin";
 const NOW = Date.parse("2026-10-26T02:00:00Z");
@@ -63,10 +62,9 @@ it.each([ ["student", "cash", 6000, 100000], ["regular", "gcash", 7000, 120000] 
   expect(pendingStatus.pendingMembership).toMatchObject({ id: purchase.id, status: "pending", kind: "new_membership" });
   if (method === "gcash") {
     await expect(decision(purchase.id)).rejects.toMatchObject({ code: "receipt-review-required" });
-    await correctReceipt("admin", { receiptId, operationId: "correction-operation-0001", reference: "0001234567890", amountMinor: monthlyAmount, expectedRevision: 0, reason: "Synthetic evidence reviewed" });
-    expect(rows("receiptCorrectionOutbox")).toHaveLength(1);
   }
-  await Promise.all([decision(purchase.id), decision(purchase.id)]);
+  const approval = method === "gcash" ? { reference: "0001234567890" } : {};
+  await Promise.all([decision(purchase.id, "approve", approval), decision(purchase.id, "approve", approval)]);
   expect(rows("statusChanges")).toHaveLength(1); expect(rows("weightEntries")[0][1].weightKg).toBe(65.5);
   expect(state.store!.data.get(`persons/${personId}`)).toMatchObject({ type: "member", status: "active", visitCount: 1 });
   const approvedStatus = await (await customerPayments(customer(token))).json();

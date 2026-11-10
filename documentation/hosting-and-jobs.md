@@ -18,7 +18,7 @@ Send Authorization: Bearer followed by the configured CRON_SECRET. Keep it in se
 ## Deployment requirements
 
 - Use a Node.js 22 server runtime with the app's dynamic API routes. Static-only hosting cannot run this application.
-- Preserve sharp native binaries, Node worker threads, tesseract.js, tesseract.js-core and bundled English language data. next.config.ts already traces the OCR dependencies for the worker route. Validate extraction on the actual host.
+- Preserve sharp native binaries (receipt upload). Receipt OCR runs in the admin browser since November 10, 2026; the host needs no OCR runtime.
 - Support the current 5 MB image request limit end to end, or explicitly adapt all matching server/client limits before rollout. Vercel Functions currently limit request/response payloads to 4.5 MB, so an unchanged Vercel deployment would not accept the top end of this app's upload range. [Vercel function limits](https://vercel.com/docs/functions/limitations).
 - Configure matching browser/server Firebase project values, server credentials and allowed admin UID, private Supabase URL/secret, canonical HTTPS NEXT_PUBLIC_APP_URL and a random private CRON_SECRET of at least 20 characters. NEXT_PUBLIC values are build-time browser configuration; privileged values stay server-only. Keep isolated/emulator flags unset in production.
 - Configure the deployed domain for Firebase Authentication. Check customer Secure cookies and same-origin requests on the final HTTPS origin.

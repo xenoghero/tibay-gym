@@ -142,14 +142,13 @@ it("requires reviewed GCash evidence and claims a reference only within successf
     tokenHash: createHash("sha256").update(receiptToken).digest("hex"), expiresAt: NOW + 10000 });
   const result = await submitPurchase("customer:p1", "p1", { operationId: operation, quoteToken: quote.quoteToken, method: "gcash", receiptId, receiptToken });
   await expect(decision(result.id)).rejects.toMatchObject({ code: "receipt-review-required" });
-  state.store!.data.set(`receiptReviews/${receiptId}`, { confirmedReference: "0001234567890", confirmedAmountMinor: 99999, reviewRevision: 1 });
-  await expect(decision(result.id)).rejects.toMatchObject({ code: "receipt-review-required" });
-  state.store!.data.get(`receiptReviews/${receiptId}`)!.confirmedAmountMinor = 100000;
+  await expect(decision(result.id, "approve", { reference: "not a ref!" })).rejects.toMatchObject({ code: "invalid-reference" });
   state.store!.data.set("approvedGcashReferences/0001234567890", { paymentRequestId: "other", chargeId: "other" });
-  await expect(decision(result.id)).rejects.toMatchObject({ code: "reference-already-used" });
+  await expect(decision(result.id, "approve", { reference: "0001 234 567890" })).rejects.toMatchObject({ code: "reference-already-used" });
   expect(state.store!.data.get(`paymentRequests/${result.id}`)?.status).toBe("pending");
-  state.store!.data.delete("approvedGcashReferences/0001234567890"); await decision(result.id);
-  expect(state.store!.data.get("approvedGcashReferences/0001234567890")?.paymentRequestId).toBe(result.id);
+  await decision(result.id, "approve", { reference: "0001 234 567890", allowDuplicateReference: true });
+  expect(state.store!.data.get(`paymentRequests/${result.id}`)).toMatchObject({ status: "approved", gcashReferenceSnapshot: "0001234567890" });
+  expect(state.store!.data.get("approvedGcashReferences/0001234567890")?.paymentRequestId).toBe("other");
 });
 it("converts a guest only after approved purchase while preserving identity, visits, card and weights", async () => {
   const person = state.store!.data.get("persons/p1")!; person.type = "guest"; person.status = null; person.membershipExpiry = null;

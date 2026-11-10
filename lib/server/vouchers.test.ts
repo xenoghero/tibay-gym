@@ -126,9 +126,8 @@ it("binds GCash evidence to the discounted payable amount on submission and appr
   expect(uses()).toHaveLength(0);
   store().data.get(`receiptIntents/${receiptId}`)!.amountMinor = 90000;
   const result = await submitPurchase("customer:p1", "p1", body);
-  store().data.set(`receiptReviews/${receiptId}`, { confirmedReference: "1234567890123", confirmedAmountMinor: 100000, reviewRevision: 1 });
   await expect(decide(result.id)).rejects.toMatchObject({ code: "receipt-review-required" });
-  store().data.get(`receiptReviews/${receiptId}`)!.confirmedAmountMinor = 90000;
+  store().data.set(`receiptReviews/${receiptId}`, { confirmedReference: "1234567890123", confirmedAmountMinor: 90000, reviewRevision: 1 });
   await decide(result.id);
   expect(voucher()).toMatchObject({ heldCount: 0, confirmedCount: 1, confirmedDiscountMinor: 10000 });
   expect(store().data.get(`paymentRequests/${result.id}`)!.amountMinor).toBe(90000);

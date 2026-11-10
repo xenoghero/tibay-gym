@@ -25,7 +25,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
-    "@tesseract.js-data/eng": "^1.0.0",
     "firebase": "^12.18.0",
     "firebase-admin": "13.10.0",
     "jspdf": "^4.2.1",

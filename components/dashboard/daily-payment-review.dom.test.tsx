@@ -6,7 +6,7 @@ import { PaymentReview } from "./payment-review";
 
 const stableUser = { getIdToken: async () => "synthetic-token" };
 vi.mock("@/lib/auth/auth-context", () => ({ useAuth: () => ({ user: stableUser }) }));
-vi.mock("./receipt-review", () => ({ ReceiptReview: ({ receiptId }: { receiptId: string }) => <p>Receipt {receiptId}</p> }));
+vi.mock("./receipt-review", () => ({ ReceiptReview: ({ receiptId, onReference }: { receiptId: string; onReference?: (value: string) => void }) => <button onClick={() => onReference?.("1234567890123")}>Receipt {receiptId}</button> }));
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
@@ -61,6 +61,7 @@ it("reviews a pending GCash payment from the single row and refreshes it to coll
   fireEvent.click(screen.getByRole("option", { name: "Pending review" }));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Review payment" })); });
   expect(screen.getAllByText("Receipt proof")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: /^Receipt / }));
   fireEvent.click(screen.getByLabelText("I reviewed the amount, evidence and final coverage."));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Approve — payment received" })); });
   expect(screen.queryByRole("dialog")).toBeNull();

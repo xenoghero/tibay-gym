@@ -18,17 +18,28 @@ import { PriceBreakdown } from "@/components/people/voucher-entry";
 import { SettingsConfirm } from "./settings-confirm";
 interface Row { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; gcashReference?: string | null }
 interface Preview { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; coverage: Coverage | null; previewToken: string; membershipChanged: boolean }
+const decisionErrors: Record<string, string> = {
+  "invalid-reference": "Enter the reference number shown on the receipt (letters and digits).",
+  "receipt-review-required": "Enter the reference number shown on the receipt before approving.",
+  "payment-review-changed": "This payment changed while you were reviewing. Check the refreshed details and try again.",
+  "membership-review-required": "The membership changed since submission. Tick the membership confirmation and try again.",
+  "payment-not-pending": "This payment was already decided. Refresh the list.",
+  "charge-review-changed": "This purchase changed or was closed. Refresh the list.",
+  "verified-profile-required": "This customer profile must be verified before approval.",
+};
 export function PaymentReview() {
   const { user } = useAuth();
   const [kind, setKind] = useState("membership"), [rows, setRows] = useState<Row[]>([]), [cursor, setCursor] = useState<string | null>(null);
   const [selected, setSelected] = useState<Preview | null>(null), [reviewed, setReviewed] = useState(false), [ack, setAck] = useState(false), [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [reference, setReference] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(""), [status, setStatus] = useState("all"), [method, setMethod] = useState("all");
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [accountError, setAccountError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [reviewLoading, setReviewLoading] = useState(false);
+  // The drawer opens at once with the row's name; details load inside it.
+  const [opening, setOpening] = useState<string | null>(null);
+  const openSequence = useRef(0);
   const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
   const requestSequence = useRef(0);
   const tabContent = useRef<HTMLDivElement>(null);
@@ -44,18 +55,24 @@ export function PaymentReview() {
     } finally { if (sequence === requestSequence.current) setLoading(false); }
   }
   async function preview(id: string) {
-    setReviewed(false); setAck(false); setReason(""); setBusy(true); setReviewLoading(true);
+    const sequence = selected?.payment.id === id ? openSequence.current : ++openSequence.current;
+    if (selected?.payment.id !== id) {
+      setReference(""); setSelected(null);
+      setOpening(rows.find(row => row.payment.id === id)?.customer.name ?? "Payment details");
+    }
+    setReviewed(false); setAck(false); setReason(""); setBusy(true);
     try {
       // Final records remain inspectable even after their customer profile is deleted.
       const finalRow = rows.find(row => row.payment.id === id && row.payment.status !== "pending");
       if (finalRow) {
-        setSelected({ ...finalRow, coverage: finalRow.payment.appliedCoverage, membershipChanged: false, previewToken: "" });
+        if (sequence === openSequence.current) setSelected({ ...finalRow, coverage: finalRow.payment.appliedCoverage, membershipChanged: false, previewToken: "" });
         return;
       }
       const response = await fetch(`/api/finance/review?id=${encodeURIComponent(id)}`, { headers: await headers(), signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error("This request cannot be reviewed yet. Verify its profile or refresh the request.");
-      setSelected(await response.json());
-    } finally { setBusy(false); setReviewLoading(false); }
+      const details = await response.json();
+      if (sequence === openSequence.current) setSelected(details);
+    } finally { setBusy(false); if (sequence === openSequence.current) setOpening(null); }
   }
   useEffect(() => {
     let active = true;
@@ -80,14 +97,24 @@ export function PaymentReview() {
       }).catch(error => { if (active) setAccountError(error.message); });
     return () => { active = false; };
   }, [user, refreshKey]);
-  async function decide(decision: "approve" | "reject") {
+  async function decide(decision: "approve" | "reject", allowDuplicateReference = false) {
     if (!selected || !reviewed || busy) return;
     if (decision === "reject" && !reason.trim()) { setMessage("Enter a rejection reason."); return; }
     setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/finance/review", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
-        body: JSON.stringify({ paymentRequestId: selected.payment.id, decision, reviewed: true, reason, previewToken: selected.previewToken, acknowledgeMembershipChange: ack }) });
-      if (!response.ok) { await preview(selected.payment.id); throw new Error("Decision not applied. Review refreshed coverage and receipt values; check any reference conflict or amount mismatch before trying again."); }
+        body: JSON.stringify({ paymentRequestId: selected.payment.id, decision, reviewed: true, reason, previewToken: selected.previewToken, acknowledgeMembershipChange: ack,
+          ...(decision === "approve" && selected.payment.receiptId ? { reference, allowDuplicateReference } : {}) }) });
+      if (!response.ok) {
+        const code = (await response.json().catch(() => ({}))).error;
+        if (code === "reference-already-used" && !allowDuplicateReference) {
+          setBusy(false);
+          if (window.confirm(`Reference ${reference} is already on another approved payment. Short bank references can repeat — approve anyway?`)) return decide(decision, true);
+          return;
+        }
+        await preview(selected.payment.id);
+        throw new Error(decisionErrors[code] ?? `Decision not applied (${code ?? "unknown error"}). Refresh and try again.`);
+      }
       setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? kind === "daily_session" ? "Daily payment collected." : "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not confirm the decision. Refresh before retrying."); }
     finally { setBusy(false); }
@@ -168,8 +195,8 @@ export function PaymentReview() {
         <div className={styles.pagination}><span>Search and filters apply to this loaded page.</span>{cursor && <button disabled={busy || loading} onClick={() => list(cursor).catch(e => setMessage(e.message))}>Next 50 requests →</button>}</div>
       </section>}
     </div>
-    {reviewLoading && !selected && <LoadingSkeleton label="Opening payment details…" variant="form" />}
-    {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
+    {(selected || opening !== null) && <PaymentDrawer title={selected?.customer.name ?? opening!} busy={busy && !!selected} onClose={() => { openSequence.current++; setOpening(null); setSelected(null); }}>
+      {!selected ? <LoadingSkeleton label="Opening payment details…" variant="form" /> : <>
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
       {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}
       <dl className={styles.details}>
@@ -182,7 +209,8 @@ export function PaymentReview() {
         <div><dt>Payment reference</dt><dd>{selected.payment.gcashReferenceSnapshot ?? "See receipt review"}</dd></div>
       </dl>
       {selected.coverage && <p className={styles.message}>Final coverage if approved now: {selected.coverage.startDate} to {selected.coverage.expiryDate}</p>}
-      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} paymentAccount={selected.payment.paymentAccountSnapshot} expectedAmountMinor={selected.payment.amountMinor} onReviewed={() => void preview(selected.payment.id).catch(e => setMessage(e.message))} />}
+      {selected.payment.receiptId && <ReceiptReview key={selected.payment.receiptId} receiptId={selected.payment.receiptId} paymentAccount={selected.payment.paymentAccountSnapshot} expectedAmountMinor={selected.payment.amountMinor}
+        {...(selected.payment.status === "pending" && !selected.charge.abandonedAt ? { reference, onReference: setReference } : {})} />}
       {selected.charge.kind === "daily_session" && <DailyPaymentHistory key={selected.charge.id} chargeId={selected.charge.id} currentPaymentRequestId={selected.payment.id} />}
       {selected.charge.abandonedAt ? <p className={styles.message}>Closed {paymentDate(selected.charge.abandonedAt)}. {selected.charge.abandonmentReason} This purchase cannot be approved or corrected.</p> : selected.payment.status === "pending" ? <>
         <h3>Review checklist</h3>
@@ -190,10 +218,11 @@ export function PaymentReview() {
         <label><input type="checkbox" checked={reviewed} disabled={busy} onChange={e => setReviewed(e.target.checked)} /> I reviewed the amount, evidence and final coverage.</label>
         <label>Rejection reason (required to reject)<textarea rows={3} value={reason} maxLength={500} disabled={busy} onChange={e => setReason(e.target.value)} /></label>
         {message && <p className={styles.message} role="status">{message}</p>}
-        <div className={styles.actions}><button className={styles.primary} disabled={busy || !reviewed || (selected.membershipChanged && !ack)} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve — payment received"}</button><button className={styles.danger} disabled={busy || !reviewed} onClick={() => void decide("reject")}>Reject request</button></div>
+        <div className={styles.actions}><button className={styles.primary} disabled={busy || !reviewed || (selected.membershipChanged && !ack) || (!!selected.payment.receiptId && !reference.trim())} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve — payment received"}</button><button className={styles.danger} disabled={busy || !reviewed} onClick={() => void decide("reject")}>Reject request</button></div>
       </> : <p>Final outcome: {selected.payment.status}. {selected.payment.rejectionReason}</p>}
       {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>Close abandoned membership request</button>}
       {closing && <SettingsConfirm title="Close this membership request?" label="Close request" danger busy={busy} confirmDisabled={!closeReason.trim()} onCancel={() => setClosing(false)} onConfirm={() => void closePurchase()}><p>This permanently ends this purchase and releases its voucher reservation. No membership is activated. Payment corrections will no longer be available; a new purchase will use current pricing.</p><label>Reason (required)<textarea maxLength={500} value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label>{message && <p role="status">{message}</p>}</SettingsConfirm>}
+      </>}
     </PaymentDrawer>}
   </main>;
 }

@@ -14,10 +14,11 @@ import {
 } from "react";
 import {
   effectiveMemberStatus,
+  getLogsInRange,
   watchAllPersons,
   type Person,
 } from "@/lib/db";
-import { formatShortDateTime } from "@/lib/dates";
+import { formatLongDate, formatShortDateTime, rangeForPreset } from "@/lib/dates";
 import { statusBadgeStyle } from "@/lib/status-badge";
 import styles from "./people-filter-select.module.css";
 
@@ -37,7 +38,10 @@ const monoFont = "var(--font-geist-mono), ui-monospace, monospace";
 
 type TypeFilter = "all" | "member" | "guest";
 type StatusFilter = "all" | "active" | "expired";
-type SortKey = "lastVisit" | "name" | "joinDate";
+type SortKey = "name" | "phone" | "type" | "status" | "joinDate" | "lastVisit" | "visits";
+type SortDir = "asc" | "desc";
+// Text columns read A→Z first; dates and counts read newest/highest first.
+const defaultDir = (key: SortKey): SortDir => (key === "name" || key === "phone" || key === "type" || key === "status" ? "asc" : "desc");
 
 type FilterOption<T extends string> = {
   value: T;
@@ -52,7 +56,7 @@ type FilterSelectProps<T extends string> = {
   align?: "start" | "end";
 };
 
-const GRID_COLUMNS = "1.5fr 1fr 0.7fr 0.8fr 1fr 0.6fr";
+const GRID_COLUMNS = "1.5fr 1fr 0.7fr 0.8fr 0.8fr 1fr 0.7fr";
 
 const typeOptions: readonly FilterOption<TypeFilter>[] = [
   { value: "all", label: "All types" },
@@ -69,7 +73,18 @@ const statusOptions: readonly FilterOption<StatusFilter>[] = [
 const sortOptions: readonly FilterOption<SortKey>[] = [
   { value: "lastVisit", label: "Last visit" },
   { value: "name", label: "Name" },
-  { value: "joinDate", label: "Join date" },
+  { value: "joinDate", label: "Member since" },
+  { value: "visits", label: "Visits this month" },
+];
+
+const columns: readonly { key: SortKey; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "phone", label: "Phone" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "joinDate", label: "Member since" },
+  { key: "lastVisit", label: "Last visit" },
+  { key: "visits", label: "Visits (month)" },
 ];
 
 function FilterSelect<T extends string>({
@@ -230,6 +245,28 @@ export function PeopleView() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("lastVisit");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [monthVisits, setMonthVisits] = useState<Map<string, number>>(new Map());
+
+  function sortBy(key: SortKey) {
+    setSortDir(key === sortKey ? (sortDir === "asc" ? "desc" : "asc") : defaultDir(key));
+    setSortKey(key);
+  }
+
+  // shortcut: one read of this month's check-ins (capped at RANGE_QUERY_LIMIT), refreshed on reload/retry;
+  // move to a per-person monthly counter if a month ever exceeds that cap.
+  useEffect(() => {
+    let active = true;
+    const { start, end } = rangeForPreset("month");
+    getLogsInRange(start, end)
+      .then((logs) => {
+        const counts = new Map<string, number>();
+        for (const log of logs) counts.set(log.personId, (counts.get(log.personId) ?? 0) + 1);
+        if (active) setMonthVisits(counts);
+      })
+      .catch((err) => console.error("[PeopleView] monthly visits failed", err));
+    return () => { active = false; };
+  }, [retryKey]);
 
   useEffect(() => {
     const unsub = watchAllPersons(
@@ -280,21 +317,25 @@ export function PeopleView() {
       return true;
     });
 
-    const lastVisitMillis = (p: Person) => p.lastVisitAt?.toMillis() ?? 0;
-
-    matched.sort((a, b) => {
-      if (sortKey === "name") return a.name.localeCompare(b.name);
-      if (sortKey === "joinDate") {
-        return (
-          (b.joinDate?.toMillis() ?? 0) - (a.joinDate?.toMillis() ?? 0)
-        );
+    const value = (p: Person): string | number => {
+      switch (sortKey) {
+        case "name": return p.name.toLowerCase();
+        case "phone": return p.phone;
+        case "type": return p.type;
+        case "status": return p.type === "member" ? effectiveMemberStatus(p) ?? "" : "~"; // guests last A→Z
+        case "joinDate": return p.joinDate?.toMillis() ?? 0;
+        case "lastVisit": return p.lastVisitAt?.toMillis() ?? 0;
+        case "visits": return monthVisits.get(p.id) ?? 0;
       }
-      // lastVisit: most recent first, never-visited sinks to the bottom.
-      return lastVisitMillis(b) - lastVisitMillis(a);
+    };
+    const sign = sortDir === "asc" ? 1 : -1;
+    matched.sort((a, b) => {
+      const x = value(a), y = value(b);
+      return sign * (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number));
     });
 
     return matched;
-  }, [people, search, typeFilter, statusFilter, sortKey]);
+  }, [people, search, typeFilter, statusFilter, sortKey, sortDir, monthVisits]);
 
   const loading = !peopleLoaded;
   const noneAtAll = !loading && people.length === 0;
@@ -366,7 +407,7 @@ export function PeopleView() {
           label="Sort"
           value={sortKey}
           options={sortOptions}
-          onChange={setSortKey}
+          onChange={(key) => { setSortKey(key); setSortDir(defaultDir(key)); }}
           align="end"
         />
         {filtersActive && (
@@ -388,12 +429,19 @@ export function PeopleView() {
         tabIndex={0}
       >
         <div className="rs-ppl-thead" style={tableHeadStyle}>
-          <span>Name</span>
-          <span>Phone</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Last visit</span>
-          <span>Visits</span>
+          {columns.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => sortBy(key)}
+              aria-sort={sortKey === key ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+              aria-label={`Sort by ${label}`}
+              style={sortHeaderStyle}
+            >
+              {label}
+              {sortKey === key && <span aria-hidden="true">{sortDir === "asc" ? " ↑" : " ↓"}</span>}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -431,6 +479,7 @@ export function PeopleView() {
           rows.map((p) => {
             const isMember = p.type === "member";
             const lastVisit = p.lastVisitAt;
+            const visits = monthVisits.get(p.id) ?? 0;
             return (
               <div
                 key={p.id}
@@ -466,13 +515,16 @@ export function PeopleView() {
                     {isMember ? "Renew" : "Add membership"}
                   </Link>
                 </span>
+                <span className="rs-ppl-joined" style={lastVisitCellStyle}>
+                  {p.joinDate ? formatLongDate(p.joinDate) : "-"}
+                </span>
                 <span className="rs-ppl-visit" style={lastVisitCellStyle}>
                   {lastVisit ? formatShortDateTime(lastVisit) : "No visits yet"}
                 </span>
                 <span className="rs-ppl-count" style={visitsCellStyle}>
-                  {p.visitCount}
+                  {visits}
                   <span className="rs-ppl-count-unit">
-                    {p.visitCount === 1 ? " visit" : " visits"}
+                    {visits === 1 ? " visit/mo" : " visits/mo"}
                   </span>
                 </span>
               </div>
@@ -596,6 +648,12 @@ const tableCardStyle: CSSProperties = {
   border: "1px solid var(--rs-line)",
   borderRadius: 10,
   overflow: "hidden",
+};
+
+const sortHeaderStyle: CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const tableHeadStyle: CSSProperties = {
