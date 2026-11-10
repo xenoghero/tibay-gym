@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FinanceStatistics } from "./finance-statistics";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   closeStaleSessions,
   effectiveMemberStatus,
@@ -156,7 +156,10 @@ export function OverviewView() {
     else activeMembers += 1;
   }
 
-  const feedRows: CheckInRow[] = visibleTodaysLogs.map((log) => {
+  // Longest stat as typed (pairs include the slash); mobile CSS sizes every number to fit it.
+  const statChars = Math.max(...[currentlyInside, checkinsToday, `${membersToday}/${guestsToday}`, `${activeMembers}/${expiredMembers}`].map((v) => String(v).length));
+
+  const feedRows: CheckInRow[] =visibleTodaysLogs.map((log) => {
     const person = peopleById.get(log.personId) ?? null;
     const isMember = person?.type === "member";
     const badge: CheckInRow["badge"] = isMember
@@ -210,11 +213,11 @@ export function OverviewView() {
             <button type="button" onClick={() => void dismissAlert(alert.eventId)} disabled={dismissing.includes(alert.eventId)} aria-label={`Dismiss alert for ${alert.name}`}>×</button>
           </div>)}
         </div>}
-        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading || !openSessionsLoaded}>
-          <div className="rs-ov-tile rs-ov-tile-hero"><h2>Currently inside</h2><strong>{!openSessionsLoaded || !peopleLoaded ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
-          <div className="rs-ov-tile"><h2>Check-ins today</h2><strong>{loading ? "—" : checkinsToday}</strong><span>Live, all sources</span></div>
-          <div className="rs-ov-tile"><h2>Members / Guests</h2><strong>{loading ? "—" : `${membersToday} / ${guestsToday}`}</strong><span>Today’s check-ins</span></div>
-          <div className="rs-ov-tile"><h2>Active / Expired</h2><strong>{!peopleLoaded ? "—" : `${activeMembers} / ${expiredMembers}`}</strong><span>Member standing</span></div>
+        <section className="rs-ov-tiles" aria-label="Attendance summary" aria-busy={loading || !openSessionsLoaded} style={{ "--ov-chars": statChars } as CSSProperties}>
+          <div className="rs-ov-tile rs-ov-tile-hero"><h2><span className="rs-ov-tile-full">Currently inside</span><span className="rs-ov-tile-short" aria-hidden="true">Inside</span></h2><strong>{!openSessionsLoaded || !peopleLoaded ? "—" : currentlyInside}</strong><span>Open sessions right now</span></div>
+          <div className="rs-ov-tile"><h2><span className="rs-ov-tile-full">Check-ins today</span><span className="rs-ov-tile-short" aria-hidden="true">Today</span></h2><strong>{loading ? "—" : checkinsToday}</strong><span>Live, all sources</span></div>
+          <div className="rs-ov-tile"><h2><span className="rs-ov-tile-full">Members / Guests</span><span className="rs-ov-tile-short" aria-hidden="true">Mem / Gst</span></h2><strong>{loading ? "—" : <>{membersToday}<i>/</i>{guestsToday}</>}</strong><span>Today’s check-ins</span></div>
+          <div className="rs-ov-tile"><h2><span className="rs-ov-tile-full">Active / Expired</span><span className="rs-ov-tile-short" aria-hidden="true">Act / Exp</span></h2><strong>{!peopleLoaded ? "—" : <><b className="rs-ov-active">{activeMembers}</b><i>/</i><b className="rs-ov-expired">{expiredMembers}</b></>}</strong><span>Member standing</span></div>
         </section>
         <div className="rs-ov-workspace">
           <div className="rs-ov-panel-selector" role="group" aria-label="Overview panel">

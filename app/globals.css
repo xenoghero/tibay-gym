@@ -126,6 +126,7 @@
   --rs-accent: #ffcc00;
   --rs-accent-text: #806000;
   --rs-danger: #a92d2d;
+  --rs-success: #2e7d32;
   --rs-accent-soft: rgba(255, 204, 0, 0.14);
   --rs-on-accent: #171400;
   /* "inverse" tokens: text sitting on the dark (--rs-fg) login panel */
@@ -166,6 +167,7 @@
     --rs-accent: #ffcc00;
     --rs-accent-text: #ffda47;
     --rs-danger: #ef9990;
+    --rs-success: #7fd48a;
     --rs-accent-soft: rgba(255, 204, 0, 0.12);
     --rs-on-accent: #171400;
     --rs-inv-muted: rgba(12, 12, 12, 0.66);
@@ -439,6 +441,11 @@ input[data-form-input]:focus-visible {
 .rs-ov-tile > span { color: var(--rs-muted); font-size: 11px; margin-top: auto; }
 .rs-ov-tile-hero { background: var(--rs-accent); color: var(--rs-on-accent); }
 .rs-ov-tile-hero h2, .rs-ov-tile-hero > span { color: var(--rs-on-accent); }
+.rs-ov-tile strong i { font-style: normal; font-size: .6em; color: var(--rs-muted); margin: 0 3px; }
+.rs-ov-tile strong b { font-weight: inherit; }
+.rs-ov-active { color: var(--rs-success); }
+.rs-ov-expired { color: var(--rs-danger); }
+.rs-ov-tile-short { display: none; }
 .rs-ov-workspace { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 24px; flex: 1; min-height: 0; }
 .rs-ov-panel-selector { display: none; }
 .rs-ov-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -522,11 +529,15 @@ input[data-form-input]:focus-visible {
   .rs-ov-panel-selector button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 0; border-radius: 5px; background: transparent; color: var(--rs-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
   .rs-ov-panel-selector button[aria-pressed="true"] { background: var(--rs-accent); color: var(--rs-on-accent); }
   .rs-ov-panel[data-selected="false"] { display: none; }
-  .rs-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rs-ov-tile { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; }
-  .rs-ov-tile strong { grid-column: 2; grid-row: 1 / 3; font-size: 30px; }
-  .rs-ov-tile h2 { font-size: 11px; }
-  .rs-ov-tile > span { grid-column: 1; font-size: 10px; margin-top: 0; }
+  /* One row of four even tiles. */
+  .rs-ov-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); container-type: inline-size; }
+  .rs-ov-tile { padding: 10px 8px; gap: 6px; }
+  .rs-ov-tile h2 { font-size: 10px; line-height: 1.25; white-space: nowrap; }
+  /* All numbers share one size: 40px, or smaller so the longest stat (--ov-chars, ~0.5em per char) fits a quarter-width tile. */
+  .rs-ov-tile strong { font-size: min(40px, ((100cqi - 3px) / 4 - 16px) / (var(--ov-chars, 3) * 0.5)); line-height: 1; white-space: nowrap; margin-top: auto; }
+  .rs-ov-tile > span { display: none; }
+  .rs-ov-tile-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .rs-ov-tile-short { display: inline; }
   .rs-ov-content { gap: 20px; }
   .rs-ov-feed-head { padding: 10px 0; }
   .rs-ov-feed-footer { gap: 6px; padding-top: 6px; }
