@@ -185,25 +185,21 @@ function QrPoster({ kind }: { kind: PosterKind }) {
   const downloadPng = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    setBusy("png");
     setNotice(null);
-    canvas.toBlob((blob) => {
-      try {
-        if (!blob) throw new Error("toBlob returned null");
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = `${fileStem}.png`;
-        a.click();
-        URL.revokeObjectURL(href);
-        setNotice({ tone: "info", text: "Poster image downloaded." });
-      } catch (err) {
-        console.error("[print-qr] PNG download failed", err);
-        setNotice({ tone: "error", text: "Couldn't create the image file." });
-      } finally {
-        setBusy(null);
-      }
-    }, "image/png");
+    try {
+      // Synchronous data URL: iOS Safari drops downloads started outside the tap
+      // or whose blob URL is revoked before it reads it.
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `${fileStem}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setNotice({ tone: "info", text: "Poster image downloaded." });
+    } catch (err) {
+      console.error("[print-qr] PNG download failed", err);
+      setNotice({ tone: "error", text: "Couldn't create the image file." });
+    }
   }, [fileStem]);
 
   const downloadPdf = useCallback(async () => {
