@@ -29,7 +29,8 @@ export async function GET(request: Request) {
     const { person, official, session } = await requireCustomer(request);
     const monthStart = Date.parse(`${philippineDate(Date.now()).slice(0, 7)}-01T00:00:00+08:00`);
     const visits = await adminDb().collection("attendanceLogs").where("personId", "==", session.personId)
-      .where("checkInAt", ">=", Timestamp.fromMillis(monthStart)).count().get();
+      // desc matches the existing (personId, checkInAt DESC) index in firestore.indexes.json
+      .where("checkInAt", ">=", Timestamp.fromMillis(monthStart)).orderBy("checkInAt", "desc").count().get();
     return json({ visitsThisMonth: visits.data().count, name: person.name, rateCategory: person.rateCategory ?? null, type: person.type,
       status: effectiveMemberStatusAt({ type: person.type, status: person.status, membershipExpiry: person.membershipExpiry ?? null }, Date.now()),
       membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, verified: official, expiresAt: session.expiresAt });
