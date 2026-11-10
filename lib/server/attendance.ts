@@ -17,7 +17,7 @@ import { registrationSettings } from "@/lib/registration-settings";
 
 export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
-export const STALE_SESSION_MS = 4 * 60 * 60 * 1_000;
+export const STALE_SESSION_MS = 2.5 * 60 * 60 * 1_000; // keep in sync with AUTO_CLOSE_AFTER_MS
 type ScanRequest = { eventId: string; requestedAt: number } & (
   { source: "qr"; personId: string; guest?: { phone: string; name: string; address: string } & Partial<RegistrationFields>; intent?: "checkout"; expectedLogId?: string; paymentMethod?: PaymentMethod; paymentRevision?: number; expectedAmountMinor?: number; receiptId?: string; receiptToken?: string; voucherCode?: string; voucherRevision?: number; voucherRateRevision?: number } |
   { source: "rfid"; uid: string; request: Request }

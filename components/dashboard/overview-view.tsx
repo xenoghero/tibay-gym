@@ -59,7 +59,7 @@ export function OverviewView() {
     [openSessions, peopleById],
   );
 
-  // Sweep sessions past the 4-hour window that no check-in traffic has closed
+  // Sweep sessions past the 2.5-hour window that no check-in traffic has closed
   // yet, so "currently inside" doesn't count someone who left hours ago. The
   // open-sessions listener picks up the closes automatically.
   useEffect(() => {

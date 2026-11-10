@@ -78,7 +78,7 @@ const PROFILE_LOADING_MIN_MS = 1500;
 
 const CLOSED_LABEL: Record<string, string> = {
   implicit: "Closed by new check-in",
-  auto: "Auto-closed after 4h",
+  auto: "Auto-closed after 2.5h",
   manual: "Closed by admin",
 };
 
