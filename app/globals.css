@@ -718,6 +718,11 @@ input[data-form-input]:focus-visible {
     white-space: nowrap;
   }
 
+  /* Member since lives on the profile page on phones; the sort menu still orders by it. */
+  .rs-ppl-joined {
+    display: none !important;
+  }
+
   .rs-ppl-type::before,
   .rs-ppl-count::before {
     content: "·";

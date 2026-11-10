@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import styles from "./payment-review.module.css";
 
-export function ReceiptImage({ receiptId, alt = "Private GCash receipt" }: { receiptId: string; alt?: string }) {
+export function ReceiptImage({ receiptId, alt = "Private GCash receipt", onImage }: { receiptId: string; alt?: string; onImage?: (image: Blob) => void }) {
   const { user } = useAuth();
   const [image, setImage] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -23,9 +23,11 @@ export function ReceiptImage({ receiptId, alt = "Private GCash receipt" }: { rec
       });
       if (!response.ok) throw new Error("receipt-image-unavailable");
       const blob = await response.blob();
-      if (active) { objectUrl = URL.createObjectURL(blob); setImage(objectUrl); }
+      if (active) { objectUrl = URL.createObjectURL(blob); setImage(objectUrl); onImage?.(blob); }
     }).catch(() => { if (active) setStatus("error"); });
     return () => { active = false; controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    // onImage is a notification only; a new callback must not refetch the image.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, receiptId, attempt]);
 
   return <div className={styles.receiptImageFrame} role="group" aria-label="Receipt image" aria-busy={status === "loading"}>

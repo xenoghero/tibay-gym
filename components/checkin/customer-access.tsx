@@ -11,7 +11,7 @@ import { PortalHeader } from "./portal-header";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import { PromotionBanner } from "./promotion-banner";
 import styles from "./customer-access.module.css";
-interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number }
+interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number; visitsThisMonth?: number }
 export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: boolean } = {}) {
   const [phone, setPhone] = useState(""), [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(membershipSetup);
@@ -231,7 +231,10 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
         <h2 className={styles.passStatus}>{membershipStatus}</h2>
         <p className={styles.passName}>{summary.name}</p>
         <div className={styles.passMeta}><span>{titleCase(summary.rateCategory ?? "Rate needs review")}</span><span>{summary.verified ? "✓ Verified profile" : "Awaiting verification"}</span></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 16 }}>
         <div className={styles.passExpiry}><span>{isMember && summary.membershipExpiryMs ? summary.status === "expired" ? "Expired on" : "Valid until" : "Membership"}</span><strong>{isMember && summary.membershipExpiryMs ? formatDate(summary.membershipExpiryMs) : "No active membership"}</strong></div>
+        <div className={styles.passExpiry}><span>Visits this month</span><strong>{summary.visitsThisMonth ?? 0}</strong></div>
+        </div>
       </section>
       {allowPurchases && <a href="#renew" className={`${styles.primaryButton} ${styles.membershipCta}`} onClick={event => { event.preventDefault(); setPrevious(undefined); setConfirmation(""); navigate("renew"); }}><span aria-hidden="true">↻</span>{membershipAction}<span aria-hidden="true">›</span></a>}
       {(!isMember || summary.status !== "active") && <Link className={styles.actionLink} href="/checkin"><span>Daily check-in<small>Training for the day? Choose a daily session at check-in.</small></span><span aria-hidden="true">→</span></Link>}

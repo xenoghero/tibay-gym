@@ -45,6 +45,7 @@ export function memoryFirestore() {
     startAfter: (row: { ref: Ref } | string) => collection(path, { ...options, after: typeof row === "string" ? `${path}/${row}` : row.ref.path }),
     limit: (limit: number) => collection(path, { ...options, cap: limit }),
     get: async () => { record("query", path); return rows({ path, id: path, ...options }); },
+    count: () => ({ get: async () => { const { size } = rows({ path, id: path, ...options }); return { data: () => ({ count: size }) }; } }),
   });
   const db = {
     doc, collection,

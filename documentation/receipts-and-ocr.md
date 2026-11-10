@@ -1,5 +1,11 @@
 # Private receipt storage and OCR
 
+## November 10, 2026: browser OCR and one-step approval
+
+- OCR now runs in the admin's browser (`lib/receipt-ocr.ts`, tesseract.js loaded from the jsDelivr CDN and cached by the browser). The server no longer runs Tesseract: `/api/receipts/review`, `receipt-ocr.ts`, `receipt-extraction.ts` and the `@tesseract.js-data/eng` tracing were removed. Older notes below about server OCR are historical.
+- Receipts from any bank or e-wallet are accepted (GCash, MariBank, GoTyme, ...). References are letters and digits; spaces/dashes are stripped and letters uppercased. OCR looks for "Reference / Ref No. / Reference Number", then "Transaction ID / Trace ID", and prefers the charged amount when a receipt lists fees too.
+- Approval is one step: the admin confirms the pre-filled reference in the approval drawer and approves. There is no separate "save reviewed reference and amount". A reference already used on another approved payment shows a warning; the admin may approve anyway (short bank references can repeat). The first claim is kept.
+
 ## Database and live backend receipt verification complete
 
 On October 28, 2026, the owner confirmed applying the saved SQL migration manually. `npm run receipts:setup` then passed against the configured live project. Subsequent local route/service tests against live Firebase and Supabase verified private upload/access, real OCR, review/approval, rejection/replacement, duplicate references, interruptions, leases and cleanup using disposable synthetic fixtures. See receipt-gcash-live-verification.md for evidence and limits. GCash availability follows server readiness; any future deployed environment still needs matching configuration and runtime/phone verification.

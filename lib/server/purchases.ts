@@ -177,8 +177,11 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     if (body.decision === "approve" && changed && body.acknowledgeMembershipChange !== true) throw new ApiError(409, "membership-review-required");
     let reference: Awaited<ReturnType<typeof prepareReferenceClaim>> | null = null;
     if (body.decision === "approve" && payment.method !== "cash") {
-      if (!payment.receiptId || !receiptReview?.confirmedReference || receiptReview.confirmedAmountMinor !== payment.amountMinor || payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "receipt-review-required");
-      reference = await prepareReferenceClaim(tx, db, receiptReview.confirmedReference, id, charge.id, payment.paymentAccountSnapshot);
+      if (!payment.receiptId) throw new ApiError(409, "receipt-review-required");
+      // The admin confirms the receipt's reference in the approval itself; older saved reviews still count.
+      const typed = typeof body.reference === "string" && body.reference.trim() ? body.reference : receiptReview?.confirmedReference;
+      if (!typed) throw new ApiError(409, "receipt-review-required");
+      reference = await prepareReferenceClaim(tx, db, typed, id, charge.id, payment.paymentAccountSnapshot, body.allowDuplicateReference === true);
     }
     const approved = body.decision === "approve";
     const settleVoucher = approved ? await prepareVoucherSettlement(tx, db, charge, "confirmed", actorId, now) : null;

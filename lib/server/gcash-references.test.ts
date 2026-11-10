@@ -9,6 +9,9 @@ it("deduplicates bank references by destination account, independent of display 
   const account = { id: "account_bank0001" as const, kind: "bank" as const, name: "BPI", accountHolder: "Tibay Gym", accountNumber: "0012345678" };
   await db.runTransaction(async tx => { const claim = await prepareReferenceClaim(tx, db, "BPI-00ab1234", "p1", "c1", account); claim.commit(); });
   await expect(db.runTransaction(tx => prepareReferenceClaim(tx, db, "BPI00AB1234", "p2", "c2", { ...account, name: "Renamed bank" }))).rejects.toMatchObject({ code: "reference-already-used" });
+  // After the admin's warning the duplicate is allowed, and the original claim is kept.
+  await db.runTransaction(async tx => { (await prepareReferenceClaim(tx, db, "BPI00AB1234", "p2", "c2", account, true)).commit(); });
+  expect([...store.data.values()][0]).toMatchObject({ paymentRequestId: "p1" });
 });
 it("claims a normalized reference for one payment under competing approval transactions", async () => {
   const store = memoryFirestore(), db = store.db as unknown as Firestore;

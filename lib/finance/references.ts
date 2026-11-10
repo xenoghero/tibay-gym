@@ -1,24 +1,32 @@
-/** Keep leading zeros. Strip only harmless formatting; never guess OCR substitutions. */
-export function normalizeGcashReference(value: unknown): string {
-  if (typeof value !== "string" || !/^[0-9\s-]{8,80}$/.test(value)) throw new Error("Enter the numeric GCash reference shown on the receipt.");
-  const normalized = value.replace(/[\s-]/g, "");
-  if (!/^\d{8,32}$/.test(normalized)) throw new Error("Check the GCash reference digits.");
+/**
+ * Any bank or e-wallet reference: letters and digits. Strip only spaces/dashes and
+ * uppercase; keep leading zeros and never guess OCR character substitutions.
+ */
+export function normalizePaymentReference(value: unknown) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9 -]{4,80}$/.test(value.trim())) throw new Error("Enter the payment reference shown on the receipt.");
+  const normalized = value.replace(/[ -]/g, "").toUpperCase();
+  if (normalized.length < 4 || normalized.length > 64 || !/\d/.test(normalized)) throw new Error("Check the payment reference.");
   return normalized;
-}
-export function parseReceiptText(text: string, confidence: number) {
-  const referenceMatch = /\b(?:reference|ref\.?)(?:\s*(?:no\.?|number))?[\s:#-]*([0-9][0-9 -]{7,40})/i.exec(text);
-  let reference: string | null = null;
-  try { reference = normalizeGcashReference(referenceMatch?.[1]?.trim()); } catch { /* Human review is required. */ }
-  const amounts = [...text.matchAll(/(?:amount(?:\s+(?:paid|sent|received))?|total(?:\s+amount)?|PHP|₱)[\s:PHP₱]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi)]
-    .map(match => Math.round(Number(match[1].replace(/,/g, "")) * 100)).filter(value => Number.isSafeInteger(value) && value > 0 && value <= 100_000_000);
-  const unique = [...new Set(amounts)], amountMinor = unique.length === 1 ? unique[0] : null;
-  return { reference, amountMinor, status: reference && amountMinor !== null && confidence >= 70 ? "extracted" as const : "needs_review" as const };
 }
 
-export function normalizePaymentReference(value: unknown, account?: { kind: string } | null) {
-  if (!account || account.kind === "gcash") return normalizeGcashReference(value);
-  if (typeof value !== "string" || !/^[A-Za-z0-9 -]{4,80}$/.test(value)) throw new Error("Enter the payment reference shown on the receipt.");
-  const normalized = value.replace(/[ -]/g, "").toUpperCase();
-  if (normalized.length < 4 || normalized.length > 64) throw new Error("Check the payment reference.");
-  return normalized;
+// First token must contain a digit; following tokens are digit groups (e.g. GCash "1234 567 891011").
+const REFERENCE_VALUE = String.raw`[\s:#.-]*([A-Z0-9]*\d[A-Z0-9]*(?:[ -]\d+)*)`;
+const REFERENCE_LABELS = [
+  String.raw`\b(?:reference|ref)\b\.?\s*(?:no\b\.?|number\b|#)?`,
+  String.raw`\b(?:transaction|trace|txn)\s*(?:id|no\b\.?|number)`,
+];
+
+/** Suggests a reference and amount from OCR text. A human still confirms both before approval. */
+export function parseReceiptText(text: string, expectedAmountMinor?: number) {
+  let reference: string | null = null;
+  for (const label of REFERENCE_LABELS) {
+    const match = new RegExp(label + REFERENCE_VALUE, "i").exec(text);
+    try { reference = normalizePaymentReference(match?.[1]); break; } catch { /* Try the next label. */ }
+  }
+  const amounts = [...text.matchAll(/(?:amount|total|PHP|₱)[\s:PHP₱-]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi)]
+    .map(match => Math.round(Number(match[1].replace(/,/g, "")) * 100)).filter(value => Number.isSafeInteger(value) && value > 0 && value <= 100_000_000);
+  const unique = [...new Set(amounts)];
+  // Receipts list fees and points too; the charged amount wins when it is present.
+  const amountMinor = expectedAmountMinor !== undefined && unique.includes(expectedAmountMinor) ? expectedAmountMinor : unique.length === 1 ? unique[0] : null;
+  return { reference, amountMinor };
 }
