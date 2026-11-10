@@ -38,6 +38,7 @@
 .status[data-status="approved"], .status[data-status="confirmed"] { color: #348660; background: rgba(52,134,96,.12); }
 .status[data-status="rejected"] { color: #d36d65; background: rgba(211,109,101,.12); }
 .page .primary, .drawer .primary { background: var(--rs-accent); color: var(--rs-on-accent); border-color: var(--rs-accent); }
+.page .primary:hover:not(:disabled), .drawer .primary:hover:not(:disabled) { background: var(--rs-accent); border-color: var(--rs-accent); filter: brightness(.96); }
 .drawer .danger { color: #d36d65; }
 .maintenance { position: relative; font-size: 12px; }
 .maintenance > summary { min-height: 44px; padding: 12px; border: 1px solid var(--rs-line); border-radius: 6px; }

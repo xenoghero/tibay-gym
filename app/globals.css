@@ -117,7 +117,7 @@
   --foreground: #171717;
 
   /* Tibay Gym palette — yellow from the supplied logo, with readable gold text.
-     Light values here; dark overrides in the media query below. */
+     Light values here are overridden by the always-on dark block below. */
   --rs-bg: #ffffff;
   --rs-panel: #faf8f0;
   --rs-fg: #0d0d0d;
@@ -154,25 +154,24 @@
   --color-rs-inv-faint: var(--rs-inv-faint);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --foreground: #ededed;
 
-    --rs-bg: #0c0c0c;
-    --rs-panel: #191810;
-    --rs-fg: #f3f2f0;
-    --rs-muted: #9a9a97;
-    --rs-line: #343022;
-    --rs-accent: #ffcc00;
-    --rs-accent-text: #ffda47;
-    --rs-danger: #ef9990;
-    --rs-success: #7fd48a;
-    --rs-accent-soft: rgba(255, 204, 0, 0.12);
-    --rs-on-accent: #171400;
-    --rs-inv-muted: rgba(12, 12, 12, 0.66);
-    --rs-inv-faint: rgba(12, 12, 12, 0.48);
-  }
+  --rs-bg: #0c0c0c;
+  --rs-panel: #191810;
+  --rs-fg: #f3f2f0;
+  --rs-muted: #9a9a97;
+  --rs-line: #343022;
+  --rs-accent: #ffcc00;
+  --rs-accent-text: #ffda47;
+  --rs-danger: #ef9990;
+  --rs-success: #7fd48a;
+  --rs-accent-soft: rgba(255, 204, 0, 0.12);
+  --rs-on-accent: #171400;
+  --rs-inv-muted: rgba(12, 12, 12, 0.66);
+  --rs-inv-faint: rgba(12, 12, 12, 0.48);
 }
 
 body {
@@ -192,7 +191,7 @@ input[data-form-input] {
 }
 
 input:is([type="date"], [type="datetime-local"], [type="time"]) {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 input[data-form-input]:is([type="date"], [type="datetime-local"], [type="time"]):not(:disabled):not([readonly]) {
@@ -1982,9 +1981,7 @@ input[data-form-input]:focus-visible {
   width: 100%;
   margin-inline: auto;
 }
-@media (prefers-color-scheme: dark) {
-  .rs-st-finance { --rs-panel: #18191b; --rs-line: #303235; --rs-muted: #adb0b5; }
-}
+.rs-st-finance { --rs-panel: #18191b; --rs-line: #303235; --rs-muted: #adb0b5; }
 .rs-st-finance [hidden] { display: none !important; }
 .rs-stat-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--rs-line); flex-shrink: 0; }
 .rs-stat-tabs button { position: relative; min-height: 48px; padding: 0 2px 14px; color: var(--rs-muted); font-size: 15px; font-weight: 500; cursor: pointer; }
@@ -2006,7 +2003,7 @@ input[data-form-input]:focus-visible {
 .rs-collection-toolbar { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 10px; padding: 14px 18px; }
 .rs-collection-toolbar .rs-finance-filters { margin: 0; gap: 12px; align-items: center; }
 .rs-collection-toolbar label { flex-direction: row; align-items: center; color: var(--rs-muted); gap: 10px; }
-.rs-collections-report :is(input, select) { font-size: 14px; color-scheme: light dark; }
+.rs-collections-report :is(input, select) { font-size: 14px; color-scheme: dark; }
 .rs-collections-report button { border-radius: 7px; font-size: 13px; cursor: pointer; }
 .rs-collection-refresh { display: flex; gap: 12px; align-items: center; margin-left: auto; }
 .rs-collection-date-trigger { display: none; }
@@ -2069,7 +2066,7 @@ input[data-form-input]:focus-visible {
 .rs-report-sheet h2 { font-size: 22px; font-weight: 600; }
 .rs-report-sheet-grabber { width: 36px; height: 4px; background: var(--rs-muted); opacity: .5; border-radius: 2px; margin: 0 auto; }
 .rs-report-sheet .rs-finance-filters { display: flex; flex-direction: column; align-items: stretch; margin: 0; }
-.rs-report-sheet :is(input,select) { width: 100%; min-width: 0; font-size: 16px; min-height: 44px; color-scheme: light dark; }
+.rs-report-sheet :is(input,select) { width: 100%; min-width: 0; font-size: 16px; min-height: 44px; color-scheme: dark; }
 .rs-report-sheet .rs-report-range-fields { flex-direction: column; align-items: stretch; }
 .rs-report-range-fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; color: var(--rs-muted); }
 .rs-report-sheet-done { min-height: 46px; background: var(--rs-accent) !important; color: var(--rs-on-accent) !important; border: 0 !important; border-radius: 8px; cursor: pointer; }

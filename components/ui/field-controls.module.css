@@ -75,7 +75,7 @@
 .calendarFooter button:hover { background: var(--rs-panel); }
 .calendarFooter button:last-child { background: var(--rs-accent-soft); color: var(--rs-accent-text); }
 .time { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; }
-.time input { min-height: 44px; padding: 8px; border: 1px solid var(--rs-line); border-radius: 4px; background: var(--rs-panel); color: var(--rs-fg); color-scheme: light dark; }
+.time input { min-height: 44px; padding: 8px; border: 1px solid var(--rs-line); border-radius: 4px; background: var(--rs-panel); color: var(--rs-fg); color-scheme: dark; }
 @media (max-width: 360px) {
   .calendar { padding: 10px; }
   .calendar :global(.rdp-root) { --rdp-day-width: 36px; --rdp-day_button-width: 36px; }

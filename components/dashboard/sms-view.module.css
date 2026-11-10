@@ -22,7 +22,7 @@
 .root button:disabled { opacity: .45; cursor: not-allowed; }
 .root :is(button, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 3px; }
 .root .primary { background: var(--rs-accent); color: var(--rs-on-accent); border-color: var(--rs-accent); font-weight: 600; }
-.root .primary:hover:not(:disabled) { background: var(--rs-accent-text); border-color: var(--rs-accent-text); }
+.root button.primary:hover:not(:disabled) { background: var(--rs-accent-text); border-color: var(--rs-accent-text); }
 .tabs { display: flex; gap: 30px; border-bottom: 1px solid var(--rs-line); flex: none; }
 .tabs button { position: relative; border: 0; border-radius: 0; padding: 10px 0 14px; color: var(--rs-muted); display: inline-flex; align-items: center; gap: 8px; }
 .tabs button[aria-selected="true"] { color: var(--rs-fg); font-weight: 600; box-shadow: 0 2px var(--rs-accent); }
@@ -69,7 +69,7 @@
 .root fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .root label { display: grid; gap: 8px; font-size: 13px; font-weight: 500; min-width: 0; }
 .root label small { color: var(--rs-muted); font-weight: 400; font-size: 11px; }
-.root input:not([type="checkbox"]), .root textarea, .root select { display: block; width: 100%; min-height: 44px; max-width: 100%; border: 1px solid var(--rs-line); border-radius: 5px; padding: 11px 12px; color: var(--rs-fg); background: var(--rs-bg); font: 14px/1.5 var(--font-geist-sans), sans-serif; color-scheme: light dark; }
+.root input:not([type="checkbox"]), .root textarea, .root select { display: block; width: 100%; min-height: 44px; max-width: 100%; border: 1px solid var(--rs-line); border-radius: 5px; padding: 11px 12px; color: var(--rs-fg); background: var(--rs-bg); font: 14px/1.5 var(--font-geist-sans), sans-serif; color-scheme: dark; }
 .root textarea { min-height: 130px; resize: vertical; }
 .root input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--rs-accent); flex: none; }
 .root .checkbox { display: flex; align-items: flex-start; gap: 12px; margin: 20px 0 0; font-weight: 400; }

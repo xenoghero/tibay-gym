@@ -73,12 +73,10 @@
 .error { background: #b6404010; border-left: 3px solid #b64040; color: var(--rs-fg); padding: 12px 16px; font-size: 12px; margin: 16px 0; overflow-wrap: anywhere; }
 .footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 44px; border-top: 1px solid var(--rs-line); padding-top: 16px; color: var(--rs-muted); font-size: 12px; }
 .footer a { color: var(--rs-fg); min-height: 44px; display: flex; align-items: center; }
-@media (prefers-color-scheme: dark) {
-  .loginPanel { background: #141413; border-color: #343431; }
-  .accessWatermark { -webkit-text-stroke-color: #2b2b28; }
-  .badge[data-status="approved"] { color: #88c9a6; border-color: #88c9a644; background: #88c9a60c; }
-  .badge[data-status="rejected"] { color: #f0a09a; border-color: #f0a09a44; background: #f0a09a0c; }
-}
+.loginPanel { background: #141413; border-color: #343431; }
+.accessWatermark { -webkit-text-stroke-color: #2b2b28; }
+.badge[data-status="approved"] { color: #88c9a6; border-color: #88c9a644; background: #88c9a60c; }
+.badge[data-status="rejected"] { color: #f0a09a; border-color: #f0a09a44; background: #f0a09a0c; }
 @media (max-width: 900px) {
 
   .loginPanel { padding: 28px; }
@@ -143,11 +141,9 @@
 .paymentPanel[data-attention] .sectionHeading h2 { color: var(--rs-accent-text); }
 .paymentPanel .primaryButton { font-size: 13px; }
 .confirmation { padding: 16px 20px; margin: 0 0 24px; border-left: 3px solid #35bd78; background: #35bd7810; font-size: 13px; }
-@media (prefers-color-scheme: dark) {
-  .memberPass { background: #171918; border-color: #343936; }
-  .passWatermark { -webkit-text-stroke-color: #3d423a; }
-  .paymentPanel { background: #131514; }
-}
+.memberPass { background: #171918; border-color: #343936; }
+.passWatermark { -webkit-text-stroke-color: #3d423a; }
+.paymentPanel { background: #131514; }
 @media (max-width: 650px) {
   .memberWorkspace { padding-top: 28px; }
   .portalHeading { margin-bottom: 22px; }
@@ -222,12 +218,10 @@
 .actionLink > span:last-child { margin-left: auto; }
 .actionIcon { font-size: 26px; line-height: 1; color: var(--rs-muted); }
 .sessionFooter { text-align: center; color: var(--rs-muted); font-size: 10px; margin-top: 22px; }
-@media (prefers-color-scheme: dark) {
-  .memberPortal { --rs-bg: #101416; --rs-panel: #1a2022; --rs-line: #343e42; --rs-fg: #f4f5f1; --rs-muted: #b1b8bb; }
-  .badge[data-status="approved"] { color: #9eeab3; background: #0d4529; }
-  .badge[data-status="pending"] { color: #ffe17d; background: #5d4307; }
-  .badge[data-status="rejected"] { color: #ffd0cb; background: #802d29; }
-}
+.memberPortal { --rs-bg: #101416; --rs-panel: #1a2022; --rs-line: #343e42; --rs-fg: #f4f5f1; --rs-muted: #b1b8bb; }
+.badge[data-status="approved"] { color: #9eeab3; background: #0d4529; }
+.badge[data-status="pending"] { color: #ffe17d; background: #5d4307; }
+.badge[data-status="rejected"] { color: #ffd0cb; background: #802d29; }
 @media (max-width: 650px) {
   .memberPortal { margin: 0 auto; padding: 0 20px 24px; border: 0; border-radius: 0; min-height: 100svh; }
   .memberPortal .header { min-height: 84px; }
@@ -287,6 +281,4 @@
   .portalNav a[aria-current="page"]::after { top: 0; bottom: auto; }
 }
 
-@media (prefers-color-scheme: dark) {
-  .memberPass[data-status="active"] .passStatus { color: #35bd78; }
-}
+.memberPass[data-status="active"] .passStatus { color: #35bd78; }

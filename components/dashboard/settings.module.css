@@ -37,7 +37,7 @@
 .section button, .confirm button { min-height: 44px; padding: 10px 15px; border-radius: 6px; border: 1px solid var(--rs-line); background: var(--rs-bg); cursor: pointer; font-size: 14px; transition: background .15s; }
 .section button:hover:not(:disabled) { background: var(--rs-panel); }
 .section button.primary, .confirm button.primary { background: var(--rs-accent); border-color: var(--rs-accent); color: var(--rs-on-accent); font-weight: 600; }
-.section button.primary:hover:not(:disabled) { filter: brightness(.96); }
+.section button.primary:hover:not(:disabled) { background: var(--rs-accent); filter: brightness(.96); }
 .section button:disabled, .confirm button:disabled { opacity: .45; cursor: default; }
 .section :is(input:not([type=checkbox]), select, textarea), .confirm textarea { display: block; width: 100%; max-width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; font-size: 16px; border-radius: 6px; border: 1px solid var(--rs-line); background: var(--rs-bg); }
 .section input[type=checkbox] { accent-color: var(--rs-accent-text); width: 18px; height: 18px; flex-shrink: 0; }
