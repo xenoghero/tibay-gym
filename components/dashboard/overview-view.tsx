@@ -200,7 +200,7 @@ export function OverviewView() {
           <span role="alert">{alertError ?? "Live updates dropped out."}</span>
           <button type="button" onClick={retryLiveUpdates}>Retry</button>
         </div>}
-        {alerts.length > 0 && <div className="rs-ov-alerts">
+        {alerts.length > 0 && <div className="rs-ov-alerts" role="region" aria-label="RFID alerts" aria-live="polite">
           {alerts.map(alert => <div key={alert.eventId} className="rs-ov-alert">
             <Link href={personProfileHref(alert.personId)} className="rs-ov-alert-body">
               <span>Expired membership</span><strong>{alert.name} — RFID tap rejected because membership expired.</strong>

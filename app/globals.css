@@ -491,7 +491,9 @@ input[data-form-input]:focus-visible {
 .rs-ov-error, .rs-ov-alert { padding: 14px; background: var(--rs-accent-soft); border-left: 3px solid var(--rs-accent); display: flex; align-items: center; gap: 14px; font-size: 13px; }
 .rs-ov-error { flex: none; justify-content: space-between; }
 .rs-ov-error button, .rs-ov-alert button { padding: 7px 12px; min-height: 36px; color: var(--rs-fg); background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 4px; cursor: pointer; }
-.rs-ov-alerts { display: grid; flex: 0 1 auto; min-height: 0; max-height: 20%; overflow-y: auto; overscroll-behavior: contain; gap: 10px; }
+/* RFID alerts float as toasts (z below the mobile header/drawer at 60+) instead of taking layout space. */
+.rs-ov-alerts { position: fixed; top: 20px; right: 20px; z-index: 50; width: min(400px, calc(100vw - 32px)); display: grid; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; gap: 10px; }
+.rs-ov-alerts .rs-ov-alert { background: linear-gradient(var(--rs-accent-soft), var(--rs-accent-soft)), var(--rs-panel); border: 1px solid var(--rs-accent); border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
 .rs-ov-alert-body { display: grid; gap: 4px; flex: 1; min-width: 0; text-decoration: none; color: var(--rs-fg); }
 .rs-ov-alert-body > span, .rs-ov-alert > a:not(.rs-ov-alert-body) { color: var(--rs-accent-text); }
 .rs-ov-alert-body > small { color: var(--rs-muted); }
@@ -501,11 +503,21 @@ input[data-form-input]:focus-visible {
   .rs-ov-tile { padding: 16px 14px; }
 }
 @media (max-width: 860px) {
-  .rs-ov { height: 100%; padding: 18px 16px; gap: 16px; }
+  /* Mobile: the page flows inside .rs-dashboard-content's scroller instead of
+     fitting one viewport — on short or zoomed screens the fixed fit squeezed
+     the check-in list to zero height. The pagination footer sticks instead. */
+  .rs-ov, .rs-ov-content { height: auto; overflow: visible; }
+  /* min-height fills the scroller so the feed grows and the footer sits at the bottom even with few rows. */
+  .rs-ov { padding: 18px 16px; gap: 16px; }
+  /* Beats the shell's `.rs-dashboard-content main { min-height: 0 !important }`. */
+  .rs-dashboard-content main.rs-ov { min-height: 100% !important; }
+  .rs-ov-alerts { top: 76px; right: 16px; max-height: 40dvh; }
+  .rs-ov-feed-scroll, .rs-ov-collections-scroll { overflow: visible; }
+  .rs-ov-feed-footer { position: sticky; bottom: 0; z-index: 1; padding-bottom: 8px; }
   .rs-ov-title { font-size: 42px; }
   .rs-ov-kicker { font-size: 10px; letter-spacing: .06em; }
   .rs-ov-live { font-size: 10px; text-align: right; max-width: 110px; }
-  .rs-ov-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
+  .rs-ov-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 14px; }
   .rs-ov-panel-selector { display: flex; flex: none; padding: 4px; gap: 4px; background: var(--rs-panel); border: 1px solid var(--rs-line); border-radius: 8px; }
   .rs-ov-panel-selector button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 0; border-radius: 5px; background: transparent; color: var(--rs-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
   .rs-ov-panel-selector button[aria-pressed="true"] { background: var(--rs-accent); color: var(--rs-on-accent); }
