@@ -26,6 +26,10 @@ export function parseReceiptText(text: string, expectedAmountMinor?: number) {
   const amounts = [...text.matchAll(/(?:amount|total|PHP|₱)[\s:PHP₱-]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi)]
     .map(match => Math.round(Number(match[1].replace(/,/g, "")) * 100)).filter(value => Number.isSafeInteger(value) && value > 0 && value <= 100_000_000);
   const unique = [...new Set(amounts)];
+  // Currency signs often OCR as stray letters, so also accept the charged amount as any "700.00" on the receipt.
+  const anywhere = [...text.matchAll(/(?<![\d.,])([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\.([0-9]{2})(?![\d])/g)]
+    .map(match => Number(match[1].replace(/,/g, "")) * 100 + Number(match[2]));
+  if (expectedAmountMinor !== undefined && anywhere.includes(expectedAmountMinor)) return { reference, amountMinor: expectedAmountMinor };
   // Receipts list fees and points too; the charged amount wins when it is present.
   const amountMinor = expectedAmountMinor !== undefined && unique.includes(expectedAmountMinor) ? expectedAmountMinor : unique.length === 1 ? unique[0] : null;
   return { reference, amountMinor };

@@ -16,6 +16,7 @@ it("reads the receipt in the browser and pre-fills the reference", async () => {
   render(<Harness />);
   await act(async () => { fireEvent.click(screen.getByText("load image")); });
   expect((screen.getByLabelText(/Payment reference/) as HTMLInputElement).value).toBe("ITO261110060130002");
+  expect((screen.getByLabelText(/Amount on receipt/) as HTMLInputElement).value).toBe("700.00");
   expect(screen.getByText(/amount matches/)).toBeTruthy();
 });
 it("keeps a typed reference and flags an unexpected amount", async () => {
@@ -24,5 +25,6 @@ it("keeps a typed reference and flags an unexpected amount", async () => {
   fireEvent.change(screen.getByLabelText(/Payment reference/), { target: { value: "ABC12345" } });
   await act(async () => { fireEvent.click(screen.getByText("load image")); });
   expect((screen.getByLabelText(/Payment reference/) as HTMLInputElement).value).toBe("ABC12345");
-  expect(screen.getByRole("alert").textContent).toContain("PHP 500.00");
+  expect((screen.getByLabelText(/Amount on receipt/) as HTMLInputElement).value).toBe("500.00");
+  expect(screen.getByRole("alert").textContent).toContain("differs from the expected PHP 700.00");
 });

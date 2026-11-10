@@ -15,6 +15,10 @@ it("reads other bank receipts (MariBank, GoTyme)", () => {
   expect(parseReceiptText("Transferred\n₱700.00\nAmount ₱700.00\nFee ₱9.00\nPaid with points -₱9.00\nTotal ₱700.00\nTrace ID 130002\nReference No. ITO261110060130002", 70000))
     .toEqual({ reference: "ITO261110060130002", amountMinor: 70000 });
 });
+it("finds the charged amount when the currency sign is misread", () => {
+  expect(parseReceiptText("Amount\n®700.00\nFee\n®9.00\nTotal\nB700.00", 70000).amountMinor).toBe(70000);
+  expect(parseReceiptText("Amount\n®1,200.00", 70000).amountMinor).toBeNull();
+});
 it("leaves ambiguous amounts and unreadable evidence for the admin", () => {
   expect(parseReceiptText("Reference 0001234567890\nAmount 60.00\nTotal 70.00").amountMinor).toBeNull();
   expect(parseReceiptText("Unreadable image")).toEqual({ reference: null, amountMinor: null });
