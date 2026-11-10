@@ -37,7 +37,9 @@ export function PaymentReview() {
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [accountError, setAccountError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [reviewLoading, setReviewLoading] = useState(false);
+  // The drawer opens at once with the row's name; details load inside it.
+  const [opening, setOpening] = useState<string | null>(null);
+  const openSequence = useRef(0);
   const [closing, setClosing] = useState(false), [closeReason, setCloseReason] = useState("");
   const requestSequence = useRef(0);
   const tabContent = useRef<HTMLDivElement>(null);
@@ -53,19 +55,24 @@ export function PaymentReview() {
     } finally { if (sequence === requestSequence.current) setLoading(false); }
   }
   async function preview(id: string) {
-    if (selected?.payment.id !== id) setReference("");
-    setReviewed(false); setAck(false); setReason(""); setBusy(true); setReviewLoading(true);
+    const sequence = selected?.payment.id === id ? openSequence.current : ++openSequence.current;
+    if (selected?.payment.id !== id) {
+      setReference(""); setSelected(null);
+      setOpening(rows.find(row => row.payment.id === id)?.customer.name ?? "Payment details");
+    }
+    setReviewed(false); setAck(false); setReason(""); setBusy(true);
     try {
       // Final records remain inspectable even after their customer profile is deleted.
       const finalRow = rows.find(row => row.payment.id === id && row.payment.status !== "pending");
       if (finalRow) {
-        setSelected({ ...finalRow, coverage: finalRow.payment.appliedCoverage, membershipChanged: false, previewToken: "" });
+        if (sequence === openSequence.current) setSelected({ ...finalRow, coverage: finalRow.payment.appliedCoverage, membershipChanged: false, previewToken: "" });
         return;
       }
       const response = await fetch(`/api/finance/review?id=${encodeURIComponent(id)}`, { headers: await headers(), signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error("This request cannot be reviewed yet. Verify its profile or refresh the request.");
-      setSelected(await response.json());
-    } finally { setBusy(false); setReviewLoading(false); }
+      const details = await response.json();
+      if (sequence === openSequence.current) setSelected(details);
+    } finally { setBusy(false); if (sequence === openSequence.current) setOpening(null); }
   }
   useEffect(() => {
     let active = true;
@@ -188,8 +195,8 @@ export function PaymentReview() {
         <div className={styles.pagination}><span>Search and filters apply to this loaded page.</span>{cursor && <button disabled={busy || loading} onClick={() => list(cursor).catch(e => setMessage(e.message))}>Next 50 requests →</button>}</div>
       </section>}
     </div>
-    {reviewLoading && !selected && <LoadingSkeleton label="Opening payment details…" variant="form" />}
-    {selected && <PaymentDrawer title={selected.customer.name} busy={busy} onClose={() => setSelected(null)}>
+    {(selected || opening !== null) && <PaymentDrawer title={selected?.customer.name ?? opening!} busy={busy && !!selected} onClose={() => { openSequence.current++; setOpening(null); setSelected(null); }}>
+      {!selected ? <LoadingSkeleton label="Opening payment details…" variant="form" /> : <>
       <PaymentStatus status={selected.payment.status} /><div className={styles.detailAmount}>{peso(selected.payment.amountMinor)}</div>
       {selected.charge.voucherSnapshot && <PriceBreakdown quote={selected.charge} />}
       <dl className={styles.details}>
@@ -215,6 +222,7 @@ export function PaymentReview() {
       </> : <p>Final outcome: {selected.payment.status}. {selected.payment.rejectionReason}</p>}
       {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>Close abandoned membership request</button>}
       {closing && <SettingsConfirm title="Close this membership request?" label="Close request" danger busy={busy} confirmDisabled={!closeReason.trim()} onCancel={() => setClosing(false)} onConfirm={() => void closePurchase()}><p>This permanently ends this purchase and releases its voucher reservation. No membership is activated. Payment corrections will no longer be available; a new purchase will use current pricing.</p><label>Reason (required)<textarea maxLength={500} value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label>{message && <p role="status">{message}</p>}</SettingsConfirm>}
+      </>}
     </PaymentDrawer>}
   </main>;
 }

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import styles from "./payment-review.module.css";
 
-export function ReceiptImage({ receiptId, alt = "Private GCash receipt", onImage }: { receiptId: string; alt?: string; onImage?: (image: Blob) => void }) {
+export function ReceiptImage({ receiptId, alt = "Private GCash receipt", onImage }: { receiptId: string; alt?: string; onImage?: (image: Blob | null) => void }) {
   const { user } = useAuth();
   const [image, setImage] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -24,7 +24,7 @@ export function ReceiptImage({ receiptId, alt = "Private GCash receipt", onImage
       if (!response.ok) throw new Error("receipt-image-unavailable");
       const blob = await response.blob();
       if (active) { objectUrl = URL.createObjectURL(blob); setImage(objectUrl); onImage?.(blob); }
-    }).catch(() => { if (active) setStatus("error"); });
+    }).catch(() => { if (active) { setStatus("error"); onImage?.(null); } });
     return () => { active = false; controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
     // onImage is a notification only; a new callback must not refetch the image.
     // eslint-disable-next-line react-hooks/exhaustive-deps
