@@ -44,7 +44,7 @@
 .maintenance > summary { min-height: 44px; padding: 12px; border: 1px solid var(--rs-line); border-radius: 6px; }
 .maintenanceMenu { position: absolute; right: 0; top: calc(100% + 8px); width: 260px; padding: 16px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-panel); z-index: 5; box-shadow: 0 8px 24px #0002; }
 .maintenanceMenu p { margin: 0 0 12px; color: var(--rs-muted); line-height: 1.6; }
-.message { margin: 0; padding: 12px 16px; border-left: 2px solid var(--rs-accent); background: var(--rs-accent-soft); font-size: 13px; line-height: 1.6; }
+.message { margin: 0; padding: 12px 16px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-accent-soft); font-size: 13px; line-height: 1.6; }
 .empty { padding: 36px 16px; text-align: center; border-bottom: 1px solid var(--rs-line); }
 .empty h3 { font-size: 17px; font-weight: 500; margin: 0 0 8px; }
 .empty p { color: var(--rs-muted); font-size: 13px; margin: 0; }
