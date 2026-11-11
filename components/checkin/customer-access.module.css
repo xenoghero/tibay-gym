@@ -282,3 +282,72 @@
 }
 
 .memberPass[data-status="active"] .passStatus { color: #35bd78; }
+
+/* Membership card: identity on the left, portrait photo above the visit count on the right. */
+.passGrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
+/* The portrait spans the brand and identity rows so it fills the card's right side. */
+.passBrand { grid-column: 1; }
+.passIdentity { min-width: 0; }
+.passPhoto { position: relative; grid-column: 2; grid-row: 1 / 3; align-self: end; width: 156px; aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); display: grid; place-items: center; }
+.passPhoto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.passPhoto > span { font: 700 34px/1 var(--font-barlow-condensed), sans-serif; color: var(--rs-muted); }
+.passPhoto button { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: rgb(0 0 0 / .55); color: #fff; opacity: .85; cursor: pointer; transition: opacity .15s, background .15s; }
+.passPhoto button:hover, .passPhoto button:focus-visible { opacity: 1; background: rgb(0 0 0 / .75); }
+.passPhoto button svg { width: 18px; height: 18px; }
+@media (max-width: 650px) {
+  .passGrid { column-gap: 12px; }
+  .passPhoto { width: clamp(104px, 33vw, 136px); }
+  .passStatus { font-size: clamp(40px, 12.5vw, 58px); }
+}
+/* Profile photo modal: centered card on desktop, bottom sheet on phones. */
+.photoModal { width: min(400px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; border: 1px solid var(--rs-line); border-radius: 16px; background: var(--rs-panel); color: var(--rs-fg); font: 13px/1.6 var(--font-geist-sans), system-ui, sans-serif; box-shadow: 0 24px 60px rgb(0 0 0 / .45); }
+.photoModal[open] { animation: photo-modal-in 280ms cubic-bezier(.22, 1, .36, 1) both; }
+.photoModal[open][data-closing=true] { animation: photo-modal-out 200ms cubic-bezier(.4, 0, 1, 1) both; }
+.photoModal::backdrop { background: rgb(0 0 0 / .6); backdrop-filter: blur(3px); animation: photo-fade-in 280ms ease-out both; }
+.photoModal[data-closing=true]::backdrop { animation: photo-fade-out 200ms ease-in both; }
+@keyframes photo-modal-in { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+@keyframes photo-modal-out { to { opacity: 0; transform: translateY(10px) scale(.97); } }
+@keyframes photo-sheet-in { from { transform: translateY(100%); } }
+@keyframes photo-sheet-out { to { transform: translateY(100%); } }
+@keyframes photo-fade-in { from { opacity: 0; } }
+@keyframes photo-fade-out { to { opacity: 0; } }
+.photoModalInner { display: grid; justify-items: center; gap: 16px; padding: 20px 20px 22px; }
+.photoModalHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; width: 100%; }
+.photoModalHead span { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--rs-muted); }
+.photoModalHead h2 { margin: 2px 0 0; font: 700 28px/1.05 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+.photoModalHead button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--rs-line); border-radius: 50%; background: transparent; color: var(--rs-muted); font-size: 14px; cursor: pointer; transition: color .15s, border-color .15s; }
+.photoModalHead button:hover:not(:disabled) { color: var(--rs-fg); border-color: var(--rs-muted); }
+.photoFrame { position: relative; display: block; width: min(224px, 60vw); aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-bg); cursor: grab; touch-action: none; user-select: none; }
+.photoFrame[data-dragging=true] { cursor: grabbing; }
+.photoFrame:focus-visible, .photoUpload:focus-within { outline: 2px solid var(--rs-accent-text); outline-offset: 3px; }
+.photoFrame img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.photoHint { position: absolute; left: 50%; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; transform: translateX(-50%); border-radius: 999px; background: rgb(0 0 0 / .58); color: #fff; font-size: 11px; font-weight: 500; white-space: nowrap; pointer-events: none; transition: opacity .2s; }
+.photoHint svg { width: 14px; height: 14px; }
+.photoFrame[data-dragging=true] .photoHint { opacity: 0; }
+.photoEmpty { display: grid; place-content: center; justify-items: center; gap: 6px; border-style: dashed; color: var(--rs-muted); cursor: pointer; text-align: center; transition: border-color .15s, color .15s; }
+.photoEmpty:hover { border-color: var(--rs-accent-text); color: var(--rs-fg); }
+.photoEmpty svg { width: 32px; height: 32px; margin-bottom: 4px; }
+.photoEmpty strong { color: var(--rs-fg); font-size: 14px; }
+.photoEmpty small { font-size: 11px; }
+.photoTools { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.photoUpload { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 18px; border: 1px solid var(--rs-line); border-radius: 999px; background: var(--rs-bg); font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .15s; }
+.photoUpload:hover { border-color: var(--rs-accent-text); }
+.photoUpload[data-disabled=true] { opacity: .5; pointer-events: none; }
+.photoUpload svg { width: 17px; height: 17px; color: var(--rs-accent-text); }
+.photoUpload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.photoReset { min-height: 44px; padding: 10px 14px; border: 0; background: transparent; color: var(--rs-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
+.photoReset:hover:not(:disabled) { color: var(--rs-fg); text-decoration: underline; text-underline-offset: 4px; }
+.photoNote { max-width: 100%; margin: -6px 0 0; color: var(--rs-muted); font-size: 11px; text-align: center; overflow-wrap: anywhere; }
+.photoModalInner .error { width: 100%; margin: 0; }
+.photoModalFoot { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; width: 100%; margin-top: 4px; }
+.photoModalFoot .primaryButton { justify-content: center; margin: 0; }
+.photoModalFoot .secondaryButton { border-radius: 6px; }
+@media (max-width: 650px) {
+  .photoModal { width: 100vw; max-height: 92dvh; margin: auto 0 0; border-width: 1px 0 0; border-radius: 18px 18px 0 0; }
+  .photoModal[open] { animation-name: photo-sheet-in; }
+  .photoModal[open][data-closing=true] { animation-name: photo-sheet-out; }
+  .photoModalInner { padding-bottom: max(22px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .photoModal[open], .photoModal[open][data-closing=true], .photoModal::backdrop, .photoModal[data-closing=true]::backdrop { animation-duration: 1ms; }
+}

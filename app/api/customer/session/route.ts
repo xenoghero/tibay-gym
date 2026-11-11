@@ -33,6 +33,7 @@ export async function GET(request: Request) {
       .where("checkInAt", ">=", Timestamp.fromMillis(monthStart)).orderBy("checkInAt", "desc").count().get();
     return json({ visitsThisMonth: visits.data().count, name: person.name, rateCategory: person.rateCategory ?? null, type: person.type,
       status: effectiveMemberStatusAt({ type: person.type, status: person.status, membershipExpiry: person.membershipExpiry ?? null }, Date.now()),
-      membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, verified: official, expiresAt: session.expiresAt });
+      membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, verified: official, expiresAt: session.expiresAt,
+      hasPhoto: Boolean(person.profileImagePath), photoPosition: person.profileImagePosition ?? null });
   });
 }

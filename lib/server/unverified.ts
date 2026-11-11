@@ -49,6 +49,7 @@ export async function approveUnverified(personId: string, adminUid: string): Pro
       verifiedAt: stamp, verifiedBy: adminUid,
       rateCategory: pending.rateCategory ?? null, leadSource: pending.leadSource ?? null,
       leadSourceOther: pending.leadSourceOther ?? null, profileImagePath: pending.profileImagePath ?? null,
+      profileImagePosition: pending.profileImagePosition ?? null,
     });
     if (pending.address) tx.set(db.doc(`profileDetails/${personId}`), {
       personId, address: pending.address, updatedAt: stamp,
