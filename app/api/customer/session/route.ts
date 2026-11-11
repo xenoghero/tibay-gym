@@ -1,6 +1,6 @@
 import { createCustomerSession, requireCustomer, revokeCustomerSession, sameOrigin, sessionCookie } from "@/lib/server/customer-session";
 import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit";
-import { attendancePhone } from "@/lib/server/attendance-request";
+import { resolveAccountPhone } from "@/lib/server/attendance-request";
 import { handleApi, json, readBody } from "@/lib/server/rfid/http";
 import { effectiveMemberStatusAt } from "@/lib/member-status";
 import { philippineDate } from "@/lib/finance/rules";
@@ -9,9 +9,9 @@ import { Timestamp } from "firebase-admin/firestore";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   return handleApi(async () => {
-    sameOrigin(request); publicRateLimiter.consume(publicCaller(request), "customerLogin");
+    const caller = publicCaller(request); sameOrigin(request); publicRateLimiter.consume(caller, "customerLogin");
     const body = await readBody(request);
-    const session = await createCustomerSession(attendancePhone(body.phone));
+    const session = await createCustomerSession(await resolveAccountPhone(body.phone, caller));
     await revokeCustomerSession(request);
     const response = json({ expiresAt: session.expiresAt });
     response.headers.set("Set-Cookie", sessionCookie(session.token)); return response;

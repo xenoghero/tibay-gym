@@ -3,7 +3,7 @@ import { adminDb } from "@/lib/server/firebase-admin";
 import { previewVoucher } from "@/lib/server/vouchers";
 import { snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
-import { attendancePhone } from "@/lib/server/attendance-request";
+import { resolveAccountPhone } from "@/lib/server/attendance-request";
 import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit";
 import { sameOrigin } from "@/lib/server/customer-session";
 import { ApiError, handleApi, json, readBody } from "@/lib/server/rfid/http";
@@ -11,8 +11,9 @@ import { dailyChargeId } from "@/lib/server/daily-charges";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   return handleApi(async () => {
-    sameOrigin(request); publicRateLimiter.consume(publicCaller(request), "lookup");
-    const body = await readBody(request), phone = attendancePhone(body.phone), db = adminDb();
+    const caller = publicCaller(request);
+    sameOrigin(request); publicRateLimiter.consume(caller, "lookup");
+    const body = await readBody(request), phone = await resolveAccountPhone(body.phone, caller), db = adminDb();
     let rows = await db.collection("persons").where("phone", "==", phone).limit(1).get();
     if (rows.empty) rows = await db.collection("unverifiedPersons").where("phone", "==", phone).limit(1).get();
     const person = rows.docs[0]?.data(), at = Date.now();

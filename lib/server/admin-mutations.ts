@@ -31,7 +31,7 @@ function profile(input: Record<string, unknown>) {
   if (!/^\d{11}$/.test(phone)) throw new ApiError(400, "invalid-phone");
   if (input.type !== "member" && input.type !== "guest") throw new ApiError(400, "invalid-input");
   if (input.type === "member" && input.status !== "active" && input.status !== "expired") throw new ApiError(400, "invalid-input");
-  return { phone, name: text(input.name, 160), type: input.type,
+  return { phone, phoneLast4: phone.slice(-4), name: text(input.name, 160), type: input.type,
     status: input.type === "guest" ? null : input.status,
     membershipExpiry: input.type === "guest" ? null : timestamp(input.membershipExpiry),
     joinDate: input.type === "guest" ? null : timestamp(input.joinDate) };
