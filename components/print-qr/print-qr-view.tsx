@@ -7,25 +7,20 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { GYM_NAME, resolvePublicPageUrl } from "@/lib/checkin-url";
-import {
-  buildPosterCanvas,
-  posterFileStem,
-  POSTER_HEIGHT,
-  POSTER_WIDTH,
-} from "./build-poster";
+import { GYM_NAME } from "@/lib/checkin-url";
 
-// Each destination owns its canvas and export state to prevent stale downloads.
+// Pre-rendered posters in /public: client-side canvas generation failed on some
+// devices. shortcut: the QR URLs are baked in, regenerate the PNGs if the domain changes.
+const POSTER_WIDTH = 1240;
+const POSTER_HEIGHT = 1754;
 const POSTERS = {
   checkin: {
-    label: "Check-in", path: "/checkin", caption: "Scan to check in",
-    instructions: "Open your phone camera and scan.\nEnter your phone number to check in.",
-    description: "For the entrance: members and guests scan to check in.", fileKey: "check-in",
+    label: "Check-in", url: "https://tibay-gym.vercel.app/checkin", image: "/qr/checkin-poster.png",
+    description: "For the entrance: members and guests scan to check in.", file: "tibay-gym-check-in-qr",
   },
   customer: {
-    label: "Customer page", path: "/customer", caption: "Scan to view\nyour membership",
-    instructions: "Open your phone camera and scan.\nEnter your registered phone number to view your membership.",
-    description: "For the counter: customers scan to view their membership, request a renewal, and follow payment status.", fileKey: "customer",
+    label: "Customer page", url: "https://tibay-gym.vercel.app/customer", image: "/qr/customer-poster.png",
+    description: "For the counter: customers scan to view their membership, request a renewal, and follow payment status.", file: "tibay-gym-customer-qr",
   },
 } as const;
 type PosterKind = keyof typeof POSTERS;
@@ -135,79 +130,19 @@ export function PrintQrView() {
 
 function QrPoster({ kind }: { kind: PosterKind }) {
   const poster = POSTERS[kind];
-  const previewRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const [url, setUrl] = useState("");
-  const [building, setBuilding] = useState(true);
-  const [failed, setFailed] = useState(false);
-  const [busy, setBusy] = useState<null | "png" | "pdf" | "print">(null);
+  const { url, image, file: fileStem } = poster;
+  const [busy, setBusy] = useState<null | "pdf" | "print">(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Resolve the fixed target URL (needs `window` for the origin fallback) and
-  // build the poster once, client-side. State is only touched from the async
-  // continuations, never synchronously in the effect body.
-  useEffect(() => {
-    let cancelled = false;
-    const target = resolvePublicPageUrl(poster.path);
-
-    buildPosterCanvas({ url: target, gymName: GYM_NAME, caption: poster.caption, instructions: poster.instructions })
-      .then((canvas) => {
-        if (cancelled) return;
-        canvasRef.current = canvas;
-        const host = previewRef.current;
-        if (host) {
-          host.replaceChildren(canvas);
-          canvas.style.width = "100%";
-          canvas.style.height = "auto";
-          canvas.style.display = "block";
-        }
-        setUrl(target);
-        setBuilding(false);
-      })
-      .catch((err) => {
-        console.error("[print-qr] poster build failed", err);
-        if (cancelled) return;
-        setUrl(target);
-        setFailed(true);
-        setBuilding(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [poster]);
-
-  const fileStem = posterFileStem(GYM_NAME, poster.fileKey);
-
-  const downloadPng = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setNotice(null);
-    try {
-      // Synchronous data URL: iOS Safari drops downloads started outside the tap
-      // or whose blob URL is revoked before it reads it.
-      const a = document.createElement("a");
-      a.href = canvas.toDataURL("image/png");
-      a.download = `${fileStem}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setNotice({ tone: "info", text: "Poster image downloaded." });
-    } catch (err) {
-      console.error("[print-qr] PNG download failed", err);
-      setNotice({ tone: "error", text: "Couldn't create the image file." });
-    }
-  }, [fileStem]);
-
   const downloadPdf = useCallback(async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     setBusy("pdf");
     setNotice(null);
     try {
+      const img = new Image();
+      img.src = image;
+      await img.decode();
       const { jsPDF } = await import("jspdf");
       const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -219,7 +154,7 @@ function QrPoster({ kind }: { kind: PosterKind }) {
       const w = POSTER_WIDTH * scale;
       const h = POSTER_HEIGHT * scale;
       pdf.addImage(
-        canvas.toDataURL("image/png"),
+        img,
         "PNG",
         (pageW - w) / 2,
         (pageH - h) / 2,
@@ -234,15 +169,14 @@ function QrPoster({ kind }: { kind: PosterKind }) {
     } finally {
       setBusy(null);
     }
-  }, [fileStem]);
+  }, [fileStem, image]);
 
   const printPoster = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     setBusy("print");
     setNotice(null);
     try {
-      const dataUrl = canvas.toDataURL("image/png");
+      // The blank pop-up has no base URL, so the image path must be absolute.
+      const src = new URL(image, window.location.origin).href;
       const win = window.open("", "_blank", "width=900,height=1200");
       if (!win) {
         setNotice({
@@ -256,7 +190,7 @@ function QrPoster({ kind }: { kind: PosterKind }) {
           `<title>${GYM_NAME} — ${poster.label} QR</title>` +
           `<style>@page{margin:12mm}html,body{margin:0;padding:0}` +
           `img{display:block;width:100%;height:auto}</style></head>` +
-          `<body><img src="${dataUrl}" alt="${poster.label} QR poster"` +
+          `<body><img src="${src}" alt="${poster.label} QR poster"` +
           ` onload="setTimeout(function(){window.focus();window.print();},150)"></body></html>`,
       );
       win.document.close();
@@ -267,14 +201,13 @@ function QrPoster({ kind }: { kind: PosterKind }) {
     } finally {
       setBusy(null);
     }
-  }, [poster.label]);
+  }, [poster.label, image]);
 
   // Copying the target is the one thing anyone wants to *do* with this string —
   // send it to a member, paste it into a message. The confirmation lives on the
   // button itself (icon swaps to a tick for two seconds) rather than in the
   // shared notice line, so it reads as feedback for that control.
   const copyUrl = useCallback(async () => {
-    if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -294,7 +227,7 @@ function QrPoster({ kind }: { kind: PosterKind }) {
     [],
   );
 
-  const actionsDisabled = building || failed || busy !== null;
+  const actionsDisabled = busy !== null;
 
   return (
     <section aria-label={`${poster.label} QR poster`}>
@@ -302,18 +235,15 @@ function QrPoster({ kind }: { kind: PosterKind }) {
 
         <div className="rs-qr-layout" style={layoutStyle}>
           <div className="rs-qr-preview" style={previewFrameStyle}>
-            <div
-              ref={previewRef}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image}
+              alt={`${poster.label} QR poster`}
+              width={POSTER_WIDTH}
+              height={POSTER_HEIGHT}
               className="rs-qr-poster"
-              style={{ width: "100%", maxWidth: 440 }}
+              style={{ width: "100%", maxWidth: 440, height: "auto", display: "block" }}
             />
-            {building && <p style={previewStatusStyle}>Generating poster…</p>}
-            {failed && (
-              <p style={{ ...previewStatusStyle, color: "var(--rs-accent-text)" }}>
-                Couldn&apos;t generate the QR poster. Reload the page to try
-                again.
-              </p>
-            )}
           </div>
 
           <div className="rs-qr-actions" style={actionsColStyle}>
@@ -322,23 +252,24 @@ function QrPoster({ kind }: { kind: PosterKind }) {
                 direction, same gap), and it is the single element the narrow
                 layout turns into a 3-up grid. */}
             <div className="rs-qr-btnrow" style={buttonRowStyle}>
-              <button
-                type="button"
-                onClick={downloadPng}
-                disabled={actionsDisabled}
+              {/* A real link, not a scripted click: mobile Safari only honours downloads from a direct tap. */}
+              <a
+                href={image}
+                download={`${fileStem}.png`}
+                onClick={() => setNotice({ tone: "info", text: "Poster image downloaded." })}
                 className="rs-qr-btn rs-qr-btn-primary"
-                style={primaryButtonStyle(actionsDisabled)}
+                style={{ ...primaryButtonStyle(false), textDecoration: "none" }}
               >
                 <span className="rs-qr-btn-icon" style={btnIconStyle}>
                   <IconImage />
                 </span>
                 <span className="rs-qr-btn-full">
-                  {busy === "png" ? "Preparing…" : "Download image"}
+                  Download image
                 </span>
                 <span className="rs-qr-btn-short" style={btnShortStyle}>
-                  {busy === "png" ? "Preparing…" : "Image"}
+                  Image
                 </span>
-              </button>
+              </a>
               <button
                 type="button"
                 onClick={downloadPdf}
@@ -378,21 +309,20 @@ function QrPoster({ kind }: { kind: PosterKind }) {
             <div className="rs-qr-url" style={urlBoxStyle}>
               <div style={urlLabelStyle}>QR target</div>
               <div className="rs-qr-url-row" style={urlRowStyle}>
-                <code style={urlValueStyle}>{url || `…${poster.path}`}</code>
+                <code style={urlValueStyle}>{url}</code>
                 <div style={urlActionsStyle}>
                   <button
                     type="button"
                     onClick={copyUrl}
-                    disabled={!url}
                     className="rs-qr-url-btn"
                     aria-label={copied ? "Link copied" : "Copy link"}
                     title={copied ? "Copied" : "Copy link"}
-                    style={urlButtonStyle(!url, copied)}
+                    style={urlButtonStyle(false, copied)}
                   >
                     {copied ? <IconCheck /> : <IconCopy />}
                   </button>
                   <a
-                    href={url || poster.path}
+                    href={url}
                     target="_blank"
                     rel="noreferrer"
                     className="rs-qr-url-btn"
@@ -483,13 +413,6 @@ const previewFrameStyle: CSSProperties = {
   background: "var(--rs-panel)",
   display: "grid",
   placeItems: "center",
-};
-
-const previewStatusStyle: CSSProperties = {
-  margin: "12px 0 0",
-  fontSize: 13,
-  color: "var(--rs-muted)",
-  textAlign: "center",
 };
 
 const actionsColStyle: CSSProperties = {
