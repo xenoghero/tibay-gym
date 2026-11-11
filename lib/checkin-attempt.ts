@@ -1,6 +1,6 @@
 import type { PaymentMethod } from "@/lib/finance/payment-methods";
 import { AttendanceApiError } from "./attendance-error";
-import { CHECKIN_PHONE_ERROR, isCheckinPhone } from "./checkin-phone";
+import { ACCOUNT_PHONE_ERROR, isAccountPhone } from "./checkin-phone";
 import type { QrLookupPerson, QrLookupResponse, QrRequest, QrResponse } from "./attendance-api";
 import type { ReceiptPreparation } from "./receipt-upload";
 
@@ -85,7 +85,7 @@ export class CheckinAttempt {
   async submitPhone(phone: string, intent: AttendanceIntent, registrationOnly = false) {
     if ((this.state.retryAt ?? 0) > this.deps.now()) return;
     if (this.state.busy || this.state.pending || this.state.status === "confirmed") return;
-    if (!isCheckinPhone(phone)) { this.update({ status: "blocked", error: CHECKIN_PHONE_ERROR }); return; }
+    if (!isAccountPhone(phone)) { this.update({ status: "blocked", error: ACCOUNT_PHONE_ERROR }); return; }
     this.update({ busy: true, error: null, phone, intent, stage: "phone", person: null });
     try {
       this.ensureOnline();

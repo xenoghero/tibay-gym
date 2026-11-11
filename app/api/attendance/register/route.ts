@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       const { requireVerification } = registrationSettings((await tx.get(db.doc("gymSettings/registration"))).data());
       const stamp = Timestamp.now();
       const { address, ...publicProfile } = profile;
-      tx.set(requireVerification ? ref : db.doc(`persons/${personId}`), { ...publicProfile,
+      tx.set(requireVerification ? ref : db.doc(`persons/${personId}`), { ...publicProfile, phoneLast4: profile.phone.slice(-4),
         ...(requireVerification ? { address } : { verifiedAt: stamp, verifiedBy: "system:auto-verification" }),
         registrationFingerprint: digest, type: "guest", status: null,
         membershipExpiry: null, rfidTagId: null, joinDate: null, visitCount: 0, lastVisitAt: null,

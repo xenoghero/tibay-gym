@@ -43,12 +43,13 @@ export async function approveUnverified(personId: string, adminUid: string): Pro
       tx.delete(log.ref);
     }
     tx.set(officialRef, {
-      phone: pending.phone, name: pending.name, type: "guest", status: null,
+      phone: pending.phone, phoneLast4: pending.phone.slice(-4), name: pending.name, type: "guest", status: null,
       membershipExpiry: null, rfidTagId: null, joinDate: null,
       visitCount: logs.size, lastVisitAt, createdAt: pending.createdAt, updatedAt: stamp,
       verifiedAt: stamp, verifiedBy: adminUid,
       rateCategory: pending.rateCategory ?? null, leadSource: pending.leadSource ?? null,
       leadSourceOther: pending.leadSourceOther ?? null, profileImagePath: pending.profileImagePath ?? null,
+      profileImagePosition: pending.profileImagePosition ?? null,
     });
     if (pending.address) tx.set(db.doc(`profileDetails/${personId}`), {
       personId, address: pending.address, updatedAt: stamp,

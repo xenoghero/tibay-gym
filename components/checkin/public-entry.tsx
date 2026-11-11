@@ -16,7 +16,7 @@ export function PublicEntry() {
           </svg>
           <span>Ready to train?</span>
         </h2>
-        <p>Members and guests, check in with your registered phone number.</p>
+        <p>Members and guests, check in with your registered phone number or its last 4 digits.</p>
         <button className={styles.primary} onClick={() => setChoice("checkin")}>Check In <span aria-hidden="true">→</span></button>
       </section>
       <section className={styles.newOption} aria-labelledby="first-time-title">

@@ -1,6 +1,6 @@
 import { customerPaymentOptions } from "@/lib/server/payment-methods";
 import { adminDb } from "@/lib/server/firebase-admin";
-import { attendanceIntent, attendancePhone, onlyFields } from "@/lib/server/attendance-request";
+import { attendanceIntent, onlyFields, resolveAccountPhone } from "@/lib/server/attendance-request";
 import { ApiError, handleApi, json, readBody } from "@/lib/server/rfid/http";
 import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit";
 import { effectiveMemberStatusAt } from "@/lib/member-status";
@@ -13,10 +13,11 @@ import { receiptsAvailable } from "@/lib/server/receipt-store";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   return handleApi(async () => {
-    publicRateLimiter.consume(publicCaller(request), "lookup");
+    const caller = publicCaller(request);
+    publicRateLimiter.consume(caller, "lookup");
     const body = await readBody(request, 4096);
     onlyFields(body, ["phone", "intent"]);
-    const phone = attendancePhone(body.phone);
+    const phone = await resolveAccountPhone(body.phone, caller);
     const intent = attendanceIntent(body.intent);
     const db = adminDb();
     let snapshot = await db.collection("persons").where("phone", "==", phone).limit(1).get();

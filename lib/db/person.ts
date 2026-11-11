@@ -41,6 +41,8 @@ export interface Person {
   leadSource?: LeadSource | null;
   leadSourceOther?: string | null;
   profileImagePath?: string | null;
+  /** Member-chosen focal point (percent, CSS object-position) for the card portrait. */
+  profileImagePosition?: { x: number; y: number } | null;
   id: string;
   /** Unique key, used for lookup at every scan. */
   phone: string;

@@ -239,11 +239,11 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
               <>
                 <label htmlFor="phone" style={labelStyle}>Phone number</label>
                 <input id="phone" maxLength={11} type="tel" inputMode="numeric" autoComplete="tel" autoFocus
-                  required pattern="[0-9]{11}" title="Enter exactly 11 digits."
+                  required pattern="([0-9]{4}|[0-9]{11})" title="Enter your 11-digit number or its last 4 digits."
                   value={phone} disabled={locked} onChange={e => setPhone(e.target.value.replace(/[^0-9]/g, "").slice(0, 11))}
                   aria-invalid={state.error ? true : undefined} aria-describedby="phone-hint attempt-status attempt-error"
                   style={inputStyle(!!state.error)} />
-                <p id="phone-hint" style={{ ...leadStyle, margin: "8px 0 0" }}>Enter exactly 11 digits.</p>
+                <p id="phone-hint" style={{ ...leadStyle, margin: "8px 0 0" }}>Enter your 11-digit number, or just the last 4 digits.</p>
               </>
             ) : (
               <>

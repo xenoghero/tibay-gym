@@ -19,6 +19,8 @@ const attendanceMessages: Record<string, string> = {
   "guest-conflict": "An account already exists for this phone number. Choose Check In to record your visit.",
   "retry-expired": "Attendance is still unconfirmed and the recovery window has ended. Do not start another scan; it could reverse an earlier attendance action.",
   "attendance-not-initialized": "Attendance is temporarily unavailable. Please try again later.",
+  "phone-not-found": "No account ends in those 4 digits. Enter your full 11-digit number.",
+  "phone-ambiguous": "More than one account ends in those digits. Enter your full 11-digit number.",
   "rate-limited": "Too many attempts. Wait a moment before retrying.",
   "attendance-cooldown": "Attendance was just updated. Please wait before changing it again.",
   "unauthorized": "Refresh this page and sign in again to continue.",

@@ -43,6 +43,11 @@ it.each(["", "0912345678", "091234567890", "0912345678a", "+9123456789", "09123 
     expect(lookup).not.toHaveBeenCalled(); expect(scan).not.toHaveBeenCalled();
   },
 );
+it("looks up an existing account by its last 4 digits", async () => {
+  await attempt.submitPhone("6789", "attendance");
+  expect(lookup).toHaveBeenCalledWith({ phone: "6789", intent: "attendance" });
+  expect(scan).toHaveBeenCalledWith(expect.objectContaining({ personId: person.id }));
+});
 it("starts idle without lookup, scan, or Firebase work", () => {
   expect(attempt.getSnapshot().status).toBe("idle");
   expect(lookup).not.toHaveBeenCalled(); expect(scan).not.toHaveBeenCalled();

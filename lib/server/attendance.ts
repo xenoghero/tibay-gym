@@ -168,7 +168,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
         receiptId: input.source === "qr" ? input.receiptId : undefined, receiptToken: input.source === "qr" ? input.receiptToken : undefined }) : () => {};
     const stamp = Timestamp.fromMillis(now);
     if (guest) {
-      tx.set(personRef!, { ...person, phone: guest.phone, name: guest.name, joinDate: null,
+      tx.set(personRef!, { ...person, phone: guest.phone, phoneLast4: guest.phone.slice(-4), name: guest.name, joinDate: null,
         rateCategory: guest.rateCategory ?? null, leadSource: guest.leadSource ?? null, leadSourceOther: guest.leadSourceOther ?? null,
         ...(unverified ? { address: guest.address } : { verifiedAt: stamp, verifiedBy: "system:auto-verification" }),
         visitCount: 0, lastVisitAt: null, createdAt: stamp, updatedAt: stamp });

@@ -14,6 +14,8 @@ const policies = {
     { scope: "guest-day", limit: 10, windowMs: 24 * 60 * MINUTE }],
   sweep: [{ scope: "sweep", limit: 10, windowMs: MINUTE }],
   customerLogin: [{ scope: "customer-login", limit: 5, windowMs: 15 * MINUTE }],
+  // 4-digit lookups are far easier to guess than 11 digits, so cap them tightly.
+  shortPhone: [{ scope: "short-phone", limit: 20, windowMs: 15 * MINUTE }],
   customer: [{ scope: "customer-action", limit: 30, windowMs: MINUTE }],
   image: [{ scope: "customer-image", limit: 5, windowMs: 15 * MINUTE }],
 } satisfies Record<string, Policy[]>;
