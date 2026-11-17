@@ -150,3 +150,17 @@ it("saves admin edits idempotently with revision checks, and retains deleted cod
   await decide(p.id); expect(voucher().status).toBe("archived"); expect(voucher().confirmedCount).toBe(1);
   expect([...store().data].filter(([path]) => path.startsWith("auditEvents/")).some(([, data]) => (data.relevantAfter as Partial<Voucher>)?.code === "FRESH10")).toBe(true);
 });
+it("discounts a Coaching package only when the voucher is valid for coaching", async () => {
+  const quoteFor = () => getPurchaseQuote("p1", undefined, "TRAIN10", undefined, "pkg-8");
+  await expect(quoteFor()).rejects.toMatchObject({ code: "voucher-scope" });
+  store().data.set("vouchers/voucher-1", { ...voucherFixture({ kinds: ["coaching_package"] }) });
+  const quote = await quoteFor();
+  expect(quote).toMatchObject({ kind: "coaching_package", baseAmountMinor: 150000, discountAmountMinor: 15000, amountMinor: 135000 });
+  const result = await submitPurchase("customer:p1", "p1", { packageId: "pkg-8", voucherCode: "TRAIN10", quoteToken: quote.quoteToken, method: "cash", operationId: "coaching-voucher-operation" });
+  expect(store().data.get(`charges/${result.chargeId}`)).toMatchObject({ kind: "coaching_package", amountMinor: 135000, discountAmountMinor: 15000 });
+  expect(store().data.get(`coachingPackages/${result.chargeId}`)).toMatchObject({ priceMinor: 150000, status: "pending" });
+  await decide(result.id);
+  expect(voucher()).toMatchObject({ heldCount: 0, confirmedCount: 1 });
+  // Gym-only vouchers keep refusing coaching.
+  await expect(getPurchaseQuote("p2", undefined, "TRAIN10")).rejects.toMatchObject({ code: "voucher-scope" });
+});

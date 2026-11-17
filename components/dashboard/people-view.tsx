@@ -14,11 +14,11 @@ import {
 } from "react";
 import {
   effectiveMemberStatus,
-  getLogsInRange,
   watchAllPersons,
   type Person,
 } from "@/lib/db";
-import { formatLongDate, formatShortDateTime, rangeForPreset } from "@/lib/dates";
+import { formatLongDate, formatShortDateTime } from "@/lib/dates";
+import { visitsThisMonth } from "@/lib/month-visits";
 import { statusBadgeStyle } from "@/lib/status-badge";
 import styles from "./people-filter-select.module.css";
 
@@ -246,27 +246,11 @@ export function PeopleView() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("lastVisit");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [monthVisits, setMonthVisits] = useState<Map<string, number>>(new Map());
 
   function sortBy(key: SortKey) {
     setSortDir(key === sortKey ? (sortDir === "asc" ? "desc" : "asc") : defaultDir(key));
     setSortKey(key);
   }
-
-  // shortcut: one read of this month's check-ins (capped at RANGE_QUERY_LIMIT), refreshed on reload/retry;
-  // move to a per-person monthly counter if a month ever exceeds that cap.
-  useEffect(() => {
-    let active = true;
-    const { start, end } = rangeForPreset("month");
-    getLogsInRange(start, end)
-      .then((logs) => {
-        const counts = new Map<string, number>();
-        for (const log of logs) counts.set(log.personId, (counts.get(log.personId) ?? 0) + 1);
-        if (active) setMonthVisits(counts);
-      })
-      .catch((err) => console.error("[PeopleView] monthly visits failed", err));
-    return () => { active = false; };
-  }, [retryKey]);
 
   useEffect(() => {
     const unsub = watchAllPersons(
@@ -325,7 +309,7 @@ export function PeopleView() {
         case "status": return p.type === "member" ? effectiveMemberStatus(p) ?? "" : "~"; // guests last A→Z
         case "joinDate": return p.joinDate?.toMillis() ?? 0;
         case "lastVisit": return p.lastVisitAt?.toMillis() ?? 0;
-        case "visits": return monthVisits.get(p.id) ?? 0;
+        case "visits": return visitsThisMonth(p.monthVisits);
       }
     };
     const sign = sortDir === "asc" ? 1 : -1;
@@ -335,7 +319,7 @@ export function PeopleView() {
     });
 
     return matched;
-  }, [people, search, typeFilter, statusFilter, sortKey, sortDir, monthVisits]);
+  }, [people, search, typeFilter, statusFilter, sortKey, sortDir]);
 
   const loading = !peopleLoaded;
   const noneAtAll = !loading && people.length === 0;
@@ -479,7 +463,7 @@ export function PeopleView() {
           rows.map((p) => {
             const isMember = p.type === "member";
             const lastVisit = p.lastVisitAt;
-            const visits = monthVisits.get(p.id) ?? 0;
+            const visits = visitsThisMonth(p.monthVisits);
             return (
               <div
                 key={p.id}

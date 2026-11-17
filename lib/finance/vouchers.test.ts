@@ -26,5 +26,7 @@ it("respects inclusive start, exclusive end and reserved per-customer capacity",
 it("validates complete admin configuration without accepting fractional caps or empty scopes", () => {
   const input = voucherFixture();
   expect(validateVoucher({ ...input }).value).toBe(1000);
+  expect(validateVoucher({ ...input, kinds: ["coaching_package"] }).kinds).toEqual(["coaching_package"]);
+  expect(() => validateVoucher({ ...input, kinds: ["coaching_session"] })).toThrow("voucher-invalid-settings");
   for (const extra of [{ kinds: [] }, { categories: [] }, { value: 10001 }, { totalLimit: 1.5 }, { endsAt: 1000, startsAt: 2000 }, { discountKind: "other" }]) expect(() => validateVoucher({ ...input, ...extra })).toThrow("voucher-invalid-settings");
 });

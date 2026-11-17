@@ -22,7 +22,8 @@
     "rfid:backup": "node scripts/rfid-backup.mjs",
     "rfid:rules-probe": "node scripts/rfid-rules-probe.mjs",
     "rfid:maintenance": "node scripts/rfid-maintenance.mjs",
-    "phone:backfill": "node scripts/phone-last4-backfill.mjs"
+    "phone:backfill": "node scripts/phone-last4-backfill.mjs",
+    "visits:backfill": "node scripts/month-visits-backfill.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

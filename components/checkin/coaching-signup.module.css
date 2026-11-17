@@ -1,0 +1,23 @@
+.form { display: grid; gap: 20px; min-width: 0; }
+.form fieldset { display: grid; gap: 16px; margin: 0; padding: 20px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); min-width: 0; }
+.form legend { padding: 0 6px; font: 600 20px/1.1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+.form label, .group > span { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
+.form small { color: var(--rs-muted); font-size: 12px; font-weight: 400; }
+.form :is(input:not([type=radio]):not([type=checkbox]), textarea) { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); color: var(--rs-fg); font-size: 16px; }
+.form [aria-invalid=true] input, .form input[aria-invalid=true] { border-color: var(--rs-danger, #b22f2f); }
+.group { display: grid; gap: 8px; min-width: 0; }
+.group:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 4px; border-radius: 6px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice { display: flex !important; grid-auto-flow: column; align-items: center; gap: 8px !important; min-height: 44px; padding: 8px 14px; border: 1px solid var(--rs-line); border-radius: 22px; background: var(--rs-bg); font-weight: 500 !important; cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--rs-accent-text); background: var(--rs-accent-soft); }
+.choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--rs-accent-text); }
+.fieldError { color: var(--rs-danger, #b22f2f); font-size: 12px; font-weight: 500; }
+.lead { margin: 0; color: var(--rs-muted); font-size: 13px; line-height: 1.6; }
+.packages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; padding: 0; list-style: none; }
+.packages button { display: grid; gap: 4px; width: 100%; min-height: 110px; padding: 16px; text-align: left; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-fg); }
+.packages button:hover { border-color: var(--rs-accent-text); }
+.packages strong { font: 700 30px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
+.packages span { font-size: 14px; font-weight: 500; }
+.packages small { color: var(--rs-muted); font-size: 12px; line-height: 1.5; }
+@media (max-width: 420px) { .packages { grid-template-columns: minmax(0, 1fr); } .form fieldset { padding: 16px; } }
+.subhead { margin: 0 0 10px; font: 600 18px/1.2 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }

@@ -1,0 +1,24 @@
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.facts dt { color: var(--rs-muted); font-size: 12px; margin-bottom: 6px; }
+.facts dd { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.lead { margin: 0 0 16px; color: var(--rs-muted); font-size: 13px; line-height: 1.6; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.options button { display: grid; gap: 4px; width: 100%; min-height: 96px; padding: 16px; text-align: left; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-fg); font: inherit; cursor: pointer; transition: border-color 140ms ease; }
+.options button:hover { border-color: var(--rs-accent-text); }
+.options button:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 2px; }
+.options strong { font: 700 28px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
+.options span { font-size: 14px; font-weight: 500; }
+.options small { color: var(--rs-muted); font-size: 12px; }
+.chosen { margin: 16px 0 0; font-size: 13px; line-height: 1.6; }
+@media (max-width: 480px) { .facts { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+@media (prefers-reduced-motion: reduce) { .options button { transition: none; } }
+.topUps { display: grid; gap: 12px; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper button { width: 48px; min-height: 48px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); color: var(--rs-fg); font-size: 20px; }
+.stepper input { width: 72px; min-height: 48px; padding: 8px; text-align: center; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); color: var(--rs-fg); font-size: 18px; font-variant-numeric: tabular-nums; }
+.stepper strong { margin-left: auto; font: 700 26px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.freeze { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--rs-line); }
+.freeze p, .freezeNote { margin: 0; font-size: 13px; line-height: 1.6; }
+.freezeNote { margin-top: 16px; color: var(--rs-muted); }
+.freeze button { justify-self: start; }

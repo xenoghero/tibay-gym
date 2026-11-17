@@ -16,6 +16,9 @@ import { DailyPaymentHistory } from "./daily-payment-history";
 import { PaymentDrawer, PaymentStatus, paymentDate, peso, styles } from "./payment-ui";
 import { PriceBreakdown } from "@/components/people/voucher-entry";
 import { SettingsConfirm } from "./settings-confirm";
+/** What a payment without membership coverage pays for. */
+const purchaseLabel = (charge?: Charge) => charge?.kind === "coaching_package" ? `Coaching · ${charge.coachingPackage?.sessions ?? "?"} sessions`
+  : charge?.kind === "session_topup" ? `${charge.quantity} session top-up${charge.quantity === 1 ? "" : "s"}` : "Daily session";
 interface Row { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; gcashReference?: string | null }
 interface Preview { payment: PaymentRequest; charge: Charge; customer: { id: string; name: string }; coverage: Coverage | null; previewToken: string; membershipChanged: boolean }
 const decisionErrors: Record<string, string> = {
@@ -115,7 +118,8 @@ export function PaymentReview() {
         await preview(selected.payment.id);
         throw new Error(decisionErrors[code] ?? `Decision not applied (${code ?? "unknown error"}). Refresh and try again.`);
       }
-      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? kind === "daily_session" ? "Daily payment collected." : "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
+      setSelected(null); setReviewed(false); setReason(""); setRefreshKey(value => value + 1); await list(); setMessage(decision === "approve" ? kind === "daily_session" ? "Daily payment collected." : selected.charge.kind === "coaching_package" ? "Payment confirmed. The coaching package is approved and starts at the client's first visit."
+        : selected.charge.kind === "session_topup" ? "Payment confirmed. The session top-ups were added." : "Payment confirmed and applicable membership coverage applied once." : "Payment rejected. Attendance and membership are preserved.");
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not confirm the decision. Refresh before retrying."); }
     finally { setBusy(false); }
   }
@@ -155,7 +159,7 @@ export function PaymentReview() {
       <div><div className={styles.kicker}>Payments & collections</div><h1 className={styles.title}>Payment review</h1></div>
     </header>
     <div className={styles.tabs} role="group" aria-label="Payment type">
-      {[["membership", "Renewal requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(value !== "daily_session"); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
+      {[["membership", "Purchase requests"], ["daily_session", "Daily payments"]].map(([value, label]) => <button aria-pressed={kind === value} key={value} disabled={busy} onClick={() => { if (kind !== value) { setKind(value); setSelected(null); setRows([]); setCursor(null); setMessage(""); setLoading(value !== "daily_session"); setSearch(""); setStatus("all"); setMethod("all"); } }}>{label}</button>)}
     </div>
     <div className={styles.toolbar}>
       <label className={styles.search}>Search this page<input type="search" placeholder="Name, customer ID or reference" value={search} onChange={e => setSearch(e.target.value)} /></label>
@@ -178,14 +182,14 @@ export function PaymentReview() {
     <div ref={tabContent} className={styles.scroll}>
       {kind === "daily_session" && <DailyPayments key={refreshKey} disabled={busy} search={search} status={status} method={method} onReviewRequest={id => void preview(id).catch(e => setMessage(e.message))} />}
       {kind !== "daily_session" && <section className={styles.section} aria-label="Payment requests" aria-busy={loading}>
-        <div className={styles.sectionHead}><h2>Renewal requests</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
+        <div className={styles.sectionHead}><h2>Purchase requests</h2><span>{loading ? "Loading…" : `${visibleRows.length} on this page`}</span></div>
         {loading ? <LoadingSkeleton label="Loading payment requests…" count={5} /> : <>
           {!visibleRows.length ? <div className={styles.empty}><h3>{rows.length ? "No matching requests" : "No requests on this page."}</h3><p>{rows.length ? "Try another search or change the filters." : "Refresh to check for new payment requests."}</p></div> :
           <table className={styles.table}><thead><tr>{["Customer", "Payment", "Coverage", "Submitted", "Status", "Action"].map(s => <th scope="col" key={s}>{s}</th>)}</tr></thead>
             <tbody>{visibleRows.map(row => <tr key={row.payment.id}>
               <td><strong>{row.customer.name}</strong><small className={styles.method}>{row.charge?.categorySnapshot ?? "—"}</small></td>
               <td><strong className={styles.amount}>{peso(row.payment.amountMinor)}</strong><small>{paymentLabel(row.payment)}</small></td>
-              <td><span className={styles.mobileLabel}>Coverage</span>{(row.payment.appliedCoverage ?? row.charge?.requestedCoverage)?.expiryDate ? `Until ${paymentDate((row.payment.appliedCoverage ?? row.charge?.requestedCoverage)!.expiryDate)}` : "Daily session"}</td>
+              <td><span className={styles.mobileLabel}>Coverage</span>{(row.payment.appliedCoverage ?? row.charge?.requestedCoverage)?.expiryDate ? `Until ${paymentDate((row.payment.appliedCoverage ?? row.charge?.requestedCoverage)!.expiryDate)}` : purchaseLabel(row.charge)}</td>
               <td><span className={styles.mobileLabel}>Submitted</span>{paymentDate(row.payment.submittedAt)}<small>{new Date(row.payment.submittedAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })}</small></td>
               <td><PaymentStatus status={row.payment.status} /></td>
               <td><button disabled={busy} className={row.payment.status === "pending" ? styles.primary : undefined} aria-label={`Review payment for ${row.customer.name}`} onClick={() => void preview(row.payment.id).catch(e => setMessage(e.message))}>Review</button></td>
@@ -220,7 +224,7 @@ export function PaymentReview() {
         {message && <p className={styles.message} role="status">{message}</p>}
         <div className={styles.actions}><button className={styles.primary} disabled={busy || !reviewed || (selected.membershipChanged && !ack) || (!!selected.payment.receiptId && !reference.trim())} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve — payment received"}</button><button className={styles.danger} disabled={busy || !reviewed} onClick={() => void decide("reject")}>Reject request</button></div>
       </> : <p>Final outcome: {selected.payment.status}. {selected.payment.rejectionReason}</p>}
-      {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>Close abandoned membership request</button>}
+      {!selected.charge.abandonedAt && selected.payment.status !== "approved" && selected.charge.kind !== "daily_session" && <button className={styles.danger} disabled={busy} onClick={() => { setCloseReason(""); setClosing(true); }}>{selected.charge.kind === "coaching_package" ? "Close abandoned coaching request" : "Close abandoned membership request"}</button>}
       {closing && <SettingsConfirm title="Close this membership request?" label="Close request" danger busy={busy} confirmDisabled={!closeReason.trim()} onCancel={() => setClosing(false)} onConfirm={() => void closePurchase()}><p>This permanently ends this purchase and releases its voucher reservation. No membership is activated. Payment corrections will no longer be available; a new purchase will use current pricing.</p><label>Reason (required)<textarea maxLength={500} value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label>{message && <p role="status">{message}</p>}</SettingsConfirm>}
       </>}
     </PaymentDrawer>}

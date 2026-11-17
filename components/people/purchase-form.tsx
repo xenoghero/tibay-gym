@@ -20,7 +20,7 @@ import { VoucherEntry, PriceBreakdown, voucherError } from "./voucher-entry";
 type Quote = PurchaseQuote & { paymentRevision?: number; paymentAccounts?: PaymentAccount[]; gcashAvailable?: boolean };
 const durations = [1, 2, 3, 4, 5, 12];
 const durationLabel = (months: number) => months === 12 ? "1 year" : `${months} ${months === 1 ? "month" : "months"}`;
-export function PurchaseForm({ admin = false, portal = false, heading, loadingFallback, personId, previousRequestId, onSubmitted }: { admin?: boolean; portal?: boolean; heading?: string; loadingFallback?: ReactNode; personId?: string; previousRequestId?: string; onSubmitted?: () => void }) {
+export function PurchaseForm({ admin = false, portal = false, heading, loadingFallback, personId, previousRequestId, packageId, topUpSessions, onSubmitted }: { admin?: boolean; portal?: boolean; heading?: string; loadingFallback?: ReactNode; personId?: string; previousRequestId?: string; packageId?: string; topUpSessions?: number; onSubmitted?: () => void }) {
   const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null), [method, setMethod] = useState<PaymentMethod>("cash");
   const [file, setFile] = useState<File | null>(null), [fileKey, setFileKey] = useState("");
@@ -42,11 +42,11 @@ export function PurchaseForm({ admin = false, portal = false, heading, loadingFa
     }
   }, [message, portal]);
   const attempt = useRef<{ key: string; id: string; proof?: { receiptId: string; receiptToken: string } } | null>(null);
-  const endpoint = admin ? `/api/finance/purchases?personId=${encodeURIComponent(personId ?? "")}` : `/api/customer/purchase${previousRequestId ? `?previousRequestId=${encodeURIComponent(previousRequestId)}` : ""}`;
+  const endpoint = admin ? `/api/finance/purchases?personId=${encodeURIComponent(personId ?? "")}` : `/api/customer/purchase${previousRequestId ? `?previousRequestId=${encodeURIComponent(previousRequestId)}` : packageId ? `?packageId=${encodeURIComponent(packageId)}` : topUpSessions ? `?topUpSessions=${topUpSessions}` : ""}`;
   function quoteEndpoint(code?: string, months = quote?.coverage?.months ?? 1) {
     const params = new URLSearchParams();
     if (code) params.set("voucherCode", code);
-    if (portal && !previousRequestId) params.set("months", String(months));
+    if (portal && !previousRequestId && !packageId && !topUpSessions) params.set("months", String(months));
     return `${endpoint}${params.size ? `${endpoint.includes("?") ? "&" : "?"}${params}` : ""}`;
   }
   async function changeDuration(months: number) {
@@ -108,21 +108,21 @@ export function PurchaseForm({ admin = false, portal = false, heading, loadingFa
     setBusy(true); setMessage("");
     try {
       if (method !== "cash" && quote.paymentAccounts && !quote.paymentAccounts.some(account => account.id === method)) throw new Error("This payment account is no longer available. Select another method.");
-      const body = { method, ...(quote.coverage ? { months: quote.coverage.months } : {}), ...(method !== "cash" ? { paymentRevision: quote.paymentRevision } : {}), quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
+      const body = { method, ...(quote.coverage ? { months: quote.coverage.months } : {}), ...(packageId && !previousRequestId ? { packageId } : {}), ...(topUpSessions && !previousRequestId ? { topUpSessions } : {}), ...(method !== "cash" ? { paymentRevision: quote.paymentRevision } : {}), quoteToken: quote.quoteToken, ...(!previousRequestId && quote.voucherSnapshot ? { voucherCode: quote.voucherSnapshot.code } : {}), ...(personId && admin ? { personId } : {}), ...(previousRequestId ? { previousRequestId } : {}) };
       const key = JSON.stringify([body, fileKey]);
       if (attempt.current?.key !== key) attempt.current = { key, id: crypto.randomUUID() };
       const current = attempt.current;
       if (method !== "cash" && !current.proof) {
         if (!file || file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Choose a JPG, PNG or WebP receipt up to 5 MB.");
         const uploaded = await fetch("/api/receipts/upload", { method: "POST", headers: { "Content-Type": file.type, "x-payment-revision": String(quote.paymentRevision ?? 0), "x-payment-method": method, "x-operation-id": current.id,
-          "x-expected-amount": String(quote.amountMinor), "x-charge-kind": quote.kind, ...(quote.coverage ? { "x-membership-months": String(quote.coverage.months) } : {}), ...(!previousRequestId && quote.voucherSnapshot ? { "x-voucher-code": quote.voucherSnapshot.code } : {}), ...(previousRequestId ? { "x-previous-request-id": previousRequestId } : {}) }, body: file });
+          "x-expected-amount": String(quote.amountMinor), "x-charge-kind": quote.kind, ...(packageId && !previousRequestId ? { "x-coaching-package": packageId } : {}), ...(topUpSessions && !previousRequestId ? { "x-topup-sessions": String(topUpSessions) } : {}), ...(quote.coverage ? { "x-membership-months": String(quote.coverage.months) } : {}), ...(!previousRequestId && quote.voucherSnapshot ? { "x-voucher-code": quote.voucherSnapshot.code } : {}), ...(previousRequestId ? { "x-previous-request-id": previousRequestId } : {}) }, body: file });
         if (!uploaded.ok) throw new Error("Receipt upload did not complete. Retry the same image or choose cash. No membership was activated.");
         current.proof = await uploaded.json();
       }
       const response = await fetch(admin ? "/api/finance/purchases" : "/api/customer/purchase", { method: "POST", headers: { "Content-Type": "application/json", ...await headers() },
         body: JSON.stringify({ ...body, operationId: current.id, ...(current.proof ?? {}) }) });
       if (!response.ok) { const failure = await response.json().catch(() => ({})); throw new Error(failure.error?.startsWith("voucher-") ? voucherError(failure.error) : "Could not confirm this request. Check payment status, refresh the quote, and retry. An existing pending request must be reviewed first."); }
-      attempt.current = null; setQuote(null); setMessage("Payment request submitted for admin review. Membership is unchanged until approval."); onSubmitted?.();
+      attempt.current = null; setQuote(null); setMessage(quote.kind === "coaching_package" || quote.kind === "session_topup" ? "Payment request submitted for admin review. Your coaching sessions are added after approval." : "Payment request submitted for admin review. Membership is unchanged until approval."); onSubmitted?.();
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not submit the request. Retry to recover it safely."); }
     finally { setBusy(false); }
   }
@@ -141,7 +141,7 @@ export function PurchaseForm({ admin = false, portal = false, heading, loadingFa
         <p className={styles.durationHelp} role="status">{changingDuration ? "Updating price and dates…" : "Tap the duration to choose from all options."}</p>
       </fieldset>}
       <h3 className={styles.stepHeading}><span className={styles.stepNumber} aria-hidden="true">{previousRequestId || !quote.coverage ? "1." : "2."}</span> Payment details</h3>
-      <div className={styles.quote} aria-live="polite" aria-busy={refreshing}><div><span>Amount</span><strong>{portalMoney(quote.amountMinor)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind === "daily_session" ? "Daily session" : `${quote.coverage?.months ?? 1}-month membership`}</span>
+      <div className={styles.quote} aria-live="polite" aria-busy={refreshing}><div><span>Amount</span><strong>{portalMoney(quote.amountMinor)}</strong></div><span className={styles.category}>{quote.categorySnapshot.replace(/^./, char => char.toUpperCase())} · {quote.kind === "daily_session" ? "Daily session" : quote.coachingPackage ? `Coaching · ${quote.coachingPackage.sessions} sessions, ${quote.coachingPackage.validityDays} days` : quote.kind === "session_topup" ? `Session top-ups · ${quote.quantity ?? topUpSessions} × ${portalMoney(quote.unitRateMinor ?? 0)}` : `${quote.coverage?.months ?? 1}-month membership`}</span>
       {quote.coverage && <dl className={styles.coverage}><div><dt>Estimated start</dt><dd>{coverageDate(quote.coverage.startDate)}</dd></div><span aria-hidden="true">→</span><div><dt>Estimated expiry</dt><dd>{coverageDate(quote.coverage.expiryDate)}</dd></div></dl>}</div>
       {quote.coverage && <p className={styles.hint}>Final dates are set at approval. Active memberships extend from their current expiry.</p>}
       {!previousRequestId && <div className={styles.voucher}><VoucherEntry quote={quote} disabled={busy || refreshing} onApply={applyVoucher} /></div>}
@@ -153,7 +153,7 @@ export function PurchaseForm({ admin = false, portal = false, heading, loadingFa
       {method !== "cash" && <div className={styles.receipt}><label htmlFor="customer-payment-receipt">{method === "gcash" ? "GCash receipt" : "Payment receipt"}</label><input id="customer-payment-receipt" ref={receiptInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy || refreshing} required onChange={e => { setFile(e.target.files?.[0] ?? null); setFileKey(crypto.randomUUID()); }} /><p className={styles.hint}>Upload a JPG, PNG or WebP up to 5 MB. Only submit proof for money already sent to the gym’s selected payment account.</p><p className={styles.hint}>{RECEIPT_RETENTION_NOTICE}</p></div>}
       <div className={styles.submitDock}>
         <button className={styles.submit} disabled={busy || refreshing} type="submit"><span>{busy ? "Submitting request…" : previousRequestId ? "Submit corrected payment" : "Submit payment request"}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></button>
-        <p className={styles.approvalNote}>Reviewed by the gym before membership activation.</p>
+        <p className={styles.approvalNote}>{quote.kind === "coaching_package" || quote.kind === "session_topup" ? "Reviewed by the gym before your coaching sessions are added." : "Reviewed by the gym before membership activation."}</p>
       </div>
     </form>}
     {message && <p ref={messageTarget} tabIndex={-1} className={styles.message} role="status">{message}</p>}

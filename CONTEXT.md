@@ -15,3 +15,49 @@ A gym visit purchased at the applicable per-session rate as an alternative to mo
 
 **Monthly membership**:
 Gym access covered by a monthly purchase, without an additional daily session fee for covered visits.
+
+### Coaching
+
+**Coaching package**:
+An admin-defined bundle of coaching sessions with one price for every rate category and a coaching validity in days, which also includes one month of Monthly membership. Both run from the package start; unused sessions expire with the coaching validity.
+_Avoid_: Plan, coaching plan
+
+**Package start**:
+The moment a paid coaching package's coaching validity and membership month begin: the client's first check-in or first coaching session, or automatically 15 days after payment approval. The membership month is added after any membership already paid for.
+_Avoid_: Activation, start date
+
+**Coaching session**:
+One coach-accompanied workout, consumed from a coaching package or session top-up when the coach marks it done.
+_Avoid_: Session (alone), class
+
+**No-show**:
+A coaching session the client missed, noted by the coach without consuming a session.
+_Avoid_: Missed session, forfeit
+
+**Session top-up**:
+Coaching sessions bought individually, in any quantity, at a single per-session price; they pay for coaching only, never gym access, and share an active package's coaching validity or else last 30 days.
+_Avoid_: Add-on, reload
+
+**Freeze**:
+An admin-approved pause of a started package's coaching sessions, at most once per package and 14 days, counted from the day the admin approves it, that pushes the coaching validity back by the days frozen; the membership month keeps running, and the client can end it early without approval.
+_Avoid_: Hold, suspension
+
+**Session adjustment**:
+An admin's manual change to a client's remaining package or top-up sessions, always recorded with a reason.
+_Avoid_: Refund, correction
+
+**Coach**:
+A staff member with their own login who runs coaching sessions for the clients the admin assigns to them.
+_Avoid_: Trainer, instructor
+
+**Client**:
+A person with coaching sessions assigned to a coach.
+_Avoid_: Trainee, student
+
+**Preferred schedule**:
+The weekdays and single time slot a client would like to train in; a preference, not a booking.
+_Avoid_: Booking, appointment
+
+**Coaching sign-up link**:
+The one fixed public page where new people register for coaching and pay for a package or top-up.
+_Avoid_: Promo link, referral link

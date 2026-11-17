@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0) throw new ApiError(400, "invalid-amount");
     let personId: string, category: unknown, registration = false;
     const rawKind = request.headers.get("x-charge-kind") ?? "daily_session";
-    if (rawKind !== "daily_session" && rawKind !== "renewal" && rawKind !== "new_membership") throw new ApiError(400, "invalid-charge-kind");
+    if (rawKind !== "daily_session" && rawKind !== "renewal" && rawKind !== "new_membership" && rawKind !== "coaching_package" && rawKind !== "session_topup") throw new ApiError(400, "invalid-charge-kind");
     const previousRequestId = request.headers.get("x-previous-request-id") ?? undefined;
     if (previousRequestId) documentId(previousRequestId);
     const header = request.headers.get("x-registration");
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       const customer = await requireCustomer(request); personId = customer.session.personId; category = customer.person.rateCategory;
     }
     return json(await uploadDailyReceipt({ paymentMethod, paymentRevision: Number(request.headers.get("x-payment-revision")), personId, category, operationId: operation, expectedAmountMinor, registration,
-      kind: rawKind, previousRequestId, voucherCode: request.headers.get("x-voucher-code") ?? undefined,
+      kind: rawKind, previousRequestId, packageId: request.headers.get("x-coaching-package") ?? undefined, topUpSessions: request.headers.has("x-topup-sessions") ? Number(request.headers.get("x-topup-sessions")) : undefined, voucherCode: request.headers.get("x-voucher-code") ?? undefined,
       months: request.headers.has("x-membership-months") ? Number(request.headers.get("x-membership-months")) : undefined, bytes: await readPrivateImage(request) }));
   });
 }

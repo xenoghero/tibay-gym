@@ -1,0 +1,4 @@
+.kicker { font: 11px var(--font-geist-mono), monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--rs-muted); }
+.title { font: 600 46px/1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; margin: 8px 0 10px; }
+.subhead { margin: 28px 0 8px; font-size: 16px; font-weight: 600; }
+@media (max-width: 699px) { .title { font-size: 34px; } }

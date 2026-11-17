@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { effectiveMemberStatusAt } from "@/lib/member-status";
+import type { MonthVisits } from "@/lib/month-visits";
 import {
   type ProfileDetailsInput,
 } from "@/lib/db/profile-details";
@@ -61,6 +62,8 @@ export interface Person {
   joinDate: Timestamp | null;
   /** Denormalized running count, incremented on every visit. */
   visitCount: number;
+  /** Server-kept check-ins this gym month; read it through `visitsThisMonth`. Missing until the next check-in. */
+  monthVisits?: MonthVisits;
   /**
    * Denormalized timestamp of this person's most recent check-in, set
    * alongside `visitCount` by `recordCheckIn`. `null` until their first visit.
@@ -144,32 +147,73 @@ export async function findPersonByRfidTag(
 }
 
 /**
- * One-shot read of the whole `persons` collection. The People tab (TASKLIST
- * Phase 8) also rides the live `watchAllPersons` listener for the roster; this
- * exists for callers that just need a snapshot without a subscription.
+ * The current roster, once. Served from the shared `watchAllPersons` listener,
+ * so it costs no reads while a dashboard tab already holds the roster.
  */
-export async function listPersons(): Promise<Person[]> {
-  const snap = await getDocs(personsCollection());
-  return snap.docs.map((d) => d.data());
+export function listPersons(): Promise<Person[]> {
+  return new Promise((resolve, reject) => {
+    let done = false, subscribed = false;
+    const finish = () => { done = true; if (subscribed) stop(); };
+    const stop = watchAllPersons((people) => { resolve(people); finish(); }, (err) => { reject(err); finish(); });
+    subscribed = true;
+    // A cached roster arrives synchronously, before `stop` existed.
+    if (done) stop();
+  });
 }
+
+/** How long the shared roster listener outlives its last subscriber, so tab switches reuse it. */
+export const ROSTER_LINGER_MS = 5 * 60_000;
+
+type RosterSubscriber = { onNext: (people: Person[]) => void; onError?: (err: Error) => void };
+type Roster = { stop: Unsubscribe; people: Person[] | null; subscribers: Set<RosterSubscriber>; idle?: ReturnType<typeof setTimeout> };
+let roster: Roster | null = null;
 
 /**
  * Live listener over the whole `persons` collection, newest snapshot wins.
  * At a single gym this collection is small (hundreds of docs), so the Overview
  * tab keeps one listener on all of it and derives both the member active/expired
  * standing counts and the name/phone/type/status lookup its activity feed needs
- * client-side, rather than running a query per feed row. Returns the Firestore
- * `Unsubscribe`.
+ * client-side, rather than running a query per feed row.
+ *
+ * Every dashboard tab shares one Firestore listener. It stays open for
+ * `ROSTER_LINGER_MS` after the last unsubscribe, because reopening it reads the
+ * whole collection again. A listener error closes it for everyone; the next
+ * subscribe (a retry) opens a fresh one.
  */
 export function watchAllPersons(
   onNext: (people: Person[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  return onSnapshot(
-    personsCollection(),
-    (snap) => onNext(snap.docs.map((d) => d.data())),
-    (err) => onError?.(err),
-  );
+  if (!roster) {
+    const current: Roster = { stop: () => {}, people: null, subscribers: new Set() };
+    roster = current;
+    current.stop = onSnapshot(
+      personsCollection(),
+      (snap) => {
+        current.people = snap.docs.map((d) => d.data());
+        for (const subscriber of [...current.subscribers]) subscriber.onNext(current.people);
+      },
+      (err) => {
+        if (roster === current) roster = null;
+        clearTimeout(current.idle);
+        for (const subscriber of [...current.subscribers]) subscriber.onError?.(err);
+        current.subscribers.clear();
+      },
+    );
+  }
+  const current = roster;
+  clearTimeout(current.idle);
+  const subscriber: RosterSubscriber = { onNext, onError };
+  current.subscribers.add(subscriber);
+  if (current.people) onNext(current.people);
+  return () => {
+    if (!current.subscribers.delete(subscriber) || current.subscribers.size > 0) return;
+    current.idle = setTimeout(() => {
+      if (current.subscribers.size > 0) return;
+      current.stop();
+      if (roster === current) roster = null;
+    }, ROSTER_LINGER_MS);
+  };
 }
 
 /**

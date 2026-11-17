@@ -17,7 +17,9 @@ export interface SmsContact {
 }
 export type SmsStatus = "queued" | "sending" | "uncertain" | "accepted" | "sent" | "delivered" | "failed" | "cancelled";
 export interface SmsMessage {
-  id: string; personId: string; campaignId: string | null; purpose: "test" | "expiry" | "inactivity" | "blast";
+  id: string; personId: string; campaignId: string | null; purpose: "test" | "expiry" | "inactivity" | "blast" | "coaching_expiry";
+  /** coaching_expiry only: the package or top-up holding it is about. */
+  coachingPackageId?: string | null;
   destination: string; text: string; status: SmsStatus; scheduledAt: number; createdAt: number;
   attempts: number; leaseUntil: number; providerMessageId: string; providerState: string | null;
   errorCode: string | null; expirySnapshot: string | null; reminderOffset: number | null;

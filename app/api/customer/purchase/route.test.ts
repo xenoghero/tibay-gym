@@ -16,11 +16,18 @@ it("binds submitted purchases to the server session, ignoring a forged target/ac
 it("passes the selected duration to the server quote", async () => {
   mocks.quote.mockResolvedValue({ amountMinor: 300000 });
   expect((await GET(new Request("https://test/api?months=3"))).status).toBe(200);
-  expect(mocks.quote).toHaveBeenCalledWith("self", undefined, undefined, 3);
+  expect(mocks.quote).toHaveBeenCalledWith("self", undefined, undefined, 3, undefined, undefined);
 });
-it("requires a verified profile and an authenticated customer session", async () => {
+it("passes the chosen coaching package to the server quote", async () => {
+  mocks.quote.mockResolvedValue({ amountMinor: 150000 });
+  expect((await GET(new Request("https://test/api?packageId=pkg-8"))).status).toBe(200);
+  expect(mocks.quote).toHaveBeenCalledWith("self", undefined, undefined, undefined, "pkg-8", undefined);
+});
+it("leaves unverified profiles to the purchase flow (coaching only) and requires a customer session", async () => {
   mocks.customer.mockResolvedValueOnce({ session: { personId: "self" }, official: false });
-  expect((await POST(request({}))).status).toBe(409); expect(mocks.submit).not.toHaveBeenCalled();
+  mocks.submit.mockRejectedValueOnce(new ApiError(409, "verified-profile-required"));
+  expect((await POST(request({}))).status).toBe(409); expect(mocks.submit).toHaveBeenCalledWith("customer:self", "self", {});
+  mocks.submit.mockClear();
   mocks.customer.mockRejectedValue(new ApiError(401, "customer-session-required"));
   expect((await GET(new Request("https://test/api"))).status).toBe(401); expect(mocks.quote).not.toHaveBeenCalled();
 });

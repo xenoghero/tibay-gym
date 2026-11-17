@@ -17,7 +17,7 @@ type Report = FinanceReport & { revision: string; nextCursor: string | null; gen
 const compactReports = new WeakMap<object, { date: string; report: Report; fetchedAt: number }>();
 const refreshInterval = 60_000;
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(value / 100);
-const labels = { daily_session: "Daily sessions", renewal: "Renewals", new_membership: "New memberships" };
+const labels = { daily_session: "Daily sessions", renewal: "Renewals", new_membership: "New memberships", coaching_package: "Coaching packages", session_topup: "Session top-ups" };
 const messages: Record<string, string> = {
   "report-record-limit": "This report has too many source records. Choose a shorter period. If the outstanding queue alone exceeds the limit, contact the system administrator.",
   "financial-data-conflict": "Some financial records need reconciliation. Contact the system administrator; totals have been withheld.",
@@ -165,7 +165,7 @@ export function FinanceStatistics({ compact = false }: { compact?: boolean }) {
         <p>Each record is one charge; its latest linked request determines its status. “No submission” means no payment request is linked. Categories and prices reflect the original purchase.</p>
       </details>
       <aside className="rs-collection-outstanding" aria-label="Outstanding requests across all dates"><div><strong>Open requests · All dates</strong><p>Separate from the selected reporting period.</p></div>
-        <dl><div><dt>Renewals</dt><dd>{money(report.outstanding.renewalMinor)}</dd></div><div><dt>New memberships</dt><dd>{money(report.outstanding.newMembershipMinor)}</dd></div><div><dt>Daily payments</dt><dd>{money(report.outstanding.dailyMinor)}</dd></div></dl>
+        <dl><div><dt>Renewals</dt><dd>{money(report.outstanding.renewalMinor)}</dd></div><div><dt>New memberships</dt><dd>{money(report.outstanding.newMembershipMinor)}</dd></div><div><dt>Coaching packages</dt><dd>{money(report.outstanding.coachingPackageMinor ?? 0)}</dd></div><div><dt>Session top-ups</dt><dd>{money(report.outstanding.sessionTopUpMinor ?? 0)}</dd></div><div><dt>Daily payments</dt><dd>{money(report.outstanding.dailyMinor)}</dd></div></dl>
       </aside>
       {!report.financialCutoverAt && <p>Financial cutover has not been set in Settings. Historical attendance is not backfilled as payments.</p>}
       <div className="rs-report-panel rs-collection-records"><div className="rs-records-heading"><h3>Charge and purchase records</h3><small>{report.ledger.length} loaded</small></div>

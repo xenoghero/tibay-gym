@@ -35,7 +35,8 @@ beforeEach(() => {
   ]);
   mocks.query.mockImplementation(() => ({ limit: () => ({ get: async () => ({ empty: !mocks.found,
     docs: mocks.found ? [{ id: "p1", data: () => mocks.person }] : [] }) }) }));
-  mocks.db.mockImplementation(() => ({ collection: () => ({ where: mocks.query }),
+  const noPackages = { where: () => noPackages, get: async () => ({ empty: true, docs: [] }) };
+  mocks.db.mockImplementation(() => ({ collection: (name: string) => name === "coachingPackages" ? noPackages : ({ where: mocks.query }),
     runTransaction: async (work: (tx: { get: (ref: { get: () => unknown }) => unknown }) => unknown) => work({ get: ref => ref.get() }),
     doc: (path: string) => ({ get: async () => ({ data: () => mocks.docs.get(path) }) }) }));
   mocks.verify.mockImplementation(async token => {

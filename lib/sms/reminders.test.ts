@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { DEFAULT_SMS_SETTINGS } from "./contracts";
-import { dueReminders, reminderStillCurrent } from "./reminders";
+import { coachingReminder, dueReminders, reminderStillCurrent } from "./reminders";
 const now = Date.parse("2026-10-28T09:00:00+08:00"), DAY = 86_400_000;
 const member = (days: number) => ({ type: "member", membershipExpiry: now + days * DAY, lastVisitAt: now });
 it.each([7, 5, 1])("queues exactly the %s-day expiry point", days => {
@@ -30,4 +30,22 @@ it("cancels obsolete expiry and inactivity snapshots but waits for a later confi
   expect(reminderStillCurrent(message, member(8), DEFAULT_SMS_SETTINGS, now)).toBe("obsolete");
   expect(reminderStillCurrent(message, person, DEFAULT_SMS_SETTINGS, now + DAY)).toBe("obsolete");
   expect(reminderStillCurrent({ ...message, purpose: "inactivity", lastVisitSnapshot: now - 11 * DAY }, person, DEFAULT_SMS_SETTINGS, now)).toBe("obsolete");
+});
+
+// Coaching validity whose last day is `days` from today (expiry is Manila midnight after the last day).
+const coaching = (days: number, sessionsLeft = 2) => ({ id: "pkg-1", expiresAt: Date.parse("2026-10-29T00:00:00+08:00") + days * DAY, sessionsLeft });
+it("queues a coaching reminder 3 days before the last day only while sessions are left", () => {
+  const candidate = coachingReminder("p1", coaching(3), DEFAULT_SMS_SETTINGS, now)!;
+  expect(candidate).toMatchObject({ purpose: "coaching_expiry", reminderOffset: 3, coachingPackageId: "pkg-1" });
+  expect(candidate.text).toContain("2026-10-31"); expect(candidate.text).toContain("still have coaching sessions left");
+  expect(coachingReminder("p1", coaching(3, 0), DEFAULT_SMS_SETTINGS, now)).toBeNull();
+  for (const days of [4, 2, 0]) expect(coachingReminder("p1", coaching(days), DEFAULT_SMS_SETTINGS, now)).toBeNull();
+  expect(coachingReminder("p1", coaching(3), DEFAULT_SMS_SETTINGS, now - 1)).toBeNull();
+});
+it("drops a queued coaching reminder once its sessions are used or the expiry moves", () => {
+  const holding = coaching(3), message = coachingReminder("p1", holding, DEFAULT_SMS_SETTINGS, now)!;
+  expect(reminderStillCurrent(message, {}, DEFAULT_SMS_SETTINGS, now, holding)).toBe("current");
+  expect(reminderStillCurrent(message, {}, DEFAULT_SMS_SETTINGS, now, { ...holding, sessionsLeft: 0 })).toBe("obsolete");
+  expect(reminderStillCurrent(message, {}, DEFAULT_SMS_SETTINGS, now, { ...holding, expiresAt: holding.expiresAt + DAY })).toBe("obsolete");
+  expect(reminderStillCurrent(message, {}, DEFAULT_SMS_SETTINGS, now, null)).toBe("obsolete");
 });

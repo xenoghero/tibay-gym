@@ -1,6 +1,6 @@
 import { isPaymentMethod, paymentLabel, type PaymentMethod } from "./payment-methods";
 import type { Charge, ChargeKind, PaymentRequest } from "./contracts";
-import { collectionTotals, mondayStart, philippineDate } from "./rules";
+import { collectionTotals, kindTotal, mondayStart, philippineDate } from "./rules";
 
 export interface ReportRange { from: string; through: string; startMs: number; endMs: number }
 export function validFinancialDate(value: string): string {
@@ -29,7 +29,7 @@ export interface FinanceLedgerRow {
 export interface FinanceReport {
   range: ReportRange;
   totals: ReturnType<typeof collectionTotals> & { expectedCount: number; pendingCount: number; pendingCashMinor: number; pendingGcashMinor: number; pendingOtherElectronicMinor: number };
-  outstanding: { dailyMinor: number; renewalMinor: number; newMembershipMinor: number; count: number };
+  outstanding: { dailyMinor: number; renewalMinor: number; newMembershipMinor: number; coachingPackageMinor: number; sessionTopUpMinor: number; count: number };
   breakdown: Array<{ kind: ChargeKind; expectedMinor: number; expectedCount: number; confirmedMinor: number; confirmedCount: number }>;
   trend: Array<{ date: string; expectedMinor: number; confirmedMinor: number; confirmedCount: number }>;
   ledger: FinanceLedgerRow[];
@@ -39,13 +39,13 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
   const byId = new Map(charges.map(charge => [charge.id, charge]));
   const between = (date: string) => date >= range.from && date <= range.through;
   const purchaseDate = (charge: Charge) => charge.kind === "daily_session" ? charge.chargeDate : charge.recognizedPurchaseAt === null ? null : philippineDate(charge.recognizedPurchaseAt);
-  const breakdown = (["daily_session", "renewal", "new_membership"] as const).map(kind => ({ kind, expectedMinor: 0, expectedCount: 0, confirmedMinor: 0, confirmedCount: 0 }));
+  const breakdown = (["daily_session", "renewal", "new_membership", "coaching_package", "session_topup"] as const).map(kind => ({ kind, expectedMinor: 0, expectedCount: 0, confirmedMinor: 0, confirmedCount: 0 }));
   const kinds = new Map(breakdown.map(row => [row.kind, row]));
   const trend: FinanceReport["trend"] = [];
   for (let date = range.from; date <= range.through; date = shiftFinancialDate(date, 1)) trend.push({ date, expectedMinor: 0, confirmedMinor: 0, confirmedCount: 0 });
   const days = new Map(trend.map(day => [day.date, day]));
   const approved = new Map<string, PaymentRequest>(), pending = new Map<string, PaymentRequest>(), latest = new Map<string, PaymentRequest>();
-  const outstanding = { dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, count: 0 };
+  const outstanding = { dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, coachingPackageMinor: 0, sessionTopUpMinor: 0, count: 0 };
   let pendingCashMinor = 0, pendingGcashMinor = 0, pendingOtherElectronicMinor = 0, expectedCount = 0, pendingCount = 0;
   for (const charge of charges) {
     if (!Number.isSafeInteger(charge.amountMinor) || charge.amountMinor <= 0 || !kinds.has(charge.kind)) throw new Error("financial-data-conflict");
@@ -70,7 +70,7 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
     } else if (request.status === "pending") {
       if (pending.has(charge.id) || (charge.activePaymentRequestId && charge.activePaymentRequestId !== request.id)) throw new Error("financial-data-conflict");
       pending.set(charge.id, request); outstanding.count++;
-      outstanding[charge.kind === "daily_session" ? "dailyMinor" : charge.kind === "renewal" ? "renewalMinor" : "newMembershipMinor"] += request.amountMinor;
+      outstanding[kindTotal(charge.kind)] += request.amountMinor;
       if (between(charge.chargeDate)) { pendingCount++; if (request.method === "cash") pendingCashMinor += request.amountMinor; else if (request.method === "gcash" || request.paymentAccountSnapshot?.kind === "gcash") pendingGcashMinor += request.amountMinor; else pendingOtherElectronicMinor += request.amountMinor; }
     } else if (request.status !== "rejected") throw new Error("financial-data-conflict");
   }

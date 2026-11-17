@@ -5,6 +5,7 @@ import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { STALE_SESSION_MS } from "./attendance";
 import { appendAudit } from "./audit";
+import { countMonthVisits } from "@/lib/month-visits";
 
 /** The profile, entire history, and session guard become official atomically.
  * Scans read the same profile/guard documents, so a concurrent scan retries in
@@ -45,11 +46,12 @@ export async function approveUnverified(personId: string, adminUid: string): Pro
     tx.set(officialRef, {
       phone: pending.phone, phoneLast4: pending.phone.slice(-4), name: pending.name, type: "guest", status: null,
       membershipExpiry: null, rfidTagId: null, joinDate: null,
-      visitCount: logs.size, lastVisitAt, createdAt: pending.createdAt, updatedAt: stamp,
+      visitCount: logs.size, monthVisits: countMonthVisits(logs.docs.map(log => log.data().checkInAt.toMillis())), lastVisitAt, createdAt: pending.createdAt, updatedAt: stamp,
       verifiedAt: stamp, verifiedBy: adminUid,
       rateCategory: pending.rateCategory ?? null, leadSource: pending.leadSource ?? null,
       leadSourceOther: pending.leadSourceOther ?? null, profileImagePath: pending.profileImagePath ?? null,
       profileImagePosition: pending.profileImagePosition ?? null,
+      ...(pending.coachingProfile ? { coachingProfile: pending.coachingProfile } : {}),
     });
     if (pending.address) tx.set(db.doc(`profileDetails/${personId}`), {
       personId, address: pending.address, updatedAt: stamp,

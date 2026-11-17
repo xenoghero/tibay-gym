@@ -5,14 +5,18 @@ import { ApiError, bearer } from "./http";
 import { credentialMatches } from "./validation";
 import { throttle } from "./rate-limit";
 
-export async function requireAdmin(request: Request): Promise<string> {
+/** Verifies a Firebase ID token (revocation included) and returns its user ID. */
+export async function verifiedUid(request: Request, scope: string): Promise<string> {
   const token = bearer(request);
-  await throttle("admin-auth", 120);
+  await throttle(scope, 120);
+  try { return (await adminAuth().verifyIdToken(token, true)).uid; }
+  catch { throw new ApiError(401, "unauthorized"); }
+}
+
+export async function requireAdmin(request: Request): Promise<string> {
   const allowedUid = process.env.FIREBASE_ADMIN_ALLOWED_UID;
   if (!allowedUid) throw new Error("Allowed admin UID is not configured");
-  let uid: string;
-  try { uid = (await adminAuth().verifyIdToken(token, true)).uid; }
-  catch { throw new ApiError(401, "unauthorized"); }
+  const uid = await verifiedUid(request, "admin-auth");
   if (uid !== allowedUid) throw new ApiError(403, "admin-required");
   // Both server authorization and browser rules use the same deployed identity.
   const config = await adminDb().doc("_serverConfig/admin").get();

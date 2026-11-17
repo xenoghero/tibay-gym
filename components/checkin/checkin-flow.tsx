@@ -47,6 +47,7 @@ interface Receipt {
   status: "active" | "expired" | null;
   membershipExpiry: Timestamp | null;
   visitCount: number;
+  coaching?: import("@/lib/attendance-api").CheckinCoaching;
 }
 const ACCIDENTAL_RESCAN_MS = 15 * 1000;
 
@@ -205,11 +206,14 @@ export function CheckInFlow({ registrationIntent = false, onBack }: { registrati
   const steps: CheckinStep[] = registering ? (registrationIntent ? [{ label: "Profile" }] : [numberStep, { label: "Profile" }]) :
     [numberStep, ...(person?.type === "member" ? [] : [{ label: "Session", onSelect: chooseSession }]), { label: "Payment" }];
   const currentStep = registering ? steps.length - 1 : choosingSession ? 1 : state.stage === "payment" ? steps.length - 1 : 0;
-  const membershipExpiry = person?.membershipExpiryMs != null ? Timestamp.fromMillis(person.membershipExpiryMs) : null;
+  // The scan response wins: a first check-in can start a coaching package and its membership month.
+  const expiryMs = state.result?.membershipExpiryMs !== undefined ? state.result.membershipExpiryMs : person?.membershipExpiryMs;
+  const membershipExpiry = expiryMs != null ? Timestamp.fromMillis(expiryMs) : null;
+  const receiptType = state.result?.type ?? person?.type ?? "guest";
   const receipt: Receipt | null = state.result?.action === "checked-in" ? {
-    name: state.displayName, type: person?.type ?? "guest",
-    status: person ? effectiveMemberStatusAt({ ...person, membershipExpiry }, state.confirmedAt!) : null,
-    membershipExpiry, visitCount: state.result.visitCount, unverified: state.result.unverified,
+    name: state.displayName, type: receiptType,
+    status: person ? effectiveMemberStatusAt({ ...person, type: receiptType, status: state.result.type === "member" && state.result.coaching?.started ? "active" : person.status, membershipExpiry }, state.confirmedAt!) : null,
+    membershipExpiry, visitCount: state.result.visitCount, unverified: state.result.unverified, coaching: state.result.coaching,
     paymentMethod: paymentMethod || undefined, paymentName: state.paymentDue?.paymentAccounts?.find(account => account.id === paymentMethod)?.name, paymentAmount: voucher?.amountMinor ?? state.paymentDue?.amountMinor,
   } : null;
 
@@ -379,7 +383,15 @@ function ReceiptView({
             </dd>
           </div>
         )}
+        {receipt.coaching && <div style={detailRow}><dt style={detailKey}>Coaching sessions left</dt><dd style={detailVal}>{receipt.coaching.sessionsLeft}</dd></div>}
+        {receipt.coaching?.coachName && <div style={detailRow}><dt style={detailKey}>Coach</dt><dd style={detailVal}>{receipt.coaching.coachName}</dd></div>}
       </dl>
+
+      {receipt.coaching?.started && (
+        <p role="status" style={{ ...leadStyle, color: C.green }}>
+          Your coaching package has started. Your coaching sessions and your month of gym membership are now running.
+        </p>
+      )}
 
       {isMember && expired && (
         <p style={{ ...leadStyle, color: C.accentText }}>

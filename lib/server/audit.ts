@@ -19,7 +19,7 @@ const allowed = new Set(["type", "status", "membershipExpiry", "joinDate", "rate
   "checkOutAt", "checkInAt", "closedReason", "enabled", "label", "studentDailyMinor", "regularDailyMinor",
   "studentMonthlyMinor", "regularMonthlyMinor", "rateRevision", "financialCutoverAt", "deleted", "changedFields", "assigned", "weightEntryCount", "amountMinor", "method", "kind", "normalizedReference", "ocrStatus",
   "disputeHold", "legalHold", "filingDeadline", "filedAt", "accountingDeleteAfter",
-  "code", "revision", "discountKind", "value", "maxDiscountMinor", "minimumBaseMinor", "startsAt", "endsAt", "totalLimit", "customerLimit", "kinds", "categories", "discountAmountMinor"]);
+  "code", "revision", "discountKind", "value", "maxDiscountMinor", "minimumBaseMinor", "startsAt", "endsAt", "totalLimit", "customerLimit", "kinds", "categories", "discountAmountMinor", "coachId", "sessionsLeft", "markDate", "outcome"]);
 export function auditValues(input: Record<string, unknown> | undefined | null) {
   if (!input) return null;
   const result: Record<string, unknown> = {};

@@ -5,6 +5,7 @@ import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { closeGuardedStaleSession, STALE_SESSION_MS } from "./attendance";
 import { appendAudit } from "./audit";
+import { countMonthVisits } from "@/lib/month-visits";
 import { randomUUID } from "node:crypto";
 
 export async function sweepStaleSessions(): Promise<number> {
@@ -63,7 +64,7 @@ export async function repairVisits(personId: string, deleteLogId?: string, delet
     const stamp = Timestamp.now();
     tx.update(stateRef, { openLogId: ids.has(state.openLogId) ? state.openLogId : null,
       ...(!ids.has(state.lastLogId) ? { lastLogId: null, lastAction: null, lastAcceptedScanAt: null } : {}), updatedAt: stamp });
-    tx.update(personRef, { visitCount: survivors.length, lastVisitAt, updatedAt: stamp });
+    tx.update(personRef, { visitCount: survivors.length, monthVisits: countMonthVisits(survivors.map((log) => (log.data().checkInAt as Timestamp).toMillis())), lastVisitAt, updatedAt: stamp });
     if (logs.size !== survivors.length || person.visitCount !== survivors.length || (person.lastVisitAt?.toMillis() ?? null) !== (lastVisitAt?.toMillis() ?? null)) {
       appendAudit(tx, db, { actorId, action: deleteAll ? "attendance-delete-all" : deleteLogId ? "attendance-delete" : "attendance-repair",
         entityType: "person", entityId: personId, personId, operationId, before: person, after: { visitCount: survivors.length, lastVisitAt } });

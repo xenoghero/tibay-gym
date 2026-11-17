@@ -10,6 +10,7 @@ import Link from "next/link";
 import { PortalHeader } from "./portal-header";
 import { PurchaseForm } from "@/components/people/purchase-form";
 import { PromotionBanner } from "./promotion-banner";
+import { CoachingPanel } from "./coaching-panel";
 import { MemberPhoto, PhotoEditor, useProfilePhotoUrl, type PhotoPosition } from "./member-photo";
 import styles from "./customer-access.module.css";
 interface Summary { name: string; rateCategory: string | null; type: string; status: string | null; membershipExpiryMs: number | null; verified: boolean; expiresAt: number; visitsThisMonth?: number; hasPhoto?: boolean; photoPosition?: PhotoPosition | null }
@@ -98,14 +99,15 @@ const titleCase = (value: string) => value.replaceAll("_", " ").replace(/^./, ch
 const formatDate = (value: number) => new Date(value).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 const money = (value: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: value % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(value / 100);
 interface CustomerPayment { id: string; status: string; amountMinor: number; method: string; kind?: import("@/lib/finance/contracts").ChargeKind | null; paymentAccountSnapshot?: import("@/lib/finance/payment-methods").PaymentAccountSnapshot; submittedAt: number; rejectionReason: string | null; closed?: boolean; voucherCode?: string; discountAmountMinor?: number; baseAmountMinor?: number }
-type PortalScreen = "overview" | "renew" | "history";
+type PortalScreen = "overview" | "renew" | "coaching" | "history";
 const portalDestinations: { screen: PortalScreen; label: string; icon: string }[] = [
   { screen: "overview", label: "Overview", icon: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" },
   { screen: "renew", label: "Membership", icon: "M3 5h18v14H3ZM3 9h18M7 14h4m4 0h2" },
+  { screen: "coaching", label: "Coaching", icon: "M6 8h12M4 10v4m16-4v4M2 11v2m20-2v2M8 6v12m8-12v12" },
   { screen: "history", label: "Payments", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2ZM9 7h6M9 11h6M9 15h3" },
 ];
 function screenFromHash(): PortalScreen {
-  return window.location.hash === "#renew" ? "renew" : window.location.hash === "#history" ? "history" : "overview";
+  return window.location.hash === "#renew" ? "renew" : window.location.hash === "#coaching" ? "coaching" : window.location.hash === "#history" ? "history" : "overview";
 }
 function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { summary: Summary; onRefreshMembership(): Promise<void>; checkin?: boolean }) {
   const [screen, setScreen] = useState<PortalScreen>(checkin ? "renew" : "overview");
@@ -205,17 +207,17 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       <strong className={styles.historyAmount}>{money(payment.amountMinor)}</strong>
       <div className={styles.historyState}>{badge}{payment.rejectionReason && <p>{payment.rejectionReason}</p>}{!payment.closed && payment.status === "pending" && <p>Awaiting gym approval.</p>}</div>
       {payment.voucherCode && <p className={styles.historyVoucher}>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}
-      {showCorrection && allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.historyCorrection} onClick={() => replace(payment.id)}>Correct submission →</button>}
+      {showCorrection && (allowPurchases || payment.kind === "coaching_package") && !payment.closed && payment.status === "rejected" && <button className={styles.historyCorrection} onClick={() => replace(payment.id)}>Correct submission →</button>}
     </article>;
     return <article className={styles.paymentRow} key={payment.id}>
       <div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong>{badge}</div>
       <p>{paymentLabel(payment)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>
       {payment.voucherCode && <p>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}
       {payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}
-      {showCorrection && allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}
+      {showCorrection && (allowPurchases || payment.kind === "coaching_package") && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}
     </article>;
   }
-  const title = screen === "history" ? "Payment history" : screen === "renew" ? previous ? "Correct your payment" : membershipAction : "Your membership";
+  const title = screen === "history" ? "Payment history" : screen === "coaching" ? "Coaching" : screen === "renew" ? previous ? "Correct your payment" : membershipAction : "Your membership";
   if (checkin && loading) return <BrandLoading fullscreen />;
 
   return <>
@@ -251,9 +253,14 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       {allowPurchases && <a href="#renew" className={`${styles.primaryButton} ${styles.membershipCta}`} onClick={event => { event.preventDefault(); setPrevious(undefined); setConfirmation(""); navigate("renew"); }}><span aria-hidden="true">↻</span>{membershipAction}<span aria-hidden="true">›</span></a>}
       {(!isMember || summary.status !== "active") && <Link className={styles.actionLink} href="/checkin"><span>Daily check-in<small>Training for the day? Choose a daily session at check-in.</small></span><span aria-hidden="true">→</span></Link>}
     </>}
-    {screen !== "history" && !allowPurchases && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Please ask the front desk to verify your account to start membership. You can still view your payment status and history.</p>
+    {/* Unverified profiles (from the Coaching sign-up link) may buy coaching; the server enforces it. */}
+    {screen === "coaching" && <CoachingPanel onSubmitted={() => {
+      setConfirmation("Payment request submitted for gym review. Your coaching package is pending until approval.");
+      void load();
+    }} />}
+    {screen !== "history" && screen !== "coaching" && !allowPurchases && !previous && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Please ask the front desk to verify your account to start membership. You can still view your payment status and history.</p>
       {checkin && <Link href="/checkin" className={styles.backLink}>Choose a daily session →</Link>}</div></div>}
-    {screen === "renew" && allowPurchases && <>
+    {screen === "renew" && (allowPurchases || previous) && <>
       {checkin && !previous && loading ? <LoadingSkeleton label="Checking existing membership requests…" /> : checkin && !previous && error ?
         <button className={styles.secondaryButton} disabled={refreshing} onClick={() => void load()}>Retry payment status</button> : checkin && !previous && pendingMembership ?
         <section className={styles.paymentPanel} aria-label="Pending membership request"><h2>Membership pending approval</h2>
@@ -279,7 +286,7 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       {!loading && screen === "overview" && latest && <>
         {paymentRow(latest, !needsAttention)}
         {!latest.closed && latest.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your membership updates once payment is approved.</p>}
-        {needsAttention && allowPurchases && <button className={styles.primaryButton} onClick={() => replace(latest.id)}>Correct submission<span aria-hidden="true">→</span></button>}
+        {needsAttention && (allowPurchases || latest.kind === "coaching_package") && <button className={styles.primaryButton} onClick={() => replace(latest.id)}>Correct submission<span aria-hidden="true">→</span></button>}
       </>}
       {!loading && screen === "history" && <>
         {browsingOlder && <span className={styles.eyebrow}>Earlier requests</span>}
