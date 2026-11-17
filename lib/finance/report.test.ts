@@ -2,6 +2,13 @@ import { expect, it } from "vitest";
 import { AT, chargeFixture, paymentFixture } from "@/tests/finance-fixtures";
 import { buildFinanceReport, reportRange } from "./report";
 const day = (date = "2026-10-26") => reportRange(new URLSearchParams({ date }));
+it("reports coaching packages on their own line, apart from membership revenue", () => {
+  const recordedAt = Date.parse("2026-10-29T09:00:00Z");
+  const charge = chargeFixture("coaching", { kind: "coaching_package", amountMinor: 150000, chargeDate: "2026-10-29", recognizedPurchaseAt: recordedAt, confirmedPaymentRequestId: "paid" });
+  const report = buildFinanceReport([charge], [paymentFixture("paid", charge, { status: "approved", confirmedAt: recordedAt })], day("2026-10-29"));
+  expect(report.breakdown.find(row => row.kind === "coaching_package")).toMatchObject({ expectedMinor: 150000, confirmedMinor: 150000 });
+  expect(report.totals).toMatchObject({ coachingPackageMinor: 150000, newMembershipMinor: 0, renewalMinor: 0 });
+});
 it("excludes yesterday's approved membership from today's purchases and confirmed collections", () => {
   const recordedAt = Date.parse("2026-10-29T09:00:00Z");
   const charge = chargeFixture("membership", {
