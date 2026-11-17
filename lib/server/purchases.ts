@@ -155,7 +155,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     if (coaching && prior) tx.update(packageRef, { paymentRequestId: requestId, status: "pending" });
     else if (coaching) tx.set(packageRef, { id: chargeId, personId, chargeId, paymentRequestId: requestId, packageId: product.coachingPackage!.packageId,
       priceMinor: product.price.unitRateMinor, sessions: product.coachingPackage!.sessions, validityDays: product.coachingPackage!.validityDays, status: "pending",
-      submittedAt: now, approvedAt: null, startedAt: null, coachingExpiresAt: null, sessionsUsed: 0, topUpSessions: 0, coachId: null } satisfies ClientPackage);
+      submittedAt: now, approvedAt: null, startedAt: null, coachingExpiresAt: null, sessionsUsed: 0, topUpSessions: 0 } satisfies ClientPackage);
     appendAudit(tx, db, { actorId, action: prior ? "payment-replacement-submitted" : coaching ? "coaching-purchase-submitted" : "membership-purchase-submitted", entityType: "paymentRequest", entityId: requestId,
       personId, operationId: operation, after: { kind: quote.kind, method: payment.method, amountMinor: quote.amountMinor, status: "pending" } });
   } };

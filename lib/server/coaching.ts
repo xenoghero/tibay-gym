@@ -6,6 +6,7 @@ import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, type ClientPackage
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
 import { appendAudit } from "./audit";
+import { coachNameFor } from "./coach-clients";
 
 export const coachingSettings = (data: unknown): CoachingSettings => (data as CoachingSettings | undefined) ?? { ...DEFAULT_COACHING, packages: [...DEFAULT_COACHING.packages] };
 
@@ -88,7 +89,7 @@ export async function checkinCoaching(personId: string, logId?: string) {
     .sort((a, b) => b.submittedAt - a.submittedAt)[0];
   if (!record) return null;
   const { status, sessionsLeft } = packageState(record, now);
-  return { status, sessionsLeft, coachingExpiresAt: record.coachingExpiresAt, started: !!logId && record.startedByLogId === logId };
+  return { status, sessionsLeft, coachingExpiresAt: record.coachingExpiresAt, started: !!logId && record.startedByLogId === logId, coachName: await coachNameFor(personId) };
 }
 
 /** What the members portal shows: visible packages and the client's latest package. */
@@ -98,7 +99,7 @@ export async function customerCoaching(personId: string) {
   const rows = await db.collection("coachingPackages").where("personId", "==", personId).get();
   const records = rows.docs.map(row => row.data() as ClientPackage);
   const latest = records.filter(row => row.status !== "closed").sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null;
-  return { packages: settings.packages.filter(item => item.visible), canBuy: !records.some(record => blocksNewPackage(record, now)),
+  return { packages: settings.packages.filter(item => item.visible), canBuy: !records.some(record => blocksNewPackage(record, now)), coachName: await coachNameFor(personId),
     current: latest && { ...packageState(latest, now), sessions: latest.sessions,
       validityDays: latest.validityDays, priceMinor: latest.priceMinor, approvedAt: latest.approvedAt, startedAt: latest.startedAt, coachingExpiresAt: latest.coachingExpiresAt } };
 }

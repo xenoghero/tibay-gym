@@ -16,6 +16,8 @@ vi.mock("./rfid/rate-limit", () => ({ throttle: async () => {} }));
 import { GET as listCoaches, POST as changeCoach } from "@/app/api/admin/coaches/route";
 import { GET as coachMe } from "@/app/api/coach/me/route";
 import { requireAdmin } from "./rfid/auth";
+import { GET as assignments, POST as assign } from "@/app/api/admin/coach-assignments/route";
+import { GET as coachClients } from "@/app/api/coach/clients/route";
 const NOW = Date.parse("2026-11-17T02:00:00Z");
 const token = (uid: string) => { const value = `token-${uid}-0123456789abcdef`; mocks.tokens.set(value, uid); return value; };
 const call = (handler: (request: Request) => Promise<Response>, uid: string | null, body?: unknown) => handler(new Request("https://tibay.test/api", {
@@ -90,4 +92,54 @@ it("refuses coaches on admin routes", async () => {
   expect(mocks.createUser).not.toHaveBeenCalled();
   // Every admin route goes through requireAdmin, which is tied to the single admin user ID.
   await expect(requireAdmin(new Request("https://tibay.test/api", { headers: { authorization: `Bearer ${token("coach1")}` } }))).rejects.toMatchObject({ status: 403 });
+});
+
+const seedClient = (id: string, extra: Record<string, unknown> = {}) => {
+  mocks.store!.data.set(`persons/${id}`, { name: `Client ${id}`, phone: "09123456789", type: "member", status: "active", address: "Private street",
+    coachingProfile: { fbName: `fb.${id}`, goals: "Build strength", startDate: "2026-11-20", preferredSchedule: { weekdays: ["mon", "wed"], timeSlot: "evening" }, remarks: "Knee injury" }, ...extra });
+  mocks.store!.data.set(`coachingPackages/pkg-${id}`, { id: `pkg-${id}`, personId: id, chargeId: `pkg-${id}`, paymentRequestId: "r", packageId: "pkg-8", priceMinor: 150000,
+    sessions: 8, validityDays: 15, status: "active", submittedAt: NOW - 1000, approvedAt: NOW - 900, startedAt: NOW - 800, coachingExpiresAt: NOW + 10 * 86400000, sessionsUsed: 2, topUpSessions: 0 });
+  mocks.store!.data.set(`paymentRequests/pay-${id}`, { personId: id, amountMinor: 150000 });
+};
+const coachRecord = (name: string) => ({ name, email: `${name}@example.com`, active: true, createdAt: NOW, deactivatedAt: null });
+
+it("lists unassigned clients with their preferences, assigns and switches coaches, audited", async () => {
+  mocks.store!.data.set("coaches/coach1", coachRecord("Ana")); mocks.store!.data.set("coaches/coach2", coachRecord("Ben"));
+  seedClient("c1"); seedClient("c2", { coachingProfile: undefined });
+  mocks.store!.data.set("coachingPackages/pkg-c2", { ...mocks.store!.data.get("coachingPackages/pkg-c2"), sessionsUsed: 8 });
+  const listed = await (await call(assignments, "admin1")).json();
+  expect(listed.unassigned).toEqual([expect.objectContaining({ id: "c1", fbName: "fb.c1", goals: "Build strength", remarks: "Knee injury", sessionsLeft: 6,
+    preferredSchedule: { weekdays: ["mon", "wed"], timeSlot: "evening" } })]);
+  expect(listed.coaches.map((c: { name: string }) => c.name)).toEqual(["Ana", "Ben"]);
+  expect((await call(assign, "admin1", { personId: "c1", coachId: "coach1" })).status).toBe(200);
+  expect((await call(assign, "admin1", { personId: "c1", coachId: "coach2" })).status).toBe(200);
+  expect((await (await call(assignments, "admin1")).json()).assigned).toEqual([expect.objectContaining({ id: "c1", coachId: "coach2", coachName: "Ben" })]);
+  expect(rows("auditEvents").filter(e => e.action === "coach-assigned").map(e => [e.relevantBefore, e.relevantAfter]))
+    .toEqual(expect.arrayContaining([[{ coachId: null }, { coachId: "coach1" }], [{ coachId: "coach1" }, { coachId: "coach2" }]]));
+  expect((await call(assign, "coach1", { personId: "c1", coachId: "coach1" })).status).toBe(403);
+});
+
+it("shows a coach only their own clients, without address or payments", async () => {
+  mocks.store!.data.set("coaches/coach1", coachRecord("Ana")); mocks.store!.data.set("coaches/coach2", coachRecord("Ben"));
+  seedClient("c1"); seedClient("c2");
+  mocks.store!.data.set("coachAssignments/c1", { personId: "c1", coachId: "coach1", assignedAt: NOW, assignedBy: "admin1" });
+  mocks.store!.data.set("coachAssignments/c2", { personId: "c2", coachId: "coach2", assignedAt: NOW, assignedBy: "admin1" });
+  const list = await (await call(coachClients, "coach1")).json();
+  expect(list.clients.map((c: { id: string }) => c.id)).toEqual(["c1"]);
+  const detail = await coachClients(new Request("https://tibay.test/api?id=c1", { headers: { authorization: `Bearer ${token("coach1")}` } }));
+  const body = await detail.json();
+  expect(body.client).toMatchObject({ name: "Client c1", phone: "09123456789", fbName: "fb.c1", sessionsLeft: 6, frozen: false });
+  expect(JSON.stringify([list, body])).not.toMatch(/Private street|address|amountMinor|payment/i);
+  const other = await coachClients(new Request("https://tibay.test/api?id=c2", { headers: { authorization: `Bearer ${token("coach1")}` } }));
+  expect([other.status, (await other.json()).error]).toEqual([403, "client-not-assigned"]);
+  expect((await call(coachClients, "admin1")).status).toBe(403);
+});
+
+it("returns a deactivated coach's clients to Unassigned clients", async () => {
+  mocks.store!.data.set("coaches/coach1", coachRecord("Ana")); seedClient("c1");
+  mocks.store!.data.set("coachAssignments/c1", { personId: "c1", coachId: "coach1", assignedAt: NOW, assignedBy: "admin1" });
+  await call(changeCoach, "admin1", { action: "deactivate", coachId: "coach1" });
+  expect(mocks.store!.data.has("coachAssignments/c1")).toBe(false);
+  expect((await (await call(assignments, "admin1")).json()).unassigned.map((c: { id: string }) => c.id)).toEqual(["c1"]);
+  expect(rows("auditEvents").some(e => e.action === "coach-assignment-cleared")).toBe(true);
 });

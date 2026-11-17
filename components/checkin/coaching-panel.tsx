@@ -16,7 +16,7 @@ const money = (minor: number) => new Intl.NumberFormat("en-PH", { style: "curren
 
 /** Members portal coaching: the client's package status, and buying a package when none is in use. */
 export function CoachingPanel({ allowPurchases, onSubmitted }: { allowPurchases: boolean; onSubmitted(): void }) {
-  const [data, setData] = useState<{ packages: CoachingPackage[]; canBuy: boolean; current: Current | null } | null>(null);
+  const [data, setData] = useState<{ packages: CoachingPackage[]; canBuy: boolean; coachName: string | null; current: Current | null } | null>(null);
   const [error, setError] = useState(""), [reload, setReload] = useState(0), [chosen, setChosen] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -36,6 +36,7 @@ export function CoachingPanel({ allowPurchases, onSubmitted }: { allowPurchases:
       <dl className={own.facts}>
         <div><dt>Status</dt><dd>{statusText[current.status]}</dd></div>
         <div><dt>Sessions left</dt><dd>{current.sessionsLeft} of {current.sessions}</dd></div>
+        <div><dt>Coach</dt><dd>{data.coachName ?? "Not assigned yet"}</dd></div>
         <div><dt>Coaching validity</dt><dd>{current.coachingExpiresAt ? `Until ${new Date(current.coachingExpiresAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}` : `${current.validityDays} days from your first visit`}</dd></div>
       </dl>
       {current.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your package starts at your first check-in or coaching session after approval.</p>}

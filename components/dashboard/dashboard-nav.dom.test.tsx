@@ -24,7 +24,7 @@ it("keeps destinations accessible when collapsed and restores the saved preferen
   expect(localStorage.getItem("tibay-sidebar-collapsed")).toBe("true");
   expect(screen.getByRole("button", { name: "Expand sidebar" }).getAttribute("aria-expanded")).toBe("false");
   const nav = screen.getByRole("navigation", { name: "Sidebar navigation" });
-  expect(within(nav).getAllByRole("link")).toHaveLength(8);
+  expect(within(nav).getAllByRole("link")).toHaveLength(9);
   expect(within(nav).getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
   view.unmount();
   render(<DashboardNav />);

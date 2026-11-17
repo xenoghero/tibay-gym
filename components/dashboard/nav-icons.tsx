@@ -37,6 +37,10 @@ export function IconMessage({ size = 22 }: IconProps) {
   return <svg {...BASE} width={size} height={size}><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2ZM7 8h10M7 12h7" /></svg>;
 }
 
+export function IconCoaching({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12" /></svg>;
+}
+
 export function IconPanel({ size = 20 }: IconProps) {
   return <svg {...BASE} width={size} height={size}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 9l-3 3 3 3" /></svg>;
 }

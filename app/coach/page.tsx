@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { coachProfile } from "@/lib/auth/staff-home";
 import { BrandLogo } from "@/components/brand-logo";
 import { BrandLoading } from "@/components/ui/brand-loading";
+import { CoachClients } from "./coach-clients";
 import styles from "./coach.module.css";
 
 type Profile = { id: string; name: string; email: string };
@@ -36,10 +37,7 @@ export default function CoachPortalPage() {
       <h1>Hi, {profile.name}</h1>
       <p className={styles.muted}>{profile.email}</p>
     </section>
-    <section className={styles.card} aria-labelledby="coach-clients">
-      <h2 id="coach-clients">Your clients</h2>
-      <p className={styles.muted}>No clients are assigned to you yet. The admin assigns clients from the dashboard.</p>
-    </section>
+    <CoachClients user={user} />
     <ChangePassword />
   </main>;
 }

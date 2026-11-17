@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { IconOverview, IconPeople, IconStatistics, IconAudit, IconPayment, IconMessage, IconQr, IconSettings, IconSignOut, IconPanel, IconMenu, IconClose } from "./nav-icons";
+import { IconOverview, IconPeople, IconStatistics, IconAudit, IconPayment, IconMessage, IconQr, IconSettings, IconSignOut, IconPanel, IconMenu, IconClose, IconCoaching } from "./nav-icons";
 import styles from "./dashboard-nav.module.css";
 
 const NAV = [
@@ -14,6 +14,7 @@ const NAV = [
   { label: "Statistics", href: "/dashboard/statistics", Icon: IconStatistics },
   { label: "Audit history", href: "/dashboard/audit", Icon: IconAudit },
   { label: "Payment review", href: "/dashboard/payments", Icon: IconPayment },
+  { label: "Coaching", href: "/dashboard/coaching", Icon: IconCoaching },
   { label: "SMS operations", href: "/dashboard/sms", Icon: IconMessage },
   { label: "QR codes", href: "/dashboard/print-qr", Icon: IconQr },
   { label: "Account Settings", href: "/dashboard/settings", Icon: IconSettings },

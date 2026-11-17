@@ -38,9 +38,18 @@ export interface ClientPackage {
   id: string; personId: string; chargeId: string; paymentRequestId: string; packageId: string;
   priceMinor: number; sessions: number; validityDays: number; status: PackageStatus;
   submittedAt: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null;
-  sessionsUsed: number; topUpSessions: number; coachId: string | null;
+  sessionsUsed: number; topUpSessions: number;
   /** The check-in that started the package, so that visit can say so. */
   startedByLogId?: string | null;
 }
 /** Only one package at a time: pending, approved-not-started, or active with sessions left and not expired. */
 export const blocksNewPackage = (record: ClientPackage, now: number) => ["pending", "approved", "active"].includes(packageState(record, now).status);
+
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri"] as const;
+export type Weekday = typeof WEEKDAYS[number];
+export const TIME_SLOTS = { morning: "6 AM–12 PM", afternoon: "12 PM–6 PM", evening: "6 PM–10 PM" } as const;
+export type TimeSlot = keyof typeof TIME_SLOTS;
+/** Coaching sign-up details kept on the profile; the Preferred schedule is a preference, not a booking. */
+export interface CoachingProfile { fbName: string; goals: string | null; startDate: string; preferredSchedule: { weekdays: Weekday[]; timeSlot: TimeSlot }; remarks: string | null }
+/** One coach per client. */
+export interface CoachAssignment { personId: string; coachId: string; assignedAt: number; assignedBy: string }

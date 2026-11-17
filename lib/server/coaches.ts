@@ -57,8 +57,15 @@ export async function changeCoach(actorId: string, body: Record<string, unknown>
     await db.runTransaction(async tx => {
       const coach = (await tx.get(ref)).data() as Coach;
       if (!coach.active) return;
+      // Their clients go back to Unassigned clients; past session marks stay credited to them.
+      const assigned = await tx.get(db.collection("coachAssignments").where("coachId", "==", coachId));
       const now = Date.now();
       tx.update(ref, { active: false, deactivatedAt: now });
+      for (const row of assigned.docs) {
+        tx.delete(row.ref);
+        appendAudit(tx, db, { actorId, action: "coach-assignment-cleared", entityType: "coachAssignment", entityId: row.id, personId: row.id,
+          operationId: `coach-deactivate-${coachId}`, before: { coachId }, after: { coachId: null }, reason: "Coach deactivated", occurredAt: now });
+      }
       appendAudit(tx, db, { actorId, action: "coach-deactivated", entityType: "coach", entityId: coachId, personId: null,
         operationId: `coach-deactivate-${coachId}`, before: { enabled: true }, after: { enabled: false }, occurredAt: now });
     });

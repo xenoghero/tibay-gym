@@ -38,7 +38,7 @@ it("buys a package at one price for every Rate category, copies its terms and ap
   const student = await buy("p1", "pkg-8"), regular = await buy("p2", "pkg-8");
   expect([student.quote.amountMinor, regular.quote.amountMinor]).toEqual([150_000, 150_000]);
   expect(student.quote).toMatchObject({ kind: "coaching_package", coverage: null, coachingPackage: { packageId: "pkg-8", sessions: 8, validityDays: 15 } });
-  expect(packageOf("p1", student.operationId)).toMatchObject({ personId: "p1", status: "pending", priceMinor: 150_000, sessions: 8, validityDays: 15, sessionsUsed: 0, coachId: null });
+  expect(packageOf("p1", student.operationId)).toMatchObject({ personId: "p1", status: "pending", priceMinor: 150_000, sessions: 8, validityDays: 15, sessionsUsed: 0 });
   expect(await customerCoaching("p1")).toMatchObject({ canBuy: false, current: { status: "pending", sessions: 8, sessionsLeft: 8, validityDays: 15 } });
   expect(rows("membershipPurchaseState")).toHaveLength(0);
 

@@ -1,4 +1,4 @@
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
 .facts dt { color: var(--rs-muted); font-size: 12px; margin-bottom: 6px; }
 .facts dd { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .lead { margin: 0 0 16px; color: var(--rs-muted); font-size: 13px; line-height: 1.6; }

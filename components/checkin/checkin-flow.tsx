@@ -393,6 +393,7 @@ function ReceiptView({
       {receipt.coaching && (
         <dl style={{ margin: 0 }}>
           <div style={detailRow}><dt style={detailKey}>Coaching sessions left</dt><dd style={detailVal}>{receipt.coaching.sessionsLeft}</dd></div>
+          {receipt.coaching.coachName && <div style={detailRow}><dt style={detailKey}>Coach</dt><dd style={detailVal}>{receipt.coaching.coachName}</dd></div>}
         </dl>
       )}
 
