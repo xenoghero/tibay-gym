@@ -28,3 +28,11 @@
 .list span { font-size: 13px; }
 .list small { color: var(--rs-muted); font-size: 12px; }
 @media (max-width: 420px) { .facts { grid-template-columns: minmax(0, 1fr); } }
+.subhead { margin: 0; font-size: 16px; font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.history { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
+.history li { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--rs-line); }
+.history span { color: var(--rs-muted); font-size: 13px; }
+.history p { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.history button { justify-self: start; min-height: 40px; }
+.stack { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--rs-line); }

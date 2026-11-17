@@ -18,6 +18,8 @@ import { GET as coachMe } from "@/app/api/coach/me/route";
 import { requireAdmin } from "./rfid/auth";
 import { GET as assignments, POST as assign } from "@/app/api/admin/coach-assignments/route";
 import { GET as coachClients } from "@/app/api/coach/clients/route";
+import { POST as coachSessions } from "@/app/api/coach/sessions/route";
+import { GET as adminSessions, POST as adminSessionChange } from "@/app/api/admin/coaching-sessions/route";
 const NOW = Date.parse("2026-11-17T02:00:00Z");
 const token = (uid: string) => { const value = `token-${uid}-0123456789abcdef`; mocks.tokens.set(value, uid); return value; };
 const call = (handler: (request: Request) => Promise<Response>, uid: string | null, body?: unknown) => handler(new Request("https://tibay.test/api", {
@@ -142,4 +144,17 @@ it("returns a deactivated coach's clients to Unassigned clients", async () => {
   expect(mocks.store!.data.has("coachAssignments/c1")).toBe(false);
   expect((await (await call(assignments, "admin1")).json()).unassigned.map((c: { id: string }) => c.id)).toEqual(["c1"]);
   expect(rows("auditEvents").some(e => e.action === "coach-assignment-cleared")).toBe(true);
+});
+
+it("keeps session routes to the right role and the assigned coach", async () => {
+  mocks.store!.data.set("coaches/coach1", coachRecord("Ana")); mocks.store!.data.set("coaches/coach2", coachRecord("Ben")); seedClient("c1");
+  mocks.store!.data.set("coachAssignments/c1", { personId: "c1", coachId: "coach2", assignedAt: NOW, assignedBy: "admin1" });
+  const mark = { action: "mark", personId: "c1", outcome: "done", operationId: "route-mark-operation-01" };
+  const refused = await call(coachSessions, "coach1", mark);
+  expect([refused.status, (await refused.json()).error]).toEqual([403, "client-not-assigned"]);
+  expect((await call(coachSessions, "admin1", mark)).status).toBe(403);
+  expect((await call(coachSessions, "coach2", mark)).status).toBe(200);
+  expect(mocks.store!.data.get("coachingPackages/pkg-c1")).toMatchObject({ sessionsUsed: 3 });
+  expect((await call(adminSessions, "coach2")).status).toBe(403);
+  expect((await call(adminSessionChange, "coach2", { action: "adjust", packageRecordId: "pkg-c1", sessionsLeft: 9, reason: "x" })).status).toBe(403);
 });

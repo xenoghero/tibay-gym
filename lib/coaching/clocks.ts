@@ -24,6 +24,12 @@ export const coachingExpiryMs = (startedAt: number, validityDays: number, daysFr
 /** One month of Monthly membership from the later of Package start and the current membership expiry. */
 export const membershipMonth = (membership: MembershipSnapshot, startedAt: number) => membershipCoverage(membership, startedAt, 1);
 
+/** The package a client is using now (approved or active), with its effective status. */
+export function currentPackage(records: ClientPackage[], now: number) {
+  const record = records.filter(row => row.status === "approved" || row.status === "active").sort((a, b) => b.submittedAt - a.submittedAt)[0];
+  return record ? { record, ...packageState(record, now) } : null;
+}
+
 /** Effective status: unused sessions expire with the coaching validity. */
 export function packageState(record: Pick<ClientPackage, "status" | "sessions" | "topUpSessions" | "sessionsUsed" | "coachingExpiresAt">, now: number): { status: PackageStatus; sessionsLeft: number } {
   const left = Math.max(0, record.sessions + record.topUpSessions - record.sessionsUsed);

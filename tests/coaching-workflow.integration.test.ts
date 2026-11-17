@@ -11,6 +11,8 @@ import { getPurchaseQuote, submitPurchase, paymentReviewPreview, decidePayment, 
 import { customerCoaching, getCoachingSettings, saveCoachingSettings } from "@/lib/server/coaching";
 import { financeReport } from "@/lib/server/finance-report";
 import { POST as scan } from "@/app/api/attendance/scan/route";
+import { adjustSessions, fixMark, markSession, monthlyCoachCounts, sessionHistory, undoMark } from "@/lib/server/session-marks";
+import { assignCoach } from "@/lib/server/coach-clients";
 import { POST as lookup } from "@/app/api/attendance/lookup/route";
 
 const NOW = Date.parse("2026-11-17T02:00:00Z");
@@ -149,4 +151,75 @@ it("starts an unused package automatically at approval + 15 days, dated at the d
   expect(packageOf("p1", bought.operationId)).toMatchObject({ status: "active", startedAt: deadline, coachingExpiresAt: Date.parse("2027-01-10T16:00:00Z") });
   expect(expiryOf("p1")).toBe(Date.parse("2027-01-01T16:00:00Z"));
   expect(rows("auditEvents").find(event => event.action === "coaching-package-started")).toMatchObject({ actorId: "system:coaching-auto-start" });
+});
+
+let markSequence = 0;
+const mark = (coachId: string, extra: Record<string, unknown> = {}) => markSession(coachId, { personId: "p1", outcome: "done", operationId: `mark-operation-${++markSequence}-000`, ...extra });
+async function coachedClient(packageId = "pkg-4") {
+  for (const id of ["ana", "ben"]) state.store!.data.set(`coaches/${id}`, { name: id === "ana" ? "Ana" : "Ben", email: `${id}@example.com`, active: true, createdAt: NOW, deactivatedAt: null });
+  const bought = await buy("p1", packageId);
+  await decide(bought.id);
+  await assignCoach("admin", { personId: "p1", coachId: "ana" });
+  return bought;
+}
+
+it("marks sessions, starts the package on the first one, and refuses marks that can't be used", async () => {
+  const bought = await coachedClient();
+  vi.setSystemTime(NOW + 86400000);
+  await mark("ana", { note: "Squats and rows" });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ status: "active", startedAt: NOW + 86400000, sessionsUsed: 1 });
+  expect(state.store!.data.get("persons/p1")).toMatchObject({ type: "member", status: "active" });
+  await mark("ana", { outcome: "no_show", note: "Overslept" });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 1 });
+  // Retrying the same request records it once.
+  await markSession("ana", { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
+  await markSession("ana", { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 2 });
+  await expect(mark("ben")).rejects.toMatchObject({ code: "client-not-assigned" });
+  await expect(mark("ana", { date: "2026-12-30" })).rejects.toMatchObject({ code: "invalid-session-date" });
+  await mark("ana"); await mark("ana");
+  await expect(mark("ana")).rejects.toMatchObject({ code: "no-sessions-left" });
+  // A No-show needs no session.
+  await expect(mark("ana", { outcome: "no_show" })).resolves.toMatchObject({ outcome: "no_show" });
+  const history = await sessionHistory("p1");
+  expect(history.filter(row => row.outcome === "done")).toHaveLength(4);
+  expect(history.find(row => row.note === "Squats and rows")).toMatchObject({ coachName: "Ana", date: "2026-11-18" });
+});
+
+it("refuses marks after the coaching validity ends", async () => {
+  await coachedClient();
+  await mark("ana");
+  vi.setSystemTime(Date.parse("2026-11-23T16:00:00Z"));
+  await expect(mark("ana")).rejects.toMatchObject({ code: "coaching-expired" });
+});
+
+it("lets the coach undo only on the same Manila day, and the admin undo or fix any mark, audited", async () => {
+  const bought = await coachedClient("pkg-8");
+  const first = await mark("ana"), second = await mark("ana");
+  await undoMark({ coachId: "ana" }, { markId: first.id });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 1 });
+  vi.setSystemTime(Date.parse("2026-11-17T16:00:00Z"));
+  await expect(undoMark({ coachId: "ana" }, { markId: second.id })).rejects.toMatchObject({ code: "mark-undo-closed" });
+  await fixMark("admin", { markId: second.id, outcome: "no_show", note: "Was actually absent" });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 0 });
+  await fixMark("admin", { markId: second.id, outcome: "done" });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 1 });
+  await undoMark({ adminId: "admin" }, { markId: second.id });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 0 });
+  expect(rows("auditEvents").map(event => event.action)).toEqual(expect.arrayContaining(["session-mark-fixed", "session-mark-undone"]));
+});
+
+it("records Session adjustments with a reason and keeps marks credited after reassignment", async () => {
+  const bought = await coachedClient("pkg-8");
+  await mark("ana"); await mark("ana", { outcome: "no_show" });
+  await assignCoach("admin", { personId: "p1", coachId: "ben" });
+  await mark("ben");
+  expect(await monthlyCoachCounts("2026-11")).toEqual({ month: "2026-11", coaches: [
+    { coachId: "ana", name: "Ana", done: 1, noShows: 1 }, { coachId: "ben", name: "Ben", done: 1, noShows: 0 }] });
+  const recordId = purchaseChargeId("p1", bought.operationId);
+  await expect(adjustSessions("admin", { packageRecordId: recordId, sessionsLeft: 3, reason: " " })).rejects.toMatchObject({ code: "adjustment-reason-required" });
+  await adjustSessions("admin", { packageRecordId: recordId, sessionsLeft: 3, reason: "Coach marked two sessions by mistake" });
+  expect((await customerCoaching("p1")).current).toMatchObject({ sessionsLeft: 3 });
+  expect(rows("auditEvents").find(event => event.action === "session-adjustment")).toMatchObject({
+    relevantBefore: { sessionsLeft: 6 }, relevantAfter: { sessionsLeft: 3 }, reason: "Coach marked two sessions by mistake" });
 });

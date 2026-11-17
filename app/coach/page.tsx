@@ -8,6 +8,7 @@ import { coachProfile } from "@/lib/auth/staff-home";
 import { BrandLogo } from "@/components/brand-logo";
 import { BrandLoading } from "@/components/ui/brand-loading";
 import { CoachClients } from "./coach-clients";
+import { SessionTools } from "./session-tools";
 import styles from "./coach.module.css";
 
 type Profile = { id: string; name: string; email: string };
@@ -37,7 +38,7 @@ export default function CoachPortalPage() {
       <h1>Hi, {profile.name}</h1>
       <p className={styles.muted}>{profile.email}</p>
     </section>
-    <CoachClients user={user} />
+    <CoachClients user={user}>{(client, reload) => <SessionTools user={user} coachId={profile.id} client={client} onChanged={reload} />}</CoachClients>
     <ChangePassword />
   </main>;
 }

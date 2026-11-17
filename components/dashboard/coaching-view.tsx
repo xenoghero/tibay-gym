@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { TIME_SLOTS, type CoachingProfile } from "@/lib/coaching/catalog";
+import { ClientSessions, CoachMonthlyCounts } from "./coaching-sessions";
 import styles from "./settings.module.css";
 
 interface Client {
@@ -22,6 +23,7 @@ export function CoachingView() {
   const [data, setData] = useState<Data | null>(null), [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
   const [choice, setChoice] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState<Client | null>(null);
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -50,6 +52,7 @@ export function CoachingView() {
       {data?.coaches.filter(coach => coach.id !== client.coachId).map(coach => <option key={coach.id} value={coach.id}>{coach.name}</option>)}
     </select>
     <button type="button" className={styles.primary} disabled={busy || !choice[client.id]} onClick={() => void assign(client)}>{client.coachId ? "Switch" : "Assign"}</button>
+    <button type="button" onClick={() => setOpen(client)}>Sessions</button>
   </div>;
   const table = (clients: Client[], assigned: boolean) => <table className={styles.table}>
     <thead><tr><th scope="col">Client</th><th scope="col">Preferred schedule</th><th scope="col">Sessions left</th>{assigned && <th scope="col">Coach</th>}<th scope="col" aria-label="Actions" /></tr></thead>
@@ -73,6 +76,8 @@ export function CoachingView() {
       {data.unassigned.length ? table(data.unassigned, false) : <div className={styles.empty}><h3>Everyone has a coach</h3><p>New clients appear here once their coaching payment is approved.</p></div>}
       <h3 style={{ margin: "32px 0 8px" }}>Clients with a coach</h3>
       {data.assigned.length ? table(data.assigned, true) : <div className={styles.empty}><p>No clients are assigned yet.</p></div>}
+      {open && <ClientSessions key={open.id} personId={open.id} name={open.name} onClose={() => { setOpen(null); setReload(v => v + 1); }} />}
+      <CoachMonthlyCounts />
     </>}
   </main>;
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { packageState } from "@/lib/coaching/clocks";
+import { currentPackage } from "@/lib/coaching/clocks";
 import type { ClientPackage, CoachAssignment, CoachingProfile } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
@@ -8,12 +8,8 @@ import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
 import { startDuePackages } from "./coaching";
 import type { Coach } from "./coaches";
+import { sessionHistory } from "./session-marks";
 
-/** The package a client is using now (approved or active), with its effective status. */
-export function currentPackage(records: ClientPackage[], now: number) {
-  const record = records.filter(row => row.status === "approved" || row.status === "active").sort((a, b) => b.submittedAt - a.submittedAt)[0];
-  return record ? { record, ...packageState(record, now) } : null;
-}
 const available = (current: ReturnType<typeof currentPackage>) => !!current && (current.status === "approved" || current.status === "active");
 
 /** Approved clients with coaching sessions available, keyed by person. Reading saves due 15-day starts first (ADR 0001: no scheduled job). */
@@ -99,5 +95,12 @@ export async function coachClient(coachId: string, personId: string) {
   if (assignment?.coachId !== coachId) throw new ApiError(403, "client-not-assigned");
   const client = await loadClient(id, Date.now());
   if (!client) throw new ApiError(404, "client-unavailable");
-  return { client };
+  return { client, history: await sessionHistory(id) };
+}
+
+/** The admin's view of a client's current package, for Session adjustments. */
+export async function clientPackageSummary(personId: string) {
+  const id = documentId(personId), rows = await adminDb().collection("coachingPackages").where("personId", "==", id).get();
+  const current = currentPackage(rows.docs.map(row => row.data() as ClientPackage), Date.now());
+  return current && { id: current.record.id, status: current.status, sessions: current.record.sessions, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.record.coachingExpiresAt };
 }
