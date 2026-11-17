@@ -55,6 +55,16 @@ it("leaves cash membership unchanged until approval, then applies one month exac
   expect(rows("paymentRequests")[0][1]).toMatchObject({ status: "approved", confirmedAt: NOW, appliedCoverage: { startDate: "2026-11-01", expiryDate: "2026-12-01", months: 1 } });
   expect(rows("statusChanges")).toHaveLength(1);
 });
+it("approves a product that grants no membership coverage without touching the membership", async () => {
+  const person = state.store!.data.get("persons/p1")!;
+  state.store!.data.set("charges/c1", { id: "c1", kind: "daily_session", personId: "p1", amountMinor: 6000, quantity: 1, categorySnapshot: "student", activePaymentRequestId: "r1", confirmedPaymentRequestId: null });
+  state.store!.data.set("paymentRequests/r1", { id: "r1", chargeId: "c1", personId: "p1", method: "cash", status: "pending", amountMinor: 6000, receiptId: null });
+  await decision("r1");
+  expect(state.store!.data.get("paymentRequests/r1")).toMatchObject({ status: "approved", appliedCoverage: null });
+  expect(state.store!.data.get("charges/c1")).toMatchObject({ confirmedPaymentRequestId: "r1", approvedCoverage: null });
+  expect(state.store!.data.get("persons/p1")).toEqual(person);
+  expect(rows("statusChanges")).toHaveLength(0);
+});
 it.each([2, 3, 5, 12])("quotes, snapshots, and approves %i months at the monthly rate", async months => {
   const quote = await getPurchaseQuote("p1", undefined, undefined, months);
   expect(quote.amountMinor).toBe(100000 * months);

@@ -3,7 +3,7 @@ import { preparePaymentAccount } from "./payment-methods";
 import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
-import type { Charge, GymSettings, PaymentRequest } from "@/lib/finance/contracts";
+import type { Charge, ChargeKind, Coverage, GymSettings, PaymentRequest, RateSnapshot } from "@/lib/finance/contracts";
 import { snapshotRate, operationId, philippineDate, membershipMonths } from "@/lib/finance/rules";
 import { membershipCoverage, snapshotMembership, coverageExpiryMs, type MembershipSnapshot } from "@/lib/finance/coverage";
 import { adminDb } from "./firebase-admin";
@@ -24,12 +24,19 @@ export interface PurchaseQuote {
   kind: Charge["kind"]; amountMinor: number; categorySnapshot: string; rateRevision: number;
   coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null;
 }
-function quoteFor(person: Person, settings: GymSettings, at: number, previous?: { charge: Charge; requestId: string }, discount?: DiscountQuote, quoteOwner = "new-profile", months = 1): PurchaseQuote {
-  let snapshot;
-  try { snapshot = previous ? previous.charge : snapshotRate(settings, person.rateCategory, person.type === "member" ? "renewal" : "new_membership", months); }
+/** What a purchase buys, its price, and the membership coverage approving it applies (null: none). New products plug in here. */
+export interface PurchaseProduct { kind: ChargeKind; price: RateSnapshot; coverage(membership: MembershipSnapshot, at: number): Coverage | null }
+const coverageFor = (kind: ChargeKind, months: number) => (membership: MembershipSnapshot, at: number) =>
+  kind === "daily_session" ? null : membershipCoverage(membership, at, months);
+function membershipProduct(settings: GymSettings, person: Person, months: number): PurchaseProduct {
+  const kind = person.type === "member" ? "renewal" : "new_membership";
+  try { return { kind, price: snapshotRate(settings, person.rateCategory, kind, months), coverage: coverageFor(kind, months) }; }
   catch { throw new ApiError(409, "monthly-price-or-category-unset"); }
-  const kind = previous?.charge.kind ?? (person.type === "member" ? "renewal" : "new_membership");
-  const coverage = kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at, snapshot.quantity);
+}
+/** The product a saved charge bought, for replacements and approval. */
+const chargeProduct = (charge: Charge): PurchaseProduct => ({ kind: charge.kind, price: charge, coverage: coverageFor(charge.kind, charge.quantity) });
+function quoteFor(person: Person, product: PurchaseProduct, at: number, previous?: { charge: Charge; requestId: string }, discount?: DiscountQuote, quoteOwner = "new-profile"): PurchaseQuote {
+  const { kind, price: snapshot } = product, coverage = product.coverage(snapshotMembership(person), at);
   const fields = { kind, amountMinor: discount?.amountMinor ?? snapshot.amountMinor, categorySnapshot: snapshot.categorySnapshot,
     ...(previous ? { baseAmountMinor: previous.charge.baseAmountMinor ?? snapshot.amountMinor, discountAmountMinor: previous.charge.discountAmountMinor ?? 0, voucherSnapshot: previous.charge.voucherSnapshot ?? null } : discount ? { baseAmountMinor: discount.baseAmountMinor, discountAmountMinor: discount.discountAmountMinor, voucherSnapshot: discount.voucherSnapshot } : {}),
     rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null };
@@ -54,19 +61,20 @@ export async function getPurchaseQuote(personId: string, previousRequestId?: str
   }
   if (previous && voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   if (previous && months !== undefined && months !== previous.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const basic = quoteFor(person, settings, Date.now(), previous, undefined, personId, duration);
+  const product = previous ? chargeProduct(previous.charge) : membershipProduct(settings, person, duration);
+  const basic = quoteFor(person, product, Date.now(), previous, undefined, personId);
   const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId, kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: Date.now() }) : undefined;
-  return quoteFor(person, settings, Date.now(), previous, discount, personId, duration);
+  return quoteFor(person, product, Date.now(), previous, discount, personId);
 }
 export async function newProfileQuote(category: unknown, voucherCode?: string) {
   const settings = (await adminDb().doc("gymSettings/finance").get()).data() as GymSettings | undefined;
   if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
   const person: Person = { type: "guest", status: null, membershipExpiry: null, rateCategory: category };
-  const basic = quoteFor(person, settings, Date.now());
-  const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId: "new-profile-preview", kind: "new_membership",
+  const product = membershipProduct(settings, person, 1), basic = quoteFor(person, product, Date.now());
+  const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId: "new-profile-preview", kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: Date.now() }) : undefined;
-  return quoteFor(person, settings, Date.now(), undefined, discount);
+  return quoteFor(person, product, Date.now(), undefined, discount);
 }
 /** Read-only preparation shared by customer/admin submissions and atomic admin profile creation. */
 export async function preparePurchase(tx: Transaction, db: Firestore, actorId: string, personId: string, person: Person, body: Record<string, unknown>, newProfile = false) {
@@ -85,11 +93,12 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   }
   const months = purchaseMonths(body.months);
   if (prior && body.months !== undefined && months !== prior.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const now = Date.now(), basic = quoteFor(person, settings, now, prior, undefined, newProfile ? "new-profile" : personId, months);
+  const product = prior ? chargeProduct(prior.charge) : membershipProduct(settings, person, months);
+  const now = Date.now(), basic = quoteFor(person, product, now, prior, undefined, newProfile ? "new-profile" : personId);
   if (prior && body.voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   const voucher = !prior && body.voucherCode ? await prepareVoucher(tx, db, { code: body.voucherCode, personId, actorId, kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: now }) : null;
-  const quote = quoteFor(person, settings, now, prior, voucher ?? undefined, newProfile ? "new-profile" : personId, months);
+  const quote = quoteFor(person, product, now, prior, voucher ?? undefined, newProfile ? "new-profile" : personId);
   if (body.quoteToken !== quote.quoteToken) throw new ApiError(409, "purchase-quote-changed");
   const stateRef = db.doc(`membershipPurchaseState/${personId}`), state = (await tx.get(stateRef)).data();
   if (quote.kind !== "daily_session" && state?.activeRequestId) {
@@ -107,8 +116,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     receiptId: typeof body.receiptId === "string" ? body.receiptId : undefined, receiptToken: typeof body.receiptToken === "string" ? body.receiptToken : undefined }) : null;
   if (proof && proof.paymentRequestId !== requestId) throw new ApiError(409, "valid-receipt-required");
   const number = prior ? null : await prepareTransactionNumber(tx, db);
-  const price = prior?.charge ?? snapshotRate(settings, person.rateCategory, quote.kind, months);
-  const charge: Charge = prior?.charge ?? { id: chargeId, ...price,
+  const charge: Charge = prior?.charge ?? { id: chargeId, ...product.price,
     ...(voucher ? { baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot } : {}),
     tibayTransactionNumber: number!.number, personId, kind: quote.kind, chargeDate: philippineDate(now),
     createdAt: now, recognizedPurchaseAt: null, requestedCoverage: quote.coverage, approvedCoverage: null, dailyVisitDate: null, attendanceLogId: null, uniqueDailyKey: null, operationId: operation };
@@ -139,7 +147,7 @@ export async function submitPurchase(actorId: string, personId: string, body: Re
   });
 }
 function approvalPreview(payment: PaymentRequest, charge: Charge, person: Person, review: Record<string, unknown> | undefined, at: number) {
-  const coverage = payment.status === "approved" ? payment.appliedCoverage : charge.kind === "daily_session" ? null : membershipCoverage(snapshotMembership(person), at, charge.quantity);
+  const coverage = payment.status === "approved" ? payment.appliedCoverage : chargeProduct(charge).coverage(snapshotMembership(person), at);
   return { coverage, previewToken: hash([payment.id, charge.amountMinor, payment.method, snapshotMembership(person), coverage, review?.reviewRevision ?? 0, philippineDate(at)]) };
 }
 export async function paymentReviewPreview(id: string) {
@@ -149,7 +157,8 @@ export async function paymentReviewPreview(id: string) {
   const person = ((await db.doc(`persons/${payment.personId}`).get()).data() ?? (await db.doc(`unverifiedPersons/${payment.personId}`).get()).data()) as Person | undefined;
   if (!charge || !person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
   const review = payment.receiptId ? (await db.doc(`receiptReviews/${payment.receiptId}`).get()).data() : undefined;
-  return { ...approvalPreview(payment, charge, person, review, Date.now()), membershipChanged: payment.status === "pending" && charge.kind !== "daily_session" && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person)),
+  const preview = approvalPreview(payment, charge, person, review, Date.now());
+  return { ...preview, membershipChanged: payment.status === "pending" && preview.coverage !== null && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person)),
     payment, charge, customer: { id: payment.personId, name: person.name, rateCategory: person.rateCategory }, receiptReview: review ?? null };
 }
 export async function decidePayment(actorId: string, body: Record<string, unknown>) {
@@ -169,11 +178,14 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     if (payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "payment-amount-conflict");
     const personRef = db.doc(`persons/${payment.personId}`), person = (await tx.get(personRef)).data() as Person | undefined;
     const pending = !person ? (await tx.get(db.doc(`unverifiedPersons/${payment.personId}`))).data() as Person | undefined : undefined;
-    if (!(person ?? pending) || (person ?? pending)!.deletingAt || (charge.kind !== "daily_session" && !person)) throw new ApiError(409, "verified-profile-required");
+    const customer = person ?? pending;
+    if (!customer || customer.deletingAt) throw new ApiError(409, "verified-profile-required");
     const receiptReview = payment.receiptId ? (await tx.get(db.doc(`receiptReviews/${payment.receiptId}`))).data() : undefined;
-    const now = Date.now(), preview = approvalPreview(payment, charge, (person ?? pending)!, receiptReview, now);
+    const now = Date.now(), preview = approvalPreview(payment, charge, customer, receiptReview, now);
+    // Only a product that grants membership coverage writes to the verified profile.
+    if (preview.coverage && !person) throw new ApiError(409, "verified-profile-required");
     if (body.previewToken !== preview.previewToken) throw new ApiError(409, "payment-review-changed");
-    const changed = charge.kind !== "daily_session" && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person!));
+    const changed = preview.coverage !== null && hash(payment.membershipSnapshot) !== hash(snapshotMembership(person!));
     if (body.decision === "approve" && changed && body.acknowledgeMembershipChange !== true) throw new ApiError(409, "membership-review-required");
     let reference: Awaited<ReturnType<typeof prepareReferenceClaim>> | null = null;
     if (body.decision === "approve" && payment.method !== "cash") {
