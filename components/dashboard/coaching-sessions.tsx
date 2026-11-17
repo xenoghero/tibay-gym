@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth/auth-context";
 import styles from "./settings.module.css";
 
 interface Mark { id: string; date: string; outcome: "done" | "no_show"; note: string | null; coachName: string }
-interface PackageSummary { id: string; status: string; sessions: number; sessionsLeft: number; coachingExpiresAt: number | null }
+interface Holding { id: string; topUp: boolean; sessions: number; sessionsLeft: number; coachingExpiresAt: number | null }
+interface PackageSummary { sessionsLeft: number; holdings: Holding[] }
 const errors: Record<string, string> = { "adjustment-reason-required": "Enter a reason for the adjustment.", "no-sessions-left": "The client has no sessions left to use.",
   "coaching-expired": "The client's coaching validity has ended.", "invalid-sessions-left": "Enter a whole number of sessions, 0 or more." };
 
@@ -25,7 +26,7 @@ function useAdminFetch() {
 export function ClientSessions({ personId, name, onClose }: { personId: string; name: string; onClose(): void }) {
   const call = useAdminFetch();
   const [data, setData] = useState<{ history: Mark[]; package: PackageSummary | null } | null>(null), [reload, setReload] = useState(0);
-  const [left, setLeft] = useState(""), [reason, setReason] = useState("");
+  const [left, setLeft] = useState(""), [reason, setReason] = useState(""), [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
   useEffect(() => {
     let active = true;
@@ -42,18 +43,20 @@ export function ClientSessions({ personId, name, onClose }: { personId: string; 
   }
   return <section className={styles.editor} aria-labelledby="client-sessions-title" style={{ marginTop: 24 }}>
     <div className={styles.head}><div><h2 id="client-sessions-title">{name}: sessions</h2>
-      {data?.package && <p className={styles.sub}>{data.package.sessionsLeft} of {data.package.sessions} sessions left</p>}</div>
+      {data?.package && <p className={styles.sub}>{data.package.sessionsLeft} sessions left in total</p>}</div>
       <button type="button" onClick={onClose}>Close</button></div>
     <p className={styles.error} role="alert">{error}</p>
     {message && <p className={styles.message} role="status">{message}</p>}
-    {data?.package && <fieldset disabled={busy}>
+    {data?.package && data.package.holdings.length > 0 && <fieldset disabled={busy}>
       <legend>Session adjustment</legend>
       <div className={styles.fields}>
-        <label>Sessions left<input inputMode="numeric" value={left} placeholder={String(data.package.sessionsLeft)} onChange={e => setLeft(e.target.value)} /></label>
+        <label>Sessions to adjust<select value={target || data.package.holdings[0].id} onChange={e => setTarget(e.target.value)}>
+          {data.package.holdings.map(row => <option key={row.id} value={row.id}>{row.topUp ? "Session top-ups" : "Coaching package"} · {row.sessionsLeft} left</option>)}</select></label>
+        <label>Sessions left<input inputMode="numeric" value={left} onChange={e => setLeft(e.target.value)} /></label>
         <label>Reason<input maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></label>
       </div>
       <div className={styles.actions} style={{ marginTop: 12 }}><button type="button" className={styles.primary} disabled={!left.trim() || !reason.trim()}
-        onClick={() => void act({ action: "adjust", packageRecordId: data.package!.id, sessionsLeft: Number(left), reason }, "Session adjustment saved.").then(() => { setLeft(""); setReason(""); })}>Save adjustment</button></div>
+        onClick={() => void act({ action: "adjust", packageRecordId: target || data.package!.holdings[0].id, sessionsLeft: Number(left), reason }, "Session adjustment saved.").then(() => { setLeft(""); setReason(""); })}>Save adjustment</button></div>
     </fieldset>}
     {!data ? <div className={styles.skeleton} aria-label="Loading sessions" /> : !data.history.length ? <div className={styles.empty}><p>No sessions recorded yet.</p></div> :
       <table className={styles.table}><thead><tr><th scope="col">Date</th><th scope="col">Outcome</th><th scope="col">Coach</th><th scope="col" aria-label="Actions" /></tr></thead>

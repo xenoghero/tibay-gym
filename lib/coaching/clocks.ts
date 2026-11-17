@@ -24,10 +24,16 @@ export const coachingExpiryMs = (startedAt: number, validityDays: number, daysFr
 /** One month of Monthly membership from the later of Package start and the current membership expiry. */
 export const membershipMonth = (membership: MembershipSnapshot, startedAt: number) => membershipCoverage(membership, startedAt, 1);
 
-/** The package a client is using now (approved or active), with its effective status. */
+/**
+ * What a client has to use now. `record` is where the next Coaching session comes from: whatever expires soonest,
+ * the package before top-ups on equal expiry. `sessionsLeft` counts every usable package and top-up holding.
+ */
 export function currentPackage(records: ClientPackage[], now: number) {
-  const record = records.filter(row => row.status === "approved" || row.status === "active").sort((a, b) => b.submittedAt - a.submittedAt)[0];
-  return record ? { record, ...packageState(record, now) } : null;
+  const candidates = records.filter(row => row.status === "approved" || row.status === "active").map(record => ({ record, ...packageState(record, now) }));
+  const usable = candidates.filter(row => (row.status === "approved" || row.status === "active") && row.sessionsLeft > 0)
+    .sort((a, b) => (a.record.coachingExpiresAt ?? Infinity) - (b.record.coachingExpiresAt ?? Infinity) || Number(!!a.record.topUp) - Number(!!b.record.topUp));
+  const shown = usable[0] ?? candidates.filter(row => !row.record.topUp).sort((a, b) => b.record.submittedAt - a.record.submittedAt)[0] ?? candidates[0];
+  return shown ? { ...shown, sessionsLeft: usable.reduce((sum, row) => sum + row.sessionsLeft, 0), holdings: usable } : null;
 }
 
 /** Effective status: unused sessions expire with the coaching validity. */

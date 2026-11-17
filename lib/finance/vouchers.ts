@@ -81,7 +81,7 @@ export function validateVoucher(body: Record<string, unknown>) {
   const discountKind = body.discountKind as Voucher["discountKind"];
   const value = integer(body.value, discountKind === "percent" ? 10000 : 100_000_000);
   const kinds = body.kinds, categories = body.categories;
-  if (!Array.isArray(kinds) || !kinds.length || kinds.some(k => !["daily_session", "renewal", "new_membership", "coaching_package"].includes(k))) fail();
+  if (!Array.isArray(kinds) || !kinds.length || kinds.some(k => !["daily_session", "renewal", "new_membership", "coaching_package", "session_topup"].includes(k))) fail();
   if (!Array.isArray(categories) || !categories.length || categories.some(c => !["student", "regular"].includes(c))) fail();
   const startsAt = nullable(body.startsAt, 8_640_000_000_000_000), endsAt = nullable(body.endsAt, 8_640_000_000_000_000);
   if (startsAt !== null && endsAt !== null && endsAt <= startsAt) fail();

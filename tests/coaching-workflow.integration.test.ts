@@ -12,7 +12,7 @@ import { customerCoaching, getCoachingSettings, saveCoachingSettings } from "@/l
 import { financeReport } from "@/lib/server/finance-report";
 import { POST as scan } from "@/app/api/attendance/scan/route";
 import { adjustSessions, fixMark, markSession, monthlyCoachCounts, sessionHistory, undoMark } from "@/lib/server/session-marks";
-import { assignCoach } from "@/lib/server/coach-clients";
+import { assignCoach, coachAssignments } from "@/lib/server/coach-clients";
 import { POST as signup } from "@/app/api/coaching/signup/route";
 import { GET as purchaseQuote, POST as purchaseSubmit } from "@/app/api/customer/purchase/route";
 import { GET as customerPayments } from "@/app/api/customer/payments/route";
@@ -284,4 +284,63 @@ it("refuses a phone that already has a profile without changing it, and validate
     expect([response.status, (await response.json()).error]).toEqual([400, `signup-invalid-${field}`]);
   }
   expect(rows("unverifiedPersons")).toHaveLength(0);
+});
+
+async function buyTopUps(personId: string, count: number, extra: Record<string, unknown> = {}) {
+  const quote = await getPurchaseQuote(personId, undefined, extra.voucherCode as string | undefined, undefined, undefined, count);
+  const result = await submitPurchase(`customer:${personId}`, personId, { method: "cash", topUpSessions: count, quoteToken: quote.quoteToken, operationId: `topup-operation-${++sequence}-0000`, ...extra });
+  return { quote, ...result };
+}
+
+it("adds top-ups to an active package, sharing its coaching expiry, and uses them after the package's own sessions", async () => {
+  const bought = await coachedClient("pkg-4");
+  await checkIn("p1", "topup-package-visit-001");
+  const topUps = await buyTopUps("p1", 3);
+  expect(topUps.quote).toMatchObject({ kind: "session_topup", amountMinor: 75000, quantity: 3, unitRateMinor: 25000, coverage: null });
+  await decide(topUps.id);
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessions: 4, topUpSessions: 3, coachingExpiresAt: Date.parse("2026-11-23T16:00:00Z") });
+  expect(state.store!.data.has(`coachingPackages/${topUps.chargeId}`)).toBe(false);
+  expect(await customerCoaching("p1")).toMatchObject({ sessionsLeft: 7 });
+  for (let i = 0; i < 7; i++) await mark("ana");
+  await expect(mark("ana")).rejects.toMatchObject({ code: "no-sessions-left" });
+  const report = await financeReport(new URLSearchParams({ date: "2026-11-17" }));
+  expect(report.totals).toMatchObject({ sessionTopUpMinor: 75000, coachingPackageMinor: 75000, newMembershipMinor: 0 });
+});
+
+it("keeps standalone top-ups for 30 days, coaching only, without blocking a package, and uses the soonest-expiring first", async () => {
+  state.store!.data.set("coaches/ana", { name: "Ana", email: "ana@example.com", active: true, createdAt: NOW, deactivatedAt: null });
+  const topUps = await buyTopUps("p1", 2);
+  await decide(topUps.id);
+  expect(state.store!.data.get(`coachingPackages/${topUps.chargeId}`)).toMatchObject({ topUp: true, status: "active", sessions: 2, coachingExpiresAt: Date.parse("2026-12-16T16:00:00Z") });
+  // Top-up-only clients wait for a coach like everyone else.
+  expect((await coachAssignments()).unassigned.map(row => row.id)).toEqual(["p1"]);
+  await assignCoach("admin", { personId: "p1", coachId: "ana" });
+  // Top-ups never grant gym access.
+  const looked = await (await lookup(post({ phone: "09123456789" }))).json();
+  expect(looked.paymentDue).toMatchObject({ amountMinor: 6000 });
+  expect(state.store!.data.get("persons/p1")).toMatchObject({ type: "guest" });
+  // A package can still be bought; its sessions run longer, so the top-ups are used first.
+  const bought = await buy("p1", "pkg-16");
+  await decide(bought.id);
+  await mark("ana");
+  expect(state.store!.data.get(`coachingPackages/${topUps.chargeId}`)).toMatchObject({ sessionsUsed: 1 });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ status: "active", sessionsUsed: 0 });
+  await mark("ana"); await mark("ana");
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 1 });
+  // The admin adjusts the top-up holding on its own.
+  await adjustSessions("admin", { packageRecordId: topUps.chargeId, sessionsLeft: 1, reason: "Goodwill session" });
+  expect(await customerCoaching("p1")).toMatchObject({ sessionsLeft: 16 });
+});
+
+it("lets vouchers target top-ups and audits top-up settings", async () => {
+  state.store!.data.set("vouchers/voucher-1", { ...voucherFixture({ kinds: ["session_topup"] }) });
+  state.store!.data.set("voucherCodeClaims/TRAIN10", { voucherId: "voucher-1" });
+  await expect(getPurchaseQuote("p1", undefined, "TRAIN10", undefined, "pkg-4")).rejects.toMatchObject({ code: "voucher-scope" });
+  const discounted = await buyTopUps("p1", 4, { voucherCode: "TRAIN10" });
+  expect(discounted.quote).toMatchObject({ baseAmountMinor: 100000, amountMinor: 90000 });
+  const settings = await getCoachingSettings();
+  await saveCoachingSettings("admin", { revision: settings.revision, packages: settings.packages, topUpPriceMinor: 30000, topUpValidityDays: 21 });
+  expect(rows("auditEvents").find(event => event.action === "coaching-catalog-update")).toMatchObject({ reason: "top-ups: PHP 250/session, 30 days -> PHP 300/session, 21 days" });
+  expect((await getPurchaseQuote("p2", undefined, undefined, undefined, undefined, 2)).amountMinor).toBe(60000);
+  await expect(getPurchaseQuote("p2", undefined, undefined, undefined, undefined, 0)).rejects.toMatchObject({ code: "invalid-top-up-sessions" });
 });

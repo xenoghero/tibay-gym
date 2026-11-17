@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PortalHeader } from "./portal-header";
 import { PurchaseForm } from "@/components/people/purchase-form";
+import { TopUpPicker } from "./coaching-panel";
 import { TIME_SLOTS, WEEKDAYS, type CoachingPackage } from "@/lib/coaching/catalog";
 import { philippineDate } from "@/lib/finance/rules";
 import portal from "./customer-access.module.css";
@@ -39,10 +40,11 @@ export function CoachingSignup() {
   const [operationId] = useState(() => crypto.randomUUID()), [today] = useState(() => philippineDate(Date.now()));
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [registered, setRegistered] = useState(false), [taken, setTaken] = useState(false);
   const [packages, setPackages] = useState<CoachingPackage[] | null>(null), [chosen, setChosen] = useState<CoachingPackage | null>(null);
+  const [topUpPriceMinor, setTopUpPriceMinor] = useState(0), [topUpCount, setTopUpCount] = useState(1), [buyingTopUps, setBuyingTopUps] = useState(false);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => { setForm(current => ({ ...current, [key]: value })); setErrors(current => ({ ...current, [key]: undefined })); };
   useEffect(() => {
     if (!registered) return;
-    fetch("/api/customer/coaching").then(async response => { if (!response.ok) throw new Error(); setPackages((await response.json()).packages); })
+    fetch("/api/customer/coaching").then(async response => { if (!response.ok) throw new Error(); const data = await response.json(); setPackages(data.packages); setTopUpPriceMinor(data.topUpPriceMinor); })
       .catch(() => setError("Could not load the coaching packages. Refresh to try again."));
   }, [registered]);
 
@@ -102,12 +104,20 @@ export function CoachingSignup() {
         <Link href="/customer" className={portal.secondaryButton}>Open members portal</Link></div>}
       {error && <p className={portal.error} role="alert">{error}</p>}
       <button type="submit" className={portal.primaryButton} disabled={busy}>{busy ? "Saving your details…" : "Continue to packages"}<span aria-hidden="true">→</span></button>
-    </form> : !chosen ? <section className={portal.paymentPanel} aria-labelledby="signup-packages">
+    </form> : buyingTopUps ? <div className={portal.purchasePanel}>
+      <p className={styles.lead}>{topUpCount} session top-up{topUpCount === 1 ? "" : "s"} · coaching only <button type="button" className={portal.textButton} onClick={() => setBuyingTopUps(false)}>Change</button></p>
+      <PurchaseForm portal heading="Pay for your session top-ups" key={`topups-${topUpCount}`} topUpSessions={topUpCount} onSubmitted={() => router.push("/members#coaching")} />
+    </div> : !chosen ? <section className={portal.paymentPanel} aria-labelledby="signup-packages">
       <div className={portal.sectionHeading}><h2 id="signup-packages">Choose a package</h2></div>
       {!packages && !error && <p className={styles.lead}>Loading packages…</p>}
       {error && <p className={portal.error} role="alert">{error}</p>}
       <ul className={styles.packages}>{packages?.map(item => <li key={item.id}><button type="button" onClick={() => setChosen(item)}>
         <strong>{money(item.priceMinor)}</strong><span>{item.sessions} sessions</span><small>Valid {item.validityDays} days · includes 1 month gym membership</small></button></li>)}</ul>
+      {packages && topUpPriceMinor > 0 && <div style={{ marginTop: 24 }}>
+        <h3 className={styles.subhead}>Or try coaching with session top-ups</h3>
+        <TopUpPicker count={topUpCount} onCount={setTopUpCount} priceMinor={topUpPriceMinor} />
+        <button type="button" className={portal.secondaryButton} style={{ marginTop: 12 }} onClick={() => setBuyingTopUps(true)}>Buy {topUpCount} top-up{topUpCount === 1 ? "" : "s"} · {money(topUpCount * topUpPriceMinor)}</button>
+      </div>}
     </section> : <div className={portal.purchasePanel}>
       <p className={styles.lead}>{chosen.sessions} coaching sessions · valid {chosen.validityDays} days <button type="button" className={portal.textButton} onClick={() => setChosen(null)}>Change</button></p>
       <PurchaseForm portal heading="Pay for your coaching package" key={chosen.id} packageId={chosen.id} onSubmitted={() => router.push("/members#coaching")} />

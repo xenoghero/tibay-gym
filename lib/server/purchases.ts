@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
 import type { Charge, ChargeKind, Coverage, GymSettings, PaymentRequest, RateSnapshot } from "@/lib/finance/contracts";
 import { snapshotRate, operationId, philippineDate, membershipMonths, rateCategory } from "@/lib/finance/rules";
-import type { ClientPackage, CoachingSettings } from "@/lib/coaching/catalog";
+import { MAX_TOP_UP_SESSIONS, type ClientPackage, type CoachingSettings } from "@/lib/coaching/catalog";
+import { addManilaDays, currentPackage } from "@/lib/coaching/clocks";
 import { assertNoActivePackage, coachingSettings, getCoachingSettings } from "./coaching";
 import { membershipCoverage, snapshotMembership, coverageExpiryMs, type MembershipSnapshot } from "@/lib/finance/coverage";
 import { adminDb } from "./firebase-admin";
@@ -26,6 +27,8 @@ export interface PurchaseQuote {
   baseAmountMinor?: number; discountAmountMinor?: number; voucherSnapshot?: DiscountQuote["voucherSnapshot"];
   kind: Charge["kind"]; amountMinor: number; categorySnapshot: string; rateRevision: number;
   coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null; coachingPackage?: Charge["coachingPackage"];
+  /** Session top-ups only: how many and the per-session price. */
+  quantity?: number; unitRateMinor?: number;
 }
 /** What a purchase buys, its price, and the membership coverage approving it applies (null: none). New products plug in here. */
 export interface PurchaseProduct { kind: ChargeKind; price: RateSnapshot; coverage(membership: MembershipSnapshot, at: number): Coverage | null; coachingPackage?: Charge["coachingPackage"] }
@@ -46,6 +49,15 @@ function membershipProduct(settings: GymSettings, person: Person, months: number
   try { return { kind, price: snapshotRate(settings, person.rateCategory, kind, months), coverage: coverageFor(kind, months) }; }
   catch { throw new ApiError(409, "monthly-price-or-category-unset"); }
 }
+/** Session top-ups: any quantity at one per-session price; coaching only, never gym access. */
+export function topUpProduct(catalog: CoachingSettings, person: Record<string, unknown>, quantity: unknown): PurchaseProduct {
+  if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_TOP_UP_SESSIONS) throw new ApiError(400, "invalid-top-up-sessions");
+  const category = rateCategory(person.rateCategory);
+  if (!category) throw new ApiError(409, "category-required");
+  return { kind: "session_topup", coverage: () => null,
+    price: { categorySnapshot: category, rateRevision: catalog.revision, unitRateMinor: catalog.topUpPriceMinor, quantity, amountMinor: catalog.topUpPriceMinor * quantity } };
+}
+const isCoaching = (kind: ChargeKind) => kind === "coaching_package" || kind === "session_topup";
 /** The product a saved charge bought, for replacements and approval. */
 const chargeProduct = (charge: Charge): PurchaseProduct => ({ kind: charge.kind, price: charge, coverage: coverageFor(charge.kind, charge.quantity),
   ...(charge.coachingPackage ? { coachingPackage: charge.coachingPackage } : {}) });
@@ -53,13 +65,14 @@ function quoteFor(person: Person, product: PurchaseProduct, at: number, previous
   const { kind, price: snapshot } = product, coverage = product.coverage(snapshotMembership(person), at);
   const fields = { kind, amountMinor: discount?.amountMinor ?? snapshot.amountMinor, categorySnapshot: snapshot.categorySnapshot,
     ...(previous ? { baseAmountMinor: previous.charge.baseAmountMinor ?? snapshot.amountMinor, discountAmountMinor: previous.charge.discountAmountMinor ?? 0, voucherSnapshot: previous.charge.voucherSnapshot ?? null } : discount ? { baseAmountMinor: discount.baseAmountMinor, discountAmountMinor: discount.discountAmountMinor, voucherSnapshot: discount.voucherSnapshot } : {}),
-    rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null, ...(product.coachingPackage ? { coachingPackage: product.coachingPackage } : {}) };
+    rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null, ...(product.coachingPackage ? { coachingPackage: product.coachingPackage } : {}),
+    ...(kind === "session_topup" ? { quantity: snapshot.quantity, unitRateMinor: snapshot.unitRateMinor } : {}) };
   return { ...fields, quoteToken: hash([quoteOwner, fields, snapshotMembership(person), philippineDate(at)]) };
 }
 function purchaseMonths(value: unknown) {
   try { return membershipMonths(value); } catch { throw new ApiError(400, "invalid-membership-months"); }
 }
-export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number, packageId?: string) {
+export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number, packageId?: string, topUpSessions?: number) {
   const duration = purchaseMonths(months);
   const db = adminDb(), official = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
   // Unverified profiles (from the Coaching sign-up link) may buy coaching only.
@@ -77,8 +90,9 @@ export async function getPurchaseQuote(personId: string, previousRequestId?: str
   }
   if (previous && voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   if (previous && months !== undefined && months !== previous.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const product = previous ? chargeProduct(previous.charge) : packageId !== undefined ? coachingProduct(await getCoachingSettings(), person, packageId) : membershipProduct(settings, person, duration);
-  if (!official && product.kind !== "coaching_package") throw new ApiError(409, "verified-profile-required");
+  const product = previous ? chargeProduct(previous.charge) : packageId !== undefined ? coachingProduct(await getCoachingSettings(), person, packageId)
+    : topUpSessions !== undefined ? topUpProduct(await getCoachingSettings(), person, topUpSessions) : membershipProduct(settings, person, duration);
+  if (!official && !isCoaching(product.kind)) throw new ApiError(409, "verified-profile-required");
   if (product.kind === "coaching_package") await assertNoActivePackage(personId, previous?.charge.id);
   const basic = quoteFor(person, product, Date.now(), previous, undefined, personId);
   const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId, kind: basic.kind,
@@ -111,8 +125,9 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   }
   const months = purchaseMonths(body.months);
   if (prior && body.months !== undefined && months !== prior.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const product = prior ? chargeProduct(prior.charge) : body.packageId !== undefined
-    ? coachingProduct(coachingSettings((await tx.get(db.doc("gymSettings/coaching"))).data()), person, body.packageId) : membershipProduct(settings, person, months);
+  const catalog = !prior && (body.packageId !== undefined || body.topUpSessions !== undefined) ? coachingSettings((await tx.get(db.doc("gymSettings/coaching"))).data()) : null;
+  const product = prior ? chargeProduct(prior.charge) : body.packageId !== undefined ? coachingProduct(catalog!, person, body.packageId)
+    : body.topUpSessions !== undefined ? topUpProduct(catalog!, person, body.topUpSessions) : membershipProduct(settings, person, months);
   const coaching = product.kind === "coaching_package", packageRef = db.doc(`coachingPackages/${prior?.charge.id ?? purchaseChargeId(personId, operation)}`);
   // A per-client lock document serializes concurrent package submissions for the one-active-package rule.
   const coachingLock = db.doc(`coachingPurchaseState/${personId}`);
@@ -176,7 +191,7 @@ export async function submitPurchase(actorId: string, personId: string, body: Re
     const person = official ?? (await tx.get(db.doc(`unverifiedPersons/${personId}`))).data() as Person | undefined;
     if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
     const staged = await preparePurchase(tx, db, actorId, personId, person, body);
-    if (!official && staged.kind !== "coaching_package") throw new ApiError(409, "verified-profile-required");
+    if (!official && !isCoaching(staged.kind)) throw new ApiError(409, "verified-profile-required");
     staged.commit(); tx.set(operationRef, { digest, result: staged.result }); return staged.result;
   });
 }
@@ -212,6 +227,7 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     if (payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "payment-amount-conflict");
     const packageRef = charge.kind === "coaching_package" ? db.doc(`coachingPackages/${charge.id}`) : null;
     if (packageRef && !(await tx.get(packageRef)).data()) throw new ApiError(409, "charge-review-changed");
+    const topUp = charge.kind === "session_topup" && body.decision === "approve" ? await prepareTopUpHolding(tx, db, charge) : null;
     const personRef = db.doc(`persons/${payment.personId}`), person = (await tx.get(personRef)).data() as Person | undefined;
     const pending = !person ? (await tx.get(db.doc(`unverifiedPersons/${payment.personId}`))).data() as Person | undefined : undefined;
     const customer = person ?? pending;
@@ -234,6 +250,7 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     const approved = body.decision === "approve";
     const settleVoucher = approved ? await prepareVoucherSettlement(tx, db, charge, "confirmed", actorId, now) : null;
     if (packageRef) tx.update(packageRef, approved ? { status: "approved", approvedAt: now } : { status: "rejected" });
+    if (approved) topUp?.(now);
     tx.update(paymentRef, { status: approved ? "approved" : "rejected", reviewedBy: actorId, reviewedAt: now, rejectionReason: approved ? null : reason,
       confirmedAt: approved ? now : null, appliedCoverage: approved ? preview.coverage : null, gcashReferenceSnapshot: reference?.normalizedReference ?? null });
     if (approved) {
@@ -257,12 +274,33 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
   return decided;
 }
 
+/**
+ * Reads, then returns the write that places approved top-ups: on the client's current package (sharing its coaching
+ * expiry, Freeze extensions included), or else as a standalone holding that expires after the top-up validity.
+ */
+async function prepareTopUpHolding(tx: Transaction, db: Firestore, charge: Charge) {
+  const records = (await tx.get(db.collection("coachingPackages").where("personId", "==", charge.personId))).docs.map(row => row.data() as ClientPackage);
+  const catalog = coachingSettings((await tx.get(db.doc("gymSettings/coaching"))).data());
+  return (now: number) => {
+    // Only an active (started, unexpired) package takes top-ups; otherwise they stand alone.
+    const current = currentPackage(records.filter(row => !row.topUp), now);
+    if (current?.status === "active") {
+      tx.update(db.doc(`coachingPackages/${current.record.id}`), { topUpSessions: current.record.topUpSessions + charge.quantity });
+      return;
+    }
+    tx.set(db.doc(`coachingPackages/${charge.id}`), { id: charge.id, personId: charge.personId, chargeId: charge.id, paymentRequestId: charge.confirmedPaymentRequestId ?? charge.activePaymentRequestId ?? "",
+      packageId: "top-up", priceMinor: charge.unitRateMinor, sessions: charge.quantity, validityDays: catalog.topUpValidityDays, status: "active", topUp: true,
+      submittedAt: charge.createdAt, approvedAt: now, startedAt: now, sessionsUsed: 0, topUpSessions: 0,
+      coachingExpiresAt: Date.parse(`${addManilaDays(philippineDate(now), catalog.topUpValidityDays)}T00:00:00+08:00`) } satisfies ClientPackage);
+  };
+}
+
 /** Approving the first coaching payment of an unverified profile also verifies it, using the existing approval. */
 async function verifyCoachingBuyer(actorId: string, paymentRequestId: string) {
   const db = adminDb(), payment = (await db.doc(`paymentRequests/${paymentRequestId}`).get()).data() as PaymentRequest | undefined;
   if (!payment || payment.status !== "approved") return;
   const charge = (await db.doc(`charges/${payment.chargeId}`).get()).data() as Charge | undefined;
-  if (charge?.kind !== "coaching_package" || (await db.doc(`persons/${payment.personId}`).get()).exists) return;
+  if (!charge || !isCoaching(charge.kind) || (await db.doc(`persons/${payment.personId}`).get()).exists) return;
   if ((await db.doc(`unverifiedPersons/${payment.personId}`).get()).exists) await approveUnverified(payment.personId, actorId);
 }
 

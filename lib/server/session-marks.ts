@@ -39,10 +39,12 @@ async function clientPackages(tx: Transaction, db: Firestore, personId: string) 
 async function prepareUse(tx: Transaction, db: Firestore, personId: string, now: number, actorId: string) {
   const person = (await tx.get(db.doc(`persons/${personId}`))).data();
   if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable");
-  const current = currentPackage(await clientPackages(tx, db, personId), now);
-  const start = current?.status === "approved" ? await prepareStartPackage(tx, db, personId, person, now, { actorId }) : null;
-  if (current?.status === "expired" || (start && now >= start.coachingExpiresAt)) throw new ApiError(409, "coaching-expired");
-  if (!current || current.status === "used_up" || current.sessionsLeft <= 0 || (current.status === "approved" && !start)) throw new ApiError(409, "no-sessions-left");
+  const records = await clientPackages(tx, db, personId);
+  // The first Coaching session starts an approved package, even when the session itself comes from earlier-expiring top-ups.
+  const start = records.some(row => row.status === "approved" && !row.topUp) ? await prepareStartPackage(tx, db, personId, person, now, { actorId }) : null;
+  const current = currentPackage(records.map(row => start && row.id === start.record.id ? { ...row, status: "active" as const, startedAt: start.startedAt, coachingExpiresAt: start.coachingExpiresAt } : row), now);
+  if (current?.status === "expired") throw new ApiError(409, "coaching-expired");
+  if (!current || current.sessionsLeft <= 0) throw new ApiError(409, "no-sessions-left");
   return { packageRecordId: current.record.id, commit() {
     start?.commit();
     tx.update(db.doc(`coachingPackages/${current.record.id}`), { sessionsUsed: current.record.sessionsUsed + 1 });

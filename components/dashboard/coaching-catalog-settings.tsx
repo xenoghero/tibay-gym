@@ -12,11 +12,14 @@ const messages: Record<string, string> = {
   "settings-changed": "The catalog changed in another session. Reload before saving.",
   "coaching-package-delete-forbidden": "Packages can't be deleted. Hide them instead.",
   "invalid-coaching-packages": "Check each package: price, sessions and validity days must be positive whole numbers.",
+  "invalid-top-up-settings": "Enter a positive top-up price and a validity of 1 to 366 days.",
 };
 
 export function CoachingCatalogSettings() {
   const { user } = useAuth();
   const [saved, setSaved] = useState<CoachingSettings | null>(null), [rows, setRows] = useState<Row[]>([]);
+  const [topUp, setTopUp] = useState({ price: "", days: "" });
+  const loadTopUp = (data: CoachingSettings) => setTopUp({ price: String(data.topUpPriceMinor / 100), days: String(data.topUpValidityDays) });
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState(""), [reload, setReload] = useState(0);
   useEffect(() => {
     if (!user) return;
@@ -25,7 +28,7 @@ export function CoachingCatalogSettings() {
       .then(async response => {
         if (!response.ok) throw new Error();
         const data: CoachingSettings = await response.json();
-        if (active) { setSaved(data); setRows(data.packages.map(toRow)); setError(""); }
+        if (active) { setSaved(data); setRows(data.packages.map(toRow)); loadTopUp(data); setError(""); }
       }).catch(() => { if (active) setError("Could not load the coaching catalog. Reload to try again."); });
     return () => { active = false; };
   }, [user, reload]);
@@ -37,10 +40,10 @@ export function CoachingCatalogSettings() {
     try {
       const packages = rows.map(row => ({ id: row.id, priceMinor: parsePesoInput(row.price) ?? 0, sessions: Number(row.sessions), validityDays: Number(row.validityDays), visible: row.visible }));
       const response = await fetch("/api/admin/coaching", { method: "POST", signal: AbortSignal.timeout(20_000),
-        headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ revision: saved.revision, packages }) });
+        headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ revision: saved.revision, packages, topUpPriceMinor: parsePesoInput(topUp.price) ?? 0, topUpValidityDays: Number(topUp.days) }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(messages[result.error] ?? "Could not confirm the change. Reload to check the saved catalog.");
-      setSaved(result); setRows(result.packages.map(toRow)); setMessage("Coaching catalog saved. Changes apply to new purchases only.");
+      setSaved(result); setRows(result.packages.map(toRow)); loadTopUp(result); setMessage("Coaching catalog saved. Changes apply to new purchases only.");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not save the catalog."); }
     finally { setBusy(false); }
   }
@@ -67,10 +70,14 @@ export function CoachingCatalogSettings() {
           <td><input type="checkbox" aria-label={`Show package ${i + 1} to customers`} checked={row.visible} onChange={e => update(i, { visible: e.target.checked })} /></td>
         </tr>)}</tbody>
       </table>
+      <div className={styles.fields} style={{ marginTop: 20 }}>
+        <label>Session top-up price per session (₱)<input inputMode="decimal" value={topUp.price} onChange={e => setTopUp({ ...topUp, price: e.target.value })} /><small>Top-ups pay for coaching only, never gym access.</small></label>
+        <label>Top-up validity without a package (days)<input inputMode="numeric" value={topUp.days} onChange={e => setTopUp({ ...topUp, days: e.target.value })} /><small>Top-ups bought with a package follow that package&apos;s coaching expiry.</small></label>
+      </div>
       <div className={styles.footer}>
         <button type="button" onClick={add}>Add package</button>
         <div className={styles.actions}>
-          <button type="button" onClick={() => { setRows(saved.packages.map(toRow)); setError(""); }}>Discard changes</button>
+          <button type="button" onClick={() => { setRows(saved.packages.map(toRow)); loadTopUp(saved); setError(""); }}>Discard changes</button>
           <button type="button" className={styles.primary} onClick={() => void save()}>{busy ? "Saving…" : "Save catalog"}</button>
         </div>
       </div>

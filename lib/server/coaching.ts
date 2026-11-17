@@ -1,14 +1,15 @@
 import "server-only";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
-import { autoStartDeadline, coachingExpiryMs, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
+import { autoStartDeadline, coachingExpiryMs, currentPackage, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
 import { coverageExpiryMs, snapshotMembership } from "@/lib/finance/coverage";
-import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, type ClientPackage, type CoachingPackage, type CoachingSettings } from "@/lib/coaching/catalog";
+import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, validateTopUps, type ClientPackage, type CoachingPackage, type CoachingSettings } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
 import { appendAudit } from "./audit";
 import { coachNameFor } from "./coach-clients";
 
-export const coachingSettings = (data: unknown): CoachingSettings => (data as CoachingSettings | undefined) ?? { ...DEFAULT_COACHING, packages: [...DEFAULT_COACHING.packages] };
+// Saved settings from before top-ups existed take the top-up defaults.
+export const coachingSettings = (data: unknown): CoachingSettings => ({ ...DEFAULT_COACHING, packages: [...DEFAULT_COACHING.packages], ...(data as Partial<CoachingSettings> | undefined) });
 
 export async function getCoachingSettings() {
   return coachingSettings((await adminDb().doc("gymSettings/coaching").get()).data());
@@ -20,15 +21,18 @@ export async function saveCoachingSettings(actorId: string, body: Record<string,
   return db.runTransaction(async tx => {
     const current = coachingSettings((await tx.get(ref)).data());
     if (current.revision !== body.revision) throw new ApiError(409, "settings-changed");
-    let packages;
-    try { packages = validateCatalog(body.packages, current.packages); } catch (error) { throw new ApiError(400, (error as Error).message); }
-    const now = Date.now(), next: CoachingSettings = { packages, revision: current.revision + 1, updatedAt: now, updatedBy: actorId };
+    let packages, topUps;
+    try { packages = validateCatalog(body.packages, current.packages); topUps = validateTopUps({ topUpPriceMinor: body.topUpPriceMinor ?? current.topUpPriceMinor, topUpValidityDays: body.topUpValidityDays ?? current.topUpValidityDays }); }
+    catch (error) { throw new ApiError(400, (error as Error).message); }
+    const now = Date.now(), next: CoachingSettings = { packages, ...topUps, revision: current.revision + 1, updatedAt: now, updatedBy: actorId };
+    const topUpChange = topUps.topUpPriceMinor !== current.topUpPriceMinor || topUps.topUpValidityDays !== current.topUpValidityDays
+      ? `top-ups: PHP ${current.topUpPriceMinor / 100}/session, ${current.topUpValidityDays} days -> PHP ${topUps.topUpPriceMinor / 100}/session, ${topUps.topUpValidityDays} days` : null;
     const changed = packages.filter(item => JSON.stringify(item) !== JSON.stringify(current.packages.find(old => old.id === item.id)));
     const describe = (item?: CoachingPackage) => item ? `PHP ${item.priceMinor / 100}, ${item.sessions} sessions, ${item.validityDays} days, ${item.visible ? "visible" : "hidden"}` : "new";
     tx.set(ref, next);
     appendAudit(tx, db, { actorId, action: "coaching-catalog-update", entityType: "settings", entityId: "coaching", personId: null,
       operationId: `coaching-settings-${next.revision}`, before: { revision: current.revision }, after: { revision: next.revision, changedFields: changed.map(item => item.id) }, occurredAt: now,
-      reason: changed.map(item => `${item.id}: ${describe(current.packages.find(old => old.id === item.id))} -> ${describe(item)}`).join("; ") || null });
+      reason: [...changed.map(item => `${item.id}: ${describe(current.packages.find(old => old.id === item.id))} -> ${describe(item)}`), ...(topUpChange ? [topUpChange] : [])].join("; ") || null });
     return next;
   });
 }
@@ -85,11 +89,10 @@ export async function startDuePackages(personId: string, now = Date.now()): Prom
 /** What the check-in screen shows: the client's current package, and whether this visit started it. */
 export async function checkinCoaching(personId: string, logId?: string) {
   const rows = await adminDb().collection("coachingPackages").where("personId", "==", personId).get(), now = Date.now();
-  const record = rows.docs.map(row => row.data() as ClientPackage).filter(row => row.status === "approved" || row.status === "active")
-    .sort((a, b) => b.submittedAt - a.submittedAt)[0];
-  if (!record) return null;
-  const { status, sessionsLeft } = packageState(record, now);
-  return { status, sessionsLeft, coachingExpiresAt: record.coachingExpiresAt, started: !!logId && record.startedByLogId === logId, coachName: await coachNameFor(personId) };
+  const records = rows.docs.map(row => row.data() as ClientPackage), current = currentPackage(records, now);
+  if (!current) return null;
+  return { status: current.status, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.record.coachingExpiresAt,
+    started: !!logId && records.some(row => row.startedByLogId === logId), coachName: await coachNameFor(personId) };
 }
 
 /** What the members portal shows: visible packages and the client's latest package. */
@@ -97,9 +100,13 @@ export async function customerCoaching(personId: string) {
   await startDuePackages(personId);
   const db = adminDb(), settings = await getCoachingSettings(), now = Date.now();
   const rows = await db.collection("coachingPackages").where("personId", "==", personId).get();
-  const records = rows.docs.map(row => row.data() as ClientPackage);
-  const latest = records.filter(row => row.status !== "closed").sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null;
+  const records = rows.docs.map(row => row.data() as ClientPackage), balance = currentPackage(records, now);
+  const latest = records.filter(row => row.status !== "closed" && !row.topUp).sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null;
   return { packages: settings.packages.filter(item => item.visible), canBuy: !records.some(record => blocksNewPackage(record, now)), coachName: await coachNameFor(personId),
-    current: latest && { ...packageState(latest, now), sessions: latest.sessions,
+    topUpPriceMinor: settings.topUpPriceMinor, topUpValidityDays: settings.topUpValidityDays,
+    // Every usable session, packages and top-ups together.
+    sessionsLeft: balance?.sessionsLeft ?? 0,
+    topUps: balance?.holdings.filter(row => row.record.topUp).map(row => ({ sessionsLeft: row.sessionsLeft, coachingExpiresAt: row.record.coachingExpiresAt })) ?? [],
+    current: latest && { ...packageState(latest, now), sessions: latest.sessions + latest.topUpSessions,
       validityDays: latest.validityDays, priceMinor: latest.priceMinor, approvedAt: latest.approvedAt, startedAt: latest.startedAt, coachingExpiresAt: latest.coachingExpiresAt } };
 }

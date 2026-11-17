@@ -2,7 +2,12 @@ import { packageState } from "./clocks";
 
 /** Coaching package catalog. One price for every Rate category; packages are hidden, never deleted. */
 export interface CoachingPackage { id: string; priceMinor: number; sessions: number; validityDays: number; visible: boolean }
-export interface CoachingSettings { packages: CoachingPackage[]; revision: number; updatedAt: number | null; updatedBy: string | null }
+export interface CoachingSettings {
+  packages: CoachingPackage[];
+  /** Session top-ups: one price per session, and the validity of top-ups bought without an active package. */
+  topUpPriceMinor: number; topUpValidityDays: number;
+  revision: number; updatedAt: number | null; updatedBy: string | null;
+}
 
 export const DEFAULT_COACHING: Readonly<CoachingSettings> = Object.freeze({
   packages: [
@@ -11,8 +16,15 @@ export const DEFAULT_COACHING: Readonly<CoachingSettings> = Object.freeze({
     { id: "pkg-12", priceMinor: 300_000, sessions: 12, validityDays: 40, visible: true },
     { id: "pkg-16", priceMinor: 370_000, sessions: 16, validityDays: 45, visible: true },
   ],
+  topUpPriceMinor: 25_000, topUpValidityDays: 30,
   revision: 0, updatedAt: null, updatedBy: null,
 });
+
+export function validateTopUps(input: Record<string, unknown>) {
+  if (!whole(input.topUpPriceMinor, 100_000_000) || !whole(input.topUpValidityDays, 366)) throw new Error("invalid-top-up-settings");
+  return { topUpPriceMinor: input.topUpPriceMinor as number, topUpValidityDays: input.topUpValidityDays as number };
+}
+export const MAX_TOP_UP_SESSIONS = 50;
 
 const whole = (value: unknown, max: number) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= max;
 
@@ -39,11 +51,13 @@ export interface ClientPackage {
   priceMinor: number; sessions: number; validityDays: number; status: PackageStatus;
   submittedAt: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null;
   sessionsUsed: number; topUpSessions: number;
+  /** A standalone Session top-up holding (no package): coaching only, never frozen, never blocks a package. */
+  topUp?: boolean;
   /** The check-in that started the package, so that visit can say so. */
   startedByLogId?: string | null;
 }
 /** Only one package at a time: pending, approved-not-started, or active with sessions left and not expired. */
-export const blocksNewPackage = (record: ClientPackage, now: number) => ["pending", "approved", "active"].includes(packageState(record, now).status);
+export const blocksNewPackage = (record: ClientPackage, now: number) => !record.topUp && ["pending", "approved", "active"].includes(packageState(record, now).status);
 
 export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri"] as const;
 export type Weekday = typeof WEEKDAYS[number];

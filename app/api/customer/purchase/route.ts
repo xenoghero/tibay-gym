@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const { session } = await requireCustomer(request);
     const params = new URL(request.url).searchParams;
     if (params.get("voucherCode")) publicRateLimiter.consume(publicCaller(request), "lookup");
-    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined, params.has("months") ? Number(params.get("months")) : undefined, params.get("packageId") ?? undefined), gcashAvailable: await receiptsAvailable(), ...await customerPaymentOptions() });
+    return json({ ...await getPurchaseQuote(session.personId, params.get("previousRequestId") ?? undefined, params.get("voucherCode") ?? undefined, params.has("months") ? Number(params.get("months")) : undefined, params.get("packageId") ?? undefined, params.has("topUpSessions") ? Number(params.get("topUpSessions")) : undefined), gcashAvailable: await receiptsAvailable(), ...await customerPaymentOptions() });
   });
 }
 export async function POST(request: Request) {

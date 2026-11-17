@@ -2,7 +2,7 @@ import type { PaymentMethod } from "@/lib/finance/payment-methods";
 /** Non-SMS financial records. All times are epoch milliseconds; money is PHP centavos. */
 export type RateCategory = "student" | "regular";
 export type LeadSource = "ads" | "facebook" | "google" | "friends" | "signage" | "others";
-export type ChargeKind = "daily_session" | "new_membership" | "renewal" | "coaching_package";
+export type ChargeKind = "daily_session" | "new_membership" | "renewal" | "coaching_package" | "session_topup";
 export interface Rates {
   studentDailyMinor: number;
   regularDailyMinor: number;

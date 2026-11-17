@@ -48,7 +48,7 @@ it("reconciles snapshots, rejected expected charges, delayed confirmation and pe
     paymentFixture("approved", newMember, { status: "approved", confirmedAt: AT, method: "gcash" }), paymentFixture("delayed-pay", delayed, { status: "approved", confirmedAt: AT })];
   const report = buildFinanceReport(charges, payments, day());
   expect(report.totals).toMatchObject({ expectedMinor: 133000, expectedCount: 3, confirmedMinor: 125500, confirmedCount: 2, pendingDailyMinor: 6000, pendingRenewalMinor: 0, pendingCount: 1, cashMinor: 5500, gcashMinor: 120000 });
-  expect(report.outstanding).toEqual({ dailyMinor: 6000, renewalMinor: 100000, newMembershipMinor: 0, coachingPackageMinor: 0, count: 2 });
+  expect(report.outstanding).toEqual({ dailyMinor: 6000, renewalMinor: 100000, newMembershipMinor: 0, coachingPackageMinor: 0, sessionTopUpMinor: 0, count: 2 });
   expect(report.trend[0]).toMatchObject({ expectedMinor: 133000, confirmedMinor: 125500 });
   expect(report.breakdown.reduce((sum, row) => sum + row.expectedMinor, 0)).toBe(report.totals.expectedMinor);
   expect(report.ledger.find(row => row.id === delayed.id)).toMatchObject({ expectedInPeriod: false, confirmedInPeriod: true });

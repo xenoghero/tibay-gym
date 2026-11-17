@@ -8,7 +8,7 @@ import { ApiError } from "./rfid/http";
 import { dailyChargeId } from "./daily-charges";
 import { operationId, philippineDate, snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
-import { coachingProduct, purchaseChargeId, purchaseRequestId } from "./purchases";
+import { coachingProduct, purchaseChargeId, purchaseRequestId, topUpProduct } from "./purchases";
 import { getCoachingSettings } from "./coaching";
 import type { Charge } from "@/lib/finance/contracts";
 import { previewVoucher } from "./vouchers";
@@ -30,7 +30,7 @@ export async function receiptsAvailable() {
   catch { return false; }
 }
 export async function uploadDailyReceipt(input: { personId: string; category: unknown; operationId: unknown; expectedAmountMinor: number; bytes: Buffer; registration?: boolean;
-  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string; months?: number; packageId?: string }) {
+  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string; months?: number; packageId?: string; topUpSessions?: number }) {
   const paymentMethod = input.paymentMethod ?? "gcash";
   if (paymentMethod === "cash") throw new ApiError(400, "invalid-payment-method");
   let operation: string;
@@ -50,9 +50,10 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
   let price;
   if (kind !== "daily_session") {
     const person = (await db.doc(`persons/${input.personId}`).get()).data()
-      ?? (kind === "coaching_package" ? (await db.doc(`unverifiedPersons/${input.personId}`).get()).data() : undefined);
+      ?? (kind === "coaching_package" || kind === "session_topup" ? (await db.doc(`unverifiedPersons/${input.personId}`).get()).data() : undefined);
     if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
     if (!previous && kind === "coaching_package") price = coachingProduct(await getCoachingSettings(), person, input.packageId).price;
+    else if (!previous && kind === "session_topup") price = topUpProduct(await getCoachingSettings(), person, input.topUpSessions).price;
     else if (!previous && kind !== (person.type === "member" ? "renewal" : "new_membership")) throw new ApiError(409, "purchase-quote-changed");
   }
   try { price ??= previous ?? snapshotRate(settings, input.category, kind, input.months); } catch { throw new ApiError(409, "category-required"); }

@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { currentPackage } from "@/lib/coaching/clocks";
+import { currentPackage, packageState } from "@/lib/coaching/clocks";
 import type { ClientPackage, CoachAssignment, CoachingProfile } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
@@ -102,5 +102,9 @@ export async function coachClient(coachId: string, personId: string) {
 export async function clientPackageSummary(personId: string) {
   const id = documentId(personId), rows = await adminDb().collection("coachingPackages").where("personId", "==", id).get();
   const current = currentPackage(rows.docs.map(row => row.data() as ClientPackage), Date.now());
-  return current && { id: current.record.id, status: current.status, sessions: current.record.sessions, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.record.coachingExpiresAt };
+  // Each unexpired package and top-up holding is adjusted on its own, including ones with no sessions left.
+  const now = Date.now(), holdings = rows.docs.map(row => row.data() as ClientPackage).filter(row => row.status === "approved" || row.status === "active")
+    .map(record => ({ record, ...packageState(record, now) })).filter(row => row.status !== "expired");
+  return current && { sessionsLeft: current.sessionsLeft, holdings: holdings.map(row => ({ id: row.record.id, topUp: !!row.record.topUp,
+    sessions: row.record.sessions + row.record.topUpSessions, sessionsLeft: row.sessionsLeft, coachingExpiresAt: row.record.coachingExpiresAt })) };
 }

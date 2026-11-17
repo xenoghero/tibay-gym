@@ -29,7 +29,7 @@ export interface FinanceLedgerRow {
 export interface FinanceReport {
   range: ReportRange;
   totals: ReturnType<typeof collectionTotals> & { expectedCount: number; pendingCount: number; pendingCashMinor: number; pendingGcashMinor: number; pendingOtherElectronicMinor: number };
-  outstanding: { dailyMinor: number; renewalMinor: number; newMembershipMinor: number; coachingPackageMinor: number; count: number };
+  outstanding: { dailyMinor: number; renewalMinor: number; newMembershipMinor: number; coachingPackageMinor: number; sessionTopUpMinor: number; count: number };
   breakdown: Array<{ kind: ChargeKind; expectedMinor: number; expectedCount: number; confirmedMinor: number; confirmedCount: number }>;
   trend: Array<{ date: string; expectedMinor: number; confirmedMinor: number; confirmedCount: number }>;
   ledger: FinanceLedgerRow[];
@@ -39,13 +39,13 @@ export function buildFinanceReport(charges: Charge[], requests: PaymentRequest[]
   const byId = new Map(charges.map(charge => [charge.id, charge]));
   const between = (date: string) => date >= range.from && date <= range.through;
   const purchaseDate = (charge: Charge) => charge.kind === "daily_session" ? charge.chargeDate : charge.recognizedPurchaseAt === null ? null : philippineDate(charge.recognizedPurchaseAt);
-  const breakdown = (["daily_session", "renewal", "new_membership", "coaching_package"] as const).map(kind => ({ kind, expectedMinor: 0, expectedCount: 0, confirmedMinor: 0, confirmedCount: 0 }));
+  const breakdown = (["daily_session", "renewal", "new_membership", "coaching_package", "session_topup"] as const).map(kind => ({ kind, expectedMinor: 0, expectedCount: 0, confirmedMinor: 0, confirmedCount: 0 }));
   const kinds = new Map(breakdown.map(row => [row.kind, row]));
   const trend: FinanceReport["trend"] = [];
   for (let date = range.from; date <= range.through; date = shiftFinancialDate(date, 1)) trend.push({ date, expectedMinor: 0, confirmedMinor: 0, confirmedCount: 0 });
   const days = new Map(trend.map(day => [day.date, day]));
   const approved = new Map<string, PaymentRequest>(), pending = new Map<string, PaymentRequest>(), latest = new Map<string, PaymentRequest>();
-  const outstanding = { dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, coachingPackageMinor: 0, count: 0 };
+  const outstanding = { dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, coachingPackageMinor: 0, sessionTopUpMinor: 0, count: 0 };
   let pendingCashMinor = 0, pendingGcashMinor = 0, pendingOtherElectronicMinor = 0, expectedCount = 0, pendingCount = 0;
   for (const charge of charges) {
     if (!Number.isSafeInteger(charge.amountMinor) || charge.amountMinor <= 0 || !kinds.has(charge.kind)) throw new Error("financial-data-conflict");

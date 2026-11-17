@@ -17,7 +17,7 @@ import styles from "./settings.module.css";
 
 const money = (v: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(v / 100);
 const date = (v: number | null) => v === null ? "No limit" : new Date(v).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
-const kindNames: Record<ChargeKind, string> = { daily_session: "Daily session", renewal: "Membership renewal", new_membership: "New membership", coaching_package: "Coaching package" };
+const kindNames: Record<ChargeKind, string> = { daily_session: "Daily session", renewal: "Membership renewal", new_membership: "New membership", coaching_package: "Coaching package", session_topup: "Session top-up" };
 function generatedCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(8)), alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return `GYM-${Array.from(bytes, b => alphabet[b % alphabet.length]).join("")}`;
@@ -147,10 +147,10 @@ export function VoucherSettings() {
   if (editor) { try {
     const config = configFor(editor.draft), category = config.categories[0], kind = config.kinds[0];
     const key = `${category}${kind === "daily_session" ? "Daily" : "Monthly"}Minor` as "studentDailyMinor";
-    const base = kind === "coaching_package" ? undefined : rates?.[key];
+    const base = kind === "coaching_package" || kind === "session_topup" ? undefined : rates?.[key];
     preview = `${discountLabel(config)} · ${config.kinds.map(k => kindNames[k]).join(", ")} · ${config.categories.join(" / ")}. `;
     if (base) { try { const q = discountQuote({ ...config, id: "preview", status: "enabled", revision: 1, heldCount: 0, confirmedCount: 0 } as Voucher, base, kind, category, config.startsAt ?? Date.now()); preview += `Example (${category}, ${kindNames[kind]}): ${money(base)} − ${money(q.discountAmountMinor)} = ${money(q.amountMinor)}.`; } catch (e) { preview += voucherError(e instanceof Error ? e.message : undefined); } }
-    else preview += kind === "coaching_package" ? "Coaching discounts apply to the package price chosen at purchase." : "Configure the eligible price in Pricing to see an example.";
+    else preview += kind === "coaching_package" || kind === "session_topup" ? "Coaching discounts apply to the package price chosen at purchase." : "Configure the eligible price in Pricing to see an example.";
   } catch { /* Incomplete drafts have no valid preview yet. */ } }
   return <section className={styles.section} aria-labelledby="vouchers-title">
       <div className={styles.head}><div><h2 id="vouchers-title">Vouchers</h2><p className={styles.sub}>Offer a discount. Keep control of where and how often it applies.</p></div><button className={styles.primary} disabled={busy} onClick={() => edit()}>+ Create voucher</button></div>
