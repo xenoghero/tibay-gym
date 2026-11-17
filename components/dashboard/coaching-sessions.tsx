@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import styles from "./settings.module.css";
+import view from "./coaching-view.module.css";
 
 interface Mark { id: string; date: string; outcome: "done" | "no_show"; note: string | null; coachName: string }
 interface Holding { id: string; topUp: boolean; sessions: number; sessionsLeft: number; coachingExpiresAt: number | null }
@@ -83,8 +84,8 @@ export function CoachMonthlyCounts() {
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch when the month changes
   }, [month]);
-  return <section aria-labelledby="coach-counts-title" style={{ marginTop: 32 }}>
-    <div className={styles.toolbar}><h3 id="coach-counts-title" style={{ margin: 0, flex: 1 }}>Sessions per coach</h3>
+  return <section aria-labelledby="coach-counts-title" style={{ marginTop: 16 }}>
+    <div className={styles.toolbar}><h2 id="coach-counts-title" className={view.subhead} style={{ flex: 1, alignSelf: "center" }}>Sessions per coach</h2>
       <label>Month<input type="month" value={month} onChange={e => { if (e.target.value) { setData(null); setMonth(e.target.value); } }} /></label></div>
     <p className={styles.error} role="alert">{error}</p>
     {!data && !error && <div className={styles.skeleton} aria-label="Loading counts" />}
@@ -114,7 +115,7 @@ export function FreezeRequests({ onChanged }: { onChanged(): void }) {
   }
   if (!requests?.length && !error) return null;
   return <section aria-labelledby="freeze-requests-title" style={{ marginTop: 24 }}>
-    <h3 id="freeze-requests-title" style={{ margin: "0 0 8px" }}>Freeze requests</h3>
+    <h2 id="freeze-requests-title" className={view.subhead}>Freeze requests</h2>
     <p className={styles.error} role="alert">{error}</p>
     {requests && <table className={styles.table}><thead><tr><th scope="col">Client</th><th scope="col">Requested</th><th scope="col">Sessions left</th><th scope="col" aria-label="Actions" /></tr></thead>
       <tbody>{requests.map(row => <tr key={row.packageRecordId}>

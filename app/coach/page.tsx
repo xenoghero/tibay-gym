@@ -30,7 +30,7 @@ export default function CoachPortalPage() {
   if (!user || !profile) return <BrandLoading label="Loading the coach portal" fullscreen />;
   return <main className={styles.page}>
     <header className={styles.header}>
-      <BrandLogo className={styles.logo} />
+      <BrandLogo sidebar className={styles.logo} />
       <button type="button" className={styles.ghost} onClick={() => void signOut().then(() => router.replace("/login"))}>Sign out</button>
     </header>
     <section className={styles.intro}>

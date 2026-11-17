@@ -383,18 +383,14 @@ function ReceiptView({
             </dd>
           </div>
         )}
+        {receipt.coaching && <div style={detailRow}><dt style={detailKey}>Coaching sessions left</dt><dd style={detailVal}>{receipt.coaching.sessionsLeft}</dd></div>}
+        {receipt.coaching?.coachName && <div style={detailRow}><dt style={detailKey}>Coach</dt><dd style={detailVal}>{receipt.coaching.coachName}</dd></div>}
       </dl>
 
       {receipt.coaching?.started && (
         <p role="status" style={{ ...leadStyle, color: C.green }}>
           Your coaching package has started. Your coaching sessions and your month of gym membership are now running.
         </p>
-      )}
-      {receipt.coaching && (
-        <dl style={{ margin: 0 }}>
-          <div style={detailRow}><dt style={detailKey}>Coaching sessions left</dt><dd style={detailVal}>{receipt.coaching.sessionsLeft}</dd></div>
-          {receipt.coaching.coachName && <div style={detailRow}><dt style={detailKey}>Coach</dt><dd style={detailVal}>{receipt.coaching.coachName}</dd></div>}
-        </dl>
       )}
 
       {isMember && expired && (

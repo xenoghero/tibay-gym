@@ -42,13 +42,17 @@ export function CoachClients({ user, children }: { user: User; children?: (clien
       <div><dt>Sessions left</dt><dd>{client.sessionsLeft}</dd></div>
       <div><dt>Status</dt><dd>{statusLabel(client)}</dd></div>
       <div><dt>Coaching until</dt><dd>{until(client.coachingExpiresAt)}</dd></div>
+    </dl>
+    {/* Recording a session comes before the profile: it is what coaches do most, usually on a phone. */}
+    {children?.(client, () => setReload(v => v + 1))}
+    <h3 className={styles.subhead}>About {client.name.split(" ")[0]}</h3>
+    <dl className={styles.facts}>
       <div><dt>Phone</dt><dd><a href={`tel:${client.phone}`}>{client.phone}</a></dd></div>
       <div><dt>FB name</dt><dd>{client.fbName ?? "Not given"}</dd></div>
       <div><dt>Preferred schedule</dt><dd>{schedule(client.preferredSchedule)}</dd></div>
       <div className={styles.wide}><dt>Goals</dt><dd>{client.goals ?? "Not given"}</dd></div>
       <div className={styles.wide}><dt>Remarks</dt><dd>{client.remarks ?? "None"}</dd></div>
     </dl>
-    {children?.(client, () => setReload(v => v + 1))}
   </section>;
   return <section className={styles.card} aria-labelledby="coach-clients">
     <h2 id="coach-clients">Your clients</h2>

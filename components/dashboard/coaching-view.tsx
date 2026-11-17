@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { TIME_SLOTS, type CoachingProfile } from "@/lib/coaching/catalog";
 import { ClientSessions, CoachMonthlyCounts, FreezeRequests } from "./coaching-sessions";
 import styles from "./settings.module.css";
+import view from "./coaching-view.module.css";
 
 interface Client {
   id: string; name: string; phone: string; fbName: string | null; goals: string | null; remarks: string | null;
@@ -66,16 +67,16 @@ export function CoachingView() {
   </table>;
 
   return <main className={styles.section} style={{ padding: "clamp(20px, 4vw, 40px)" }}>
-    <div className={styles.head}><div><h2>Coaching</h2><p className={styles.sub}>Approved clients with coaching sessions available. Each client has one coach; sessions already done stay credited to the coach who ran them.</p></div></div>
+    <div className={styles.head}><div><div className={view.kicker}>Clients & coaches</div><h1 className={view.title}>Coaching</h1><p className={styles.sub}>Approved clients with coaching sessions available. Each client has one coach; sessions already done stay credited to the coach who ran them.</p></div></div>
     <p className={styles.error} role="alert">{error}</p>
     {message && <p className={styles.message} role="status">{message}</p>}
     {!data && !error && <div className={styles.skeleton} aria-label="Loading coaching clients" />}
     {data && !data.coaches.length && <p className={styles.message}>Create a coach in Settings → Coaching before assigning clients.</p>}
     {data && <>
       <FreezeRequests onChanged={() => setReload(v => v + 1)} />
-      <h3 style={{ margin: "24px 0 8px" }}>Unassigned clients</h3>
+      <h2 className={view.subhead}>Unassigned clients</h2>
       {data.unassigned.length ? table(data.unassigned, false) : <div className={styles.empty}><h3>Everyone has a coach</h3><p>New clients appear here once their coaching payment is approved.</p></div>}
-      <h3 style={{ margin: "32px 0 8px" }}>Clients with a coach</h3>
+      <h2 className={view.subhead}>Clients with a coach</h2>
       {data.assigned.length ? table(data.assigned, true) : <div className={styles.empty}><p>No clients are assigned yet.</p></div>}
       {open && <ClientSessions key={open.id} personId={open.id} name={open.name} onClose={() => { setOpen(null); setReload(v => v + 1); }} />}
       <CoachMonthlyCounts />

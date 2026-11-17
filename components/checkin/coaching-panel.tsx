@@ -59,7 +59,7 @@ export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
     try {
       const response = await fetch("/api/customer/coaching", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }), signal: AbortSignal.timeout(20_000) });
       if (!response.ok) throw new Error();
-      setFreezeMessage(action === "unfreeze" ? "Unfrozen. Your coaching validity was extended by the days you were frozen." : "Freeze requested. The gym will review it.");
+      // The Freeze status line below the package already says what changed.
       setReload(v => v + 1);
     } catch { setFreezeMessage("Could not update your Freeze. Refresh and try again."); }
     finally { setFreezeBusy(false); }
@@ -84,7 +84,7 @@ export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
         <div><dt>Status</dt><dd>{current.frozen ? "Frozen" : statusText[current.status]}</dd></div>
         <div><dt>Sessions left</dt><dd>{data.sessionsLeft || current.sessionsLeft}{data.topUps.length ? " (with top-ups)" : ` of ${current.sessions}`}</dd></div>
         <div><dt>Coach</dt><dd>{data.coachName ?? "Not assigned yet"}</dd></div>
-        <div><dt>Coaching validity</dt><dd>{current.coachingExpiresAt ? `Until ${new Date(current.coachingExpiresAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}` : `${current.validityDays} days from your first visit`}</dd></div>
+        <div><dt>Coaching validity</dt><dd>{current.coachingExpiresAt ? `Until ${new Date(current.coachingExpiresAt - 1).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}` : `${current.validityDays} days from your first visit`}</dd></div>
       </dl>
       {current.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your package starts at your first check-in or coaching session after approval.</p>}
       {current.status === "approved" && <p className={styles.pendingNote}>Approved. Your sessions and your included month of gym membership start at your first check-in or coaching session, or 15 days after approval.</p>}
