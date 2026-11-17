@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { TIME_SLOTS, type CoachingProfile } from "@/lib/coaching/catalog";
-import { ClientSessions, CoachMonthlyCounts } from "./coaching-sessions";
+import { ClientSessions, CoachMonthlyCounts, FreezeRequests } from "./coaching-sessions";
 import styles from "./settings.module.css";
 
 interface Client {
   id: string; name: string; phone: string; fbName: string | null; goals: string | null; remarks: string | null;
-  preferredSchedule: CoachingProfile["preferredSchedule"] | null; status: string; sessionsLeft: number; coachingExpiresAt: number | null;
+  preferredSchedule: CoachingProfile["preferredSchedule"] | null; status: string; sessionsLeft: number; coachingExpiresAt: number | null; frozen: boolean;
   coachId: string | null; coachName: string | null;
 }
 interface Data { unassigned: Client[]; assigned: Client[]; coaches: { id: string; name: string }[] }
@@ -59,7 +59,7 @@ export function CoachingView() {
     <tbody>{clients.map(client => <tr key={client.id}>
       <td>{client.name}<small>{client.phone}{client.fbName ? ` · FB ${client.fbName}` : ""}</small>{client.goals && <small>Goals: {client.goals}</small>}{client.remarks && <small>Remarks: {client.remarks}</small>}</td>
       <td>{scheduleLabel(client.preferredSchedule)}</td>
-      <td className={styles.number}>{client.sessionsLeft}<small>{client.status === "approved" ? "Not started" : `Until ${date(client.coachingExpiresAt)}`}</small></td>
+      <td className={styles.number}>{client.sessionsLeft}<small>{client.frozen ? "Frozen" : client.status === "approved" ? "Not started" : `Until ${date(client.coachingExpiresAt)}`}</small></td>
       {assigned && <td>{client.coachName}</td>}
       <td>{picker(client)}</td>
     </tr>)}</tbody>
@@ -72,6 +72,7 @@ export function CoachingView() {
     {!data && !error && <div className={styles.skeleton} aria-label="Loading coaching clients" />}
     {data && !data.coaches.length && <p className={styles.message}>Create a coach in Settings → Coaching before assigning clients.</p>}
     {data && <>
+      <FreezeRequests onChanged={() => setReload(v => v + 1)} />
       <h3 style={{ margin: "24px 0 8px" }}>Unassigned clients</h3>
       {data.unassigned.length ? table(data.unassigned, false) : <div className={styles.empty}><h3>Everyone has a coach</h3><p>New clients appear here once their coaching payment is approved.</p></div>}
       <h3 style={{ margin: "32px 0 8px" }}>Clients with a coach</h3>

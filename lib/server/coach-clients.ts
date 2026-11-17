@@ -1,12 +1,12 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { currentPackage, packageState } from "@/lib/coaching/clocks";
+import { currentPackage, effectiveExpiry, packageState } from "@/lib/coaching/clocks";
 import type { ClientPackage, CoachAssignment, CoachingProfile } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
-import { startDuePackages } from "./coaching";
+import { settleDuePackages } from "./coaching";
 import type { Coach } from "./coaches";
 import { sessionHistory } from "./session-marks";
 
@@ -19,18 +19,18 @@ async function clientsWithSessions() {
     .flatMap(rows => rows.docs.map(row => row.data() as ClientPackage));
   let records = await read();
   const due = [...new Set(records.filter(row => row.status === "approved").map(row => row.personId))];
-  if ((await Promise.all(due.map(id => startDuePackages(id, now)))).some(Boolean)) records = await read();
+  if ((await Promise.all(due.map(id => settleDuePackages(id, now)))).some(Boolean)) records = await read();
   const byPerson = new Map<string, ClientPackage[]>();
   for (const row of records) byPerson.set(row.personId, [...byPerson.get(row.personId) ?? [], row]);
   return new Map([...byPerson].map(([id, rows]) => [id, currentPackage(rows, now)] as const).filter(([, current]) => available(current)));
 }
 
 /** Only fields a coach may see: never address or payments. */
-function clientView(id: string, person: Record<string, unknown>, current: { status: string; sessionsLeft: number; coachingExpiresAt: number | null }) {
+function clientView(id: string, person: Record<string, unknown>, current: { status: string; sessionsLeft: number; coachingExpiresAt: number | null; frozen?: boolean }) {
   const profile = (person.coachingProfile ?? null) as CoachingProfile | null;
   return { id, name: String(person.name ?? ""), phone: String(person.phone ?? ""), fbName: profile?.fbName ?? null, goals: profile?.goals ?? null,
     preferredSchedule: profile?.preferredSchedule ?? null, remarks: profile?.remarks ?? null,
-    status: current.status, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.coachingExpiresAt, frozen: false };
+    status: current.status, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.coachingExpiresAt, frozen: !!current.frozen };
 }
 
 export async function coachAssignments() {
@@ -40,7 +40,7 @@ export async function coachAssignments() {
   const names = new Map(coaches.docs.map(row => [row.id, (row.data() as Coach).name]));
   const rows = await Promise.all([...clients].map(async ([id, current]) => {
     const person = (await db.doc(`persons/${id}`).get()).data();
-    return person && !person.deletingAt ? { ...clientView(id, person, { ...current!, coachingExpiresAt: current!.record.coachingExpiresAt }), coachId: coachOf.get(id) ?? null, coachName: names.get(coachOf.get(id) ?? "") ?? null } : null;
+    return person && !person.deletingAt ? { ...clientView(id, person, { ...current!, coachingExpiresAt: effectiveExpiry(current!.record, Date.now()) }), coachId: coachOf.get(id) ?? null, coachName: names.get(coachOf.get(id) ?? "") ?? null } : null;
   }));
   const listed = rows.filter(row => row !== null);
   return { unassigned: listed.filter(row => !row.coachId), assigned: listed.filter(row => row.coachId),
@@ -74,13 +74,13 @@ export async function coachNameFor(personId: string) {
 }
 
 async function loadClient(id: string, now: number) {
-  await startDuePackages(id, now);
+  await settleDuePackages(id, now);
   const db = adminDb(), [person, packages] = await Promise.all([db.doc(`persons/${id}`).get(), db.collection("coachingPackages").where("personId", "==", id).get()]);
   const data = person.data();
   if (!data || data.deletingAt) return null;
   const current = currentPackage(packages.docs.map(doc => doc.data() as ClientPackage), now);
   // A client whose package ran out stays listed so the coach can see why.
-  return clientView(id, data, current ? { ...current, coachingExpiresAt: current.record.coachingExpiresAt } : { status: "expired", sessionsLeft: 0, coachingExpiresAt: null });
+  return clientView(id, data, current ? { ...current, coachingExpiresAt: effectiveExpiry(current.record, now) } : { status: "expired", sessionsLeft: 0, coachingExpiresAt: null });
 }
 
 export async function coachClients(coachId: string) {

@@ -44,6 +44,7 @@ export function validateCatalog(input: unknown, saved: CoachingPackage[]): Coach
 }
 
 
+export interface Freeze { status: "requested" | "active" | "ended" | "rejected" | "dropped"; requestedAt: number; startedAt: number | null; endedAt: number | null; days: number | null }
 export type PackageStatus = "pending" | "rejected" | "closed" | "approved" | "active" | "used_up" | "expired";
 /** A client's package: catalog values copied at purchase time, so later catalog edits never change it. */
 export interface ClientPackage {
@@ -51,6 +52,8 @@ export interface ClientPackage {
   priceMinor: number; sessions: number; validityDays: number; status: PackageStatus;
   submittedAt: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null;
   sessionsUsed: number; topUpSessions: number;
+  /** Freeze of a started package: requested, then approved (active) until unfrozen or 14 days pass. At most once per package. */
+  freeze?: Freeze | null;
   /** A standalone Session top-up holding (no package): coaching only, never frozen, never blocks a package. */
   topUp?: boolean;
   /** The check-in that started the package, so that visit can say so. */

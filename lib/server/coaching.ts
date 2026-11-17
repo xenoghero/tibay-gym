@@ -1,10 +1,11 @@
 import "server-only";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
-import { autoStartDeadline, coachingExpiryMs, currentPackage, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
+import { autoStartDeadline, coachingExpiryMs, currentPackage, effectiveExpiry, freezeAutoEnd, freezeDays, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
 import { coverageExpiryMs, snapshotMembership } from "@/lib/finance/coverage";
-import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, validateTopUps, type ClientPackage, type CoachingPackage, type CoachingSettings } from "@/lib/coaching/catalog";
+import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, validateTopUps, type ClientPackage, type CoachingPackage, type CoachingSettings, type Freeze } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
+import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
 import { coachNameFor } from "./coach-clients";
 
@@ -72,10 +73,24 @@ export async function prepareStartPackage(tx: Transaction, db: Firestore, person
     } };
 }
 
-/** Saves the 15-day automatic start (dated at the deadline) for a package nobody started; called wherever a package is read. Returns whether one started. */
-export async function startDuePackages(personId: string, now = Date.now()): Promise<boolean> {
-  const db = adminDb(), due = await db.collection("coachingPackages").where("personId", "==", personId).where("status", "==", "approved").get();
-  if (!due.docs.some(row => autoStartDeadline((row.data() as ClientPackage).approvedAt ?? Infinity) <= now)) return false;
+/**
+ * Saves changes that happen by themselves, wherever a package is read (ADR 0001: no scheduled job): the 15-day
+ * automatic start (dated at the deadline), the automatic end of a 14-day Freeze, and dropping a Freeze request
+ * once the coaching expiry passes. Returns whether a package started (which changes the membership).
+ */
+export async function settleDuePackages(personId: string, now = Date.now()): Promise<boolean> {
+  const db = adminDb(), rows = (await db.collection("coachingPackages").where("personId", "==", personId).get()).docs.map(row => row.data() as ClientPackage);
+  if (rows.some(row => freezeDue(row, now))) await db.runTransaction(async tx => {
+    const fresh = await tx.get(db.collection("coachingPackages").where("personId", "==", personId));
+    for (const doc of fresh.docs) {
+      const record = doc.data() as ClientPackage, freeze = record.freeze!;
+      if (!freezeDue(record, now)) continue;
+      if (freeze.status === "requested") { tx.update(doc.ref, { freeze: { ...freeze, status: "dropped", endedAt: now } }); continue; }
+      const endedAt = freezeAutoEnd(freeze.startedAt!), days = freezeDays(freeze.startedAt!, endedAt);
+      tx.update(doc.ref, { freeze: { ...freeze, status: "ended", endedAt, days }, coachingExpiresAt: record.coachingExpiresAt! + days * 86_400_000 });
+    }
+  });
+  if (!rows.some(row => row.status === "approved" && autoStartDeadline(row.approvedAt ?? Infinity) <= now)) return false;
   return db.runTransaction(async tx => {
     const person = (await tx.get(db.doc(`persons/${personId}`))).data() as Member | undefined;
     if (!person || person.deletingAt) return false;
@@ -83,6 +98,66 @@ export async function startDuePackages(personId: string, now = Date.now()): Prom
     // Re-checked in the transaction: a check-in may have started it first.
     if (!start || start.startedAt >= now) return false;
     start.commit(); return true;
+  });
+}
+
+/** A Freeze that ended by itself (14 days), or a request still pending when the coaching expiry passed. */
+function freezeDue(record: ClientPackage, now: number) {
+  const freeze = record.freeze;
+  if (freeze?.status === "active" && freeze.startedAt !== null) return now >= freezeAutoEnd(freeze.startedAt);
+  return freeze?.status === "requested" && record.coachingExpiresAt !== null && now >= record.coachingExpiresAt;
+}
+
+/** The client's started package that can take a Freeze action, read inside a transaction. */
+async function freezable(tx: Transaction, db: Firestore, personId: string, now: number) {
+  const rows = await tx.get(db.collection("coachingPackages").where("personId", "==", personId));
+  return rows.docs.map(row => row.data() as ClientPackage).filter(row => !row.topUp && row.status === "active" && row.startedAt !== null && packageState(row, now).status !== "expired")
+    .sort((a, b) => b.submittedAt - a.submittedAt)[0];
+}
+
+/** Client: request (once per package, after it started) or end a Freeze. Unfreezing needs no approval. */
+export async function changeFreeze(personId: string, action: unknown) {
+  if (action !== "request-freeze" && action !== "unfreeze") throw new ApiError(400, "invalid-action");
+  await settleDuePackages(personId);
+  const db = adminDb();
+  return db.runTransaction(async tx => {
+    const now = Date.now(), record = await freezable(tx, db, personId, now);
+    const ref = record && db.doc(`coachingPackages/${record.id}`);
+    if (action === "request-freeze") {
+      // Once per package: a rejected or dropped request never froze it, so the client may ask again.
+      if (!record || ["requested", "active", "ended"].includes(record.freeze?.status ?? "")) throw new ApiError(409, "freeze-unavailable");
+      tx.update(ref!, { freeze: { status: "requested", requestedAt: now, startedAt: null, endedAt: null, days: null } satisfies Freeze });
+      return { ok: true, freeze: "requested" };
+    }
+    if (record?.freeze?.status !== "active" || record.freeze.startedAt === null) throw new ApiError(409, "not-frozen");
+    const days = freezeDays(record.freeze.startedAt, Math.min(now, freezeAutoEnd(record.freeze.startedAt)));
+    tx.update(ref!, { freeze: { ...record.freeze, status: "ended", endedAt: now, days }, coachingExpiresAt: record.coachingExpiresAt! + days * 86_400_000 });
+    return { ok: true, freeze: "ended", days };
+  });
+}
+
+/** Admin: pending Freeze requests, oldest first. */
+export async function freezeRequests() {
+  const db = adminDb(), rows = await db.collection("coachingPackages").where("status", "==", "active").get(), now = Date.now();
+  const pending = rows.docs.map(row => row.data() as ClientPackage).filter(row => row.freeze?.status === "requested" && !freezeDue(row, now));
+  return { requests: await Promise.all(pending.sort((a, b) => a.freeze!.requestedAt - b.freeze!.requestedAt).map(async row => ({
+    packageRecordId: row.id, personId: row.personId, name: String((await db.doc(`persons/${row.personId}`).get()).data()?.name ?? ""),
+    requestedAt: row.freeze!.requestedAt, coachingExpiresAt: row.coachingExpiresAt, ...packageState(row, now) }))) };
+}
+
+/** Admin approves (the Freeze starts today) or rejects a pending request; audited. */
+export async function decideFreeze(adminId: string, body: Record<string, unknown>) {
+  const id = documentId(body.packageRecordId);
+  if (body.decision !== "approve" && body.decision !== "reject") throw new ApiError(400, "invalid-decision");
+  const db = adminDb();
+  return db.runTransaction(async tx => {
+    const ref = db.doc(`coachingPackages/${id}`), record = (await tx.get(ref)).data() as ClientPackage | undefined, now = Date.now();
+    if (!record || record.freeze?.status !== "requested" || freezeDue(record, now) || packageState(record, now).status === "expired") throw new ApiError(409, "freeze-request-unavailable");
+    const approved = body.decision === "approve";
+    tx.update(ref, { freeze: { ...record.freeze, status: approved ? "active" : "rejected", startedAt: approved ? now : null, endedAt: approved ? null : now } });
+    appendAudit(tx, db, { actorId: adminId, action: approved ? "freeze-approved" : "freeze-rejected", entityType: "coachingPackage", entityId: id, personId: record.personId,
+      operationId: `freeze-${approved ? "approve" : "reject"}-${id}`, before: { status: "requested" }, after: { status: approved ? "active" : "rejected" }, occurredAt: now });
+    return { ok: true };
   });
 }
 
@@ -97,7 +172,7 @@ export async function checkinCoaching(personId: string, logId?: string) {
 
 /** What the members portal shows: visible packages and the client's latest package. */
 export async function customerCoaching(personId: string) {
-  await startDuePackages(personId);
+  await settleDuePackages(personId);
   const db = adminDb(), settings = await getCoachingSettings(), now = Date.now();
   const rows = await db.collection("coachingPackages").where("personId", "==", personId).get();
   const records = rows.docs.map(row => row.data() as ClientPackage), balance = currentPackage(records, now);
@@ -108,5 +183,7 @@ export async function customerCoaching(personId: string) {
     sessionsLeft: balance?.sessionsLeft ?? 0,
     topUps: balance?.holdings.filter(row => row.record.topUp).map(row => ({ sessionsLeft: row.sessionsLeft, coachingExpiresAt: row.record.coachingExpiresAt })) ?? [],
     current: latest && { ...packageState(latest, now), sessions: latest.sessions + latest.topUpSessions,
-      validityDays: latest.validityDays, priceMinor: latest.priceMinor, approvedAt: latest.approvedAt, startedAt: latest.startedAt, coachingExpiresAt: latest.coachingExpiresAt } };
+      freeze: latest.freeze ? { status: latest.freeze.status, startedAt: latest.freeze.startedAt, endsBy: latest.freeze.startedAt ? freezeAutoEnd(latest.freeze.startedAt) : null, days: latest.freeze.days } : null,
+      canRequestFreeze: !["requested", "active", "ended"].includes(latest.freeze?.status ?? "") && latest.status === "active" && packageState(latest, now).status !== "expired",
+      validityDays: latest.validityDays, priceMinor: latest.priceMinor, approvedAt: latest.approvedAt, startedAt: latest.startedAt, coachingExpiresAt: effectiveExpiry(latest, now) } };
 }

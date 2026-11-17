@@ -8,7 +8,7 @@ vi.mock("@/lib/server/firebase-admin", () => ({ adminDb: () => state.store!.db }
 vi.mock("@/lib/server/rfid/rate-limit", () => ({ throttle: vi.fn() }));
 vi.mock("@/lib/server/public-rate-limit", () => ({ publicCaller: () => "synthetic", publicRateLimiter: { consume: vi.fn() } }));
 import { getPurchaseQuote, submitPurchase, paymentReviewPreview, decidePayment, abandonPurchase, purchaseChargeId } from "@/lib/server/purchases";
-import { customerCoaching, getCoachingSettings, saveCoachingSettings } from "@/lib/server/coaching";
+import { changeFreeze, customerCoaching, decideFreeze, freezeRequests, getCoachingSettings, saveCoachingSettings } from "@/lib/server/coaching";
 import { financeReport } from "@/lib/server/finance-report";
 import { POST as scan } from "@/app/api/attendance/scan/route";
 import { adjustSessions, fixMark, markSession, monthlyCoachCounts, sessionHistory, undoMark } from "@/lib/server/session-marks";
@@ -343,4 +343,66 @@ it("lets vouchers target top-ups and audits top-up settings", async () => {
   expect(rows("auditEvents").find(event => event.action === "coaching-catalog-update")).toMatchObject({ reason: "top-ups: PHP 250/session, 30 days -> PHP 300/session, 21 days" });
   expect((await getPurchaseQuote("p2", undefined, undefined, undefined, undefined, 2)).amountMinor).toBe(60000);
   await expect(getPurchaseQuote("p2", undefined, undefined, undefined, undefined, 0)).rejects.toMatchObject({ code: "invalid-top-up-sessions" });
+});
+
+const DAY = 86400000;
+async function startedPackage(packageId = "pkg-8") {
+  const bought = await coachedClient(packageId);
+  await mark("ana");
+  return { bought, recordId: purchaseChargeId("p1", bought.operationId) };
+}
+
+it("freezes a started package with approval, blocks marks, keeps gym access, and extends coaching on an early unfreeze", async () => {
+  await expect(changeFreeze("p1", "request-freeze")).rejects.toMatchObject({ code: "freeze-unavailable" });
+  const { bought, recordId } = await startedPackage();
+  const expiry = packageOf("p1", bought.operationId)!.coachingExpiresAt as number;
+  await changeFreeze("p1", "request-freeze");
+  expect((await freezeRequests()).requests).toEqual([expect.objectContaining({ packageRecordId: recordId, name: "Client" })]);
+  vi.setSystemTime(NOW + DAY);
+  await decideFreeze("admin", { packageRecordId: recordId, decision: "approve" });
+  expect(rows("auditEvents").some(event => event.action === "freeze-approved")).toBe(true);
+  expect(await customerCoaching("p1")).toMatchObject({ current: { frozen: true, freeze: { status: "active", startedAt: NOW + DAY } } });
+  await expect(mark("ana")).rejects.toMatchObject({ code: "client-frozen" });
+  // The membership month keeps running: check-in still works without a daily fee.
+  expect(await checkIn("p1", "frozen-gym-visit-0001")).toMatchObject({ action: "checked-in" });
+  expect(rows("charges").filter(charge => charge.kind === "daily_session")).toHaveLength(0);
+  vi.setSystemTime(NOW + 4 * DAY);
+  expect(await changeFreeze("p1", "unfreeze")).toMatchObject({ days: 3 });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ coachingExpiresAt: expiry + 3 * DAY, freeze: { status: "ended", days: 3 } });
+  await expect(mark("ana")).resolves.toMatchObject({ outcome: "done" });
+  // Only once per package.
+  await expect(changeFreeze("p1", "request-freeze")).rejects.toMatchObject({ code: "freeze-unavailable" });
+});
+
+it("ends a Freeze automatically after 14 days and drops a request the expiry overtakes", async () => {
+  const { bought, recordId } = await startedPackage();
+  const expiry = packageOf("p1", bought.operationId)!.coachingExpiresAt as number;
+  await changeFreeze("p1", "request-freeze");
+  await decideFreeze("admin", { packageRecordId: recordId, decision: "approve" });
+  vi.setSystemTime(NOW + 20 * DAY);
+  const settled = (await customerCoaching("p1")).current;
+  expect(settled).toMatchObject({ freeze: { status: "ended", days: 14 } });
+  expect(settled).not.toHaveProperty("frozen");
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ coachingExpiresAt: expiry + 14 * DAY });
+
+  // A second client whose request is never approved before the expiry.
+  state.store!.data.set("coachAssignments/p2", { personId: "p2", coachId: "ana", assignedAt: NOW, assignedBy: "admin" });
+  vi.setSystemTime(NOW);
+  const other = await buy("p2", "pkg-4"); await decide(other.id); await checkIn("p2", "p2-first-visit-000001");
+  await changeFreeze("p2", "request-freeze");
+  vi.setSystemTime(NOW + 10 * DAY);
+  await expect(decideFreeze("admin", { packageRecordId: purchaseChargeId("p2", other.operationId), decision: "approve" })).rejects.toMatchObject({ code: "freeze-request-unavailable" });
+  await customerCoaching("p2");
+  expect(packageOf("p2", other.operationId)).toMatchObject({ freeze: { status: "dropped" } });
+  expect((await freezeRequests()).requests).toHaveLength(0);
+});
+
+it("lets a client ask again after a rejected Freeze request", async () => {
+  const { recordId } = await startedPackage();
+  await changeFreeze("p1", "request-freeze");
+  await expect(changeFreeze("p1", "request-freeze")).rejects.toMatchObject({ code: "freeze-unavailable" });
+  await decideFreeze("admin", { packageRecordId: recordId, decision: "reject" });
+  expect(rows("auditEvents").some(event => event.action === "freeze-rejected")).toBe(true);
+  expect((await customerCoaching("p1")).current).toMatchObject({ canRequestFreeze: true, freeze: { status: "rejected" } });
+  await expect(changeFreeze("p1", "request-freeze")).resolves.toMatchObject({ freeze: "requested" });
 });

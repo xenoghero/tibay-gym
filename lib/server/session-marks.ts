@@ -2,13 +2,13 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import type { ClientPackage, CoachAssignment } from "@/lib/coaching/catalog";
-import { addManilaDays, currentPackage } from "@/lib/coaching/clocks";
+import { addManilaDays, currentPackage, packageState } from "@/lib/coaching/clocks";
 import { operationId, philippineDate } from "@/lib/finance/rules";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
-import { prepareStartPackage, startDuePackages } from "./coaching";
+import { prepareStartPackage, settleDuePackages } from "./coaching";
 import type { Coach } from "./coaches";
 
 /** One coach-accompanied workout (done) or a No-show, credited to the coach who recorded it. */
@@ -43,6 +43,7 @@ async function prepareUse(tx: Transaction, db: Firestore, personId: string, now:
   // The first Coaching session starts an approved package, even when the session itself comes from earlier-expiring top-ups.
   const start = records.some(row => row.status === "approved" && !row.topUp) ? await prepareStartPackage(tx, db, personId, person, now, { actorId }) : null;
   const current = currentPackage(records.map(row => start && row.id === start.record.id ? { ...row, status: "active" as const, startedAt: start.startedAt, coachingExpiresAt: start.coachingExpiresAt } : row), now);
+  if (records.some(row => packageState(row, now).frozen)) throw new ApiError(409, "client-frozen");
   if (current?.status === "expired") throw new ApiError(409, "coaching-expired");
   if (!current || current.sessionsLeft <= 0) throw new ApiError(409, "no-sessions-left");
   return { packageRecordId: current.record.id, commit() {
@@ -58,7 +59,7 @@ export async function markSession(coachId: string, body: Record<string, unknown>
   try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
   const db = adminDb(), id = `mark-${createHash("sha256").update(JSON.stringify([coachId, operation])).digest("hex").slice(0, 40)}`;
   // Save a due 15-day start first, so it stays saved even if this mark is refused.
-  await startDuePackages(personId);
+  await settleDuePackages(personId);
   return db.runTransaction(async tx => {
     const now = Date.now(), date = markDate(body.date ?? philippineDate(now), now), ref = db.doc(`sessionMarks/${id}`);
     const existing = (await tx.get(ref)).data() as SessionMark | undefined;

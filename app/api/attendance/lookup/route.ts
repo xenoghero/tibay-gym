@@ -9,7 +9,7 @@ import { snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
 import { STALE_SESSION_MS } from "@/lib/server/attendance";
 import { receiptsAvailable } from "@/lib/server/receipt-store";
-import { checkinCoaching, startDuePackages } from "@/lib/server/coaching";
+import { checkinCoaching, settleDuePackages } from "@/lib/server/coaching";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const person = doc.data();
     if (person.deletingAt != null) throw new ApiError(409, "person-unavailable");
     // An automatic start may just have added the membership month, so read the profile again.
-    const membership = !unverified && await startDuePackages(doc.id) ? (await db.doc(`persons/${doc.id}`).get()).data()! : person;
+    const membership = !unverified && await settleDuePackages(doc.id) ? (await db.doc(`persons/${doc.id}`).get()).data()! : person;
     const coaching = unverified ? null : await checkinCoaching(doc.id);
     const result = { id: doc.id, name: person.name, type: membership.type, status: membership.status,
       membershipExpiryMs: membership.membershipExpiry?.toMillis() ?? null, visitCount: person.visitCount,

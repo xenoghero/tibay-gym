@@ -18,3 +18,7 @@
 .stepper input { width: 72px; min-height: 48px; padding: 8px; text-align: center; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); color: var(--rs-fg); font-size: 18px; font-variant-numeric: tabular-nums; }
 .stepper strong { margin-left: auto; font: 700 26px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.freeze { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--rs-line); }
+.freeze p, .freezeNote { margin: 0; font-size: 13px; line-height: 1.6; }
+.freezeNote { margin-top: 16px; color: var(--rs-muted); }
+.freeze button { justify-self: start; }

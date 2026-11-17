@@ -7,12 +7,31 @@ import { MAX_TOP_UP_SESSIONS, type CoachingPackage, type PackageStatus } from "@
 import styles from "./customer-access.module.css";
 import own from "./coaching-panel.module.css";
 
-interface Current { status: PackageStatus; sessions: number; sessionsLeft: number; validityDays: number; priceMinor: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null }
+interface Current { frozen?: true; canRequestFreeze: boolean; freeze: { status: string; startedAt: number | null; endsBy: number | null; days: number | null } | null;
+  status: PackageStatus; sessions: number; sessionsLeft: number; validityDays: number; priceMinor: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null }
 const statusText: Record<PackageStatus, string> = {
   pending: "Pending approval", rejected: "Payment needs correction", closed: "Closed", approved: "Approved, not started",
   active: "Active", used_up: "Used up", expired: "Expired",
 };
 const money = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(minor / 100);
+
+const shortDate = (ms: number) => new Date(ms).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" });
+/** Freeze: once per started package, up to 14 days from approval; unfreezing needs no approval. Gym access keeps running. */
+function FreezeStatus({ current, busy, onAction }: { current: Current; busy: boolean; onAction(action: "request-freeze" | "unfreeze"): void }) {
+  const f = current.freeze;
+  if (current.frozen && f?.startedAt) return <div className={own.freeze}>
+    <p><strong>Frozen since {shortDate(f.startedAt)}.</strong> Coaching is paused until you unfreeze, or until {f.endsBy ? shortDate(f.endsBy - 1) : "14 days pass"}. Your gym membership keeps running.</p>
+    <button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => onAction("unfreeze")}>{busy ? "Saving…" : "Unfreeze now"}</button>
+  </div>;
+  if (f?.status === "requested") return <p className={own.freezeNote}>Freeze requested. The gym will approve it; it starts on the day it is approved.</p>;
+  if (f?.status === "ended") return <p className={own.freezeNote}>You froze this package for {f.days} {f.days === 1 ? "day" : "days"}. A Freeze can be used once per package.</p>;
+  if (!current.canRequestFreeze) return f?.status === "rejected" ? <p className={own.freezeNote}>Your Freeze request was not approved.</p> : null;
+  return <div className={own.freeze}>
+    {f?.status === "rejected" && <p className={own.freezeNote}>Your last Freeze request was not approved.</p>}
+    <p>Sick or away? You can freeze your coaching sessions once per package, for up to 14 days from the day the gym approves it. Your coaching validity moves back by the days frozen; your gym membership keeps running.</p>
+    <button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => onAction("request-freeze")}>{busy ? "Sending…" : "Request a Freeze"}</button>
+  </div>;
+}
 
 /** Choose how many Session top-ups, with the total; shared by the portal and the sign-up link. */
 export function TopUpPicker({ count, onCount, priceMinor, note }: { count: number; onCount(count: number): void; priceMinor: number; note?: string | null }) {
@@ -33,6 +52,18 @@ export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
   const [data, setData] = useState<{ packages: CoachingPackage[]; canBuy: boolean; coachName: string | null; current: Current | null;
     sessionsLeft: number; topUps: { sessionsLeft: number; coachingExpiresAt: number | null }[]; topUpPriceMinor: number; topUpValidityDays: number } | null>(null);
   const [topUpCount, setTopUpCount] = useState(1), [buyingTopUps, setBuyingTopUps] = useState(false);
+  const [freezeBusy, setFreezeBusy] = useState(false), [freezeMessage, setFreezeMessage] = useState("");
+  async function freeze(action: "request-freeze" | "unfreeze") {
+    if (freezeBusy) return;
+    setFreezeBusy(true); setFreezeMessage("");
+    try {
+      const response = await fetch("/api/customer/coaching", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }), signal: AbortSignal.timeout(20_000) });
+      if (!response.ok) throw new Error();
+      setFreezeMessage(action === "unfreeze" ? "Unfrozen. Your coaching validity was extended by the days you were frozen." : "Freeze requested. The gym will review it.");
+      setReload(v => v + 1);
+    } catch { setFreezeMessage("Could not update your Freeze. Refresh and try again."); }
+    finally { setFreezeBusy(false); }
+  }
   const [error, setError] = useState(""), [reload, setReload] = useState(0), [chosen, setChosen] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -50,13 +81,15 @@ export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
     {current && <section className={styles.paymentPanel} aria-labelledby="coaching-status">
       <div className={styles.sectionHeading}><h2 id="coaching-status">Your coaching package</h2></div>
       <dl className={own.facts}>
-        <div><dt>Status</dt><dd>{statusText[current.status]}</dd></div>
+        <div><dt>Status</dt><dd>{current.frozen ? "Frozen" : statusText[current.status]}</dd></div>
         <div><dt>Sessions left</dt><dd>{data.sessionsLeft || current.sessionsLeft}{data.topUps.length ? " (with top-ups)" : ` of ${current.sessions}`}</dd></div>
         <div><dt>Coach</dt><dd>{data.coachName ?? "Not assigned yet"}</dd></div>
         <div><dt>Coaching validity</dt><dd>{current.coachingExpiresAt ? `Until ${new Date(current.coachingExpiresAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}` : `${current.validityDays} days from your first visit`}</dd></div>
       </dl>
       {current.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your package starts at your first check-in or coaching session after approval.</p>}
       {current.status === "approved" && <p className={styles.pendingNote}>Approved. Your sessions and your included month of gym membership start at your first check-in or coaching session, or 15 days after approval.</p>}
+      <FreezeStatus current={current} busy={freezeBusy} onAction={action => void freeze(action)} />
+      {freezeMessage && <p className={styles.pendingNote} role="status">{freezeMessage}</p>}
       {current.status === "rejected" && <p className={styles.pendingNote}>Your payment was rejected. Correct it from your latest payment on the Overview tab.</p>}
     </section>}
     {!current && data.topUps.length > 0 && <section className={styles.paymentPanel} aria-labelledby="coaching-topups">
