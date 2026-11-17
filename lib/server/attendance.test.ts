@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
+import { visitMonth } from "@/lib/month-visits";
 vi.mock("server-only", () => ({}));
 vi.mock("./rfid/rate-limit", () => ({ throttle: vi.fn() }));
 const store = vi.hoisted(() => ({ data: new Map<string, Record<string, unknown>>(), sequence: 0, failCleanup: false, tail: Promise.resolve() }));
@@ -200,6 +201,7 @@ it("auto-closes stale visits and atomically opens one new visit", async () => {
   expect(next.action).toBe("checked-in"); expect(logs()).toHaveLength(2);
   expect(logs()[0][1].closedReason).toBe("auto");
   expect(store.data.get("persons/p1")?.visitCount).toBe(2);
+  expect(store.data.get("persons/p1")?.monthVisits).toEqual({ month: visitMonth(now), count: 2 });
   expect(await closeGuardedStaleSession("p1", logs()[0][0].split("/")[1])).toBe(false);
 });
 it("conditionally cleans up only the expected still-open stale session", async () => {

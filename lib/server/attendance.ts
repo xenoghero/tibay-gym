@@ -15,6 +15,7 @@ import { appendAudit } from "./audit";
 import { prepareDailyCharge } from "./daily-charges";
 import { registrationSettings } from "@/lib/registration-settings";
 import { prepareStartPackage } from "./coaching";
+import { addMonthVisit, type MonthVisits } from "@/lib/month-visits";
 
 export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
@@ -26,7 +27,7 @@ type ScanRequest = { eventId: string; requestedAt: number } & (
 interface PersonData {
   type: string; status: "active" | "expired" | null;
   membershipExpiry: Timestamp | null; rfidTagId: string | null; deletingAt?: Timestamp | null;
-  visitCount?: number; lastVisitAt?: Timestamp | null;
+  visitCount?: number; monthVisits?: MonthVisits; lastVisitAt?: Timestamp | null;
   rateCategory?: import("@/lib/finance/contracts").RateCategory | null;
 }
 interface LogData {
@@ -187,7 +188,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
       commitCharge();
       packageStart?.commit();
       tx.set(newLog, { personId, source: input.source, checkInAt: stamp, checkOutAt: null, closedReason: null });
-      tx.update(personRef!, { visitCount: FieldValue.increment(1), lastVisitAt: stamp, updatedAt: stamp });
+      tx.update(personRef!, { visitCount: FieldValue.increment(1), monthVisits: addMonthVisit(storedPerson?.monthVisits, now), lastVisitAt: stamp, updatedAt: stamp });
     }
     tx.set(stateRef, { openLogId: action === "checked-in" ? logId : null, lastLogId: logId,
       lastAcceptedScanAt: stamp, lastAction: action, updatedAt: stamp } satisfies AttendanceState);
