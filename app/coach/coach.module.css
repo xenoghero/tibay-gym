@@ -1,0 +1,17 @@
+.page { min-height: 100dvh; max-width: 720px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); background: var(--rs-bg); color: var(--rs-fg); display: grid; gap: 20px; align-content: start; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.logo { font-size: 28px; }
+.intro h1 { margin: 0 0 4px; font-family: var(--font-barlow-condensed), 'Barlow Condensed', sans-serif; font-size: 36px; line-height: 1.05; font-weight: 600; text-transform: uppercase; overflow-wrap: anywhere; }
+.kicker { margin: 0 0 8px; color: var(--rs-muted); font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.muted { margin: 0; color: var(--rs-muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.card { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); }
+.card h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.card label { display: grid; gap: 7px; font-size: 13px; font-weight: 500; }
+.card input { min-height: 46px; padding: 10px 12px; font: inherit; font-size: 16px; color: var(--rs-fg); background: var(--rs-bg); border: 1px solid var(--rs-line); border-radius: 6px; width: 100%; }
+.card input:focus-visible, .primary:focus-visible, .ghost:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 2px; }
+.primary, .ghost { min-height: 44px; padding: 10px 16px; border-radius: 6px; font: inherit; font-size: 14px; cursor: pointer; }
+.primary { justify-self: start; border: 0; background: var(--rs-accent); color: var(--rs-on-accent); font-weight: 600; }
+.primary:disabled { opacity: .6; cursor: wait; }
+.ghost { border: 1px solid var(--rs-line); background: transparent; color: var(--rs-fg); }
+.error { margin: 0; color: var(--rs-danger, #b22f2f); font-size: 13px; }
+.message { margin: 0; padding: 10px 12px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); font-size: 13px; }

@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth/auth-context";
+import { staffHome } from "@/lib/auth/staff-home";
 
 // The login screen is a fixed composition from the "Tibay Gym Admin Dashboard"
 // canvas — dark brand panel on the left, light sign-in form on the right —
@@ -202,7 +203,7 @@ export default function LoginPage() {
 
   // Already signed in → skip the form.
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
+    if (!loading && user) void staffHome(user).then(home => router.replace(home));
   }, [loading, user, router]);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -211,8 +212,8 @@ export default function LoginPage() {
     setNotice(null);
     setSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.replace("/dashboard");
+      const { user: signedIn } = await signInWithEmailAndPassword(auth, email.trim(), password);
+      router.replace(await staffHome(signedIn));
     } catch (err) {
       if (err instanceof FirebaseError && CREDENTIAL_ERROR_CODES.has(err.code)) {
         setError("Email or password is incorrect.");
@@ -233,7 +234,7 @@ export default function LoginPage() {
     setError(null);
     setNotice(null);
     if (!email.trim()) {
-      setError("Enter the admin email above first, then tap Forgot password.");
+      setError("Enter your email above first, then tap Forgot password.");
       return;
     }
     try {
@@ -254,8 +255,8 @@ export default function LoginPage() {
           <BrandLogo hero className="rs-login-logo" />
           <div className="rs-login-brand-body">
             <p className="rs-login-blurb">
-              Attendance and membership control for the front desk. One admin
-              login, no self-signup.
+              Attendance, membership and coaching for the gym. Staff logins
+              only, no self-signup.
             </p>
           </div>
         </div>
@@ -267,7 +268,7 @@ export default function LoginPage() {
         <form className="rs-login-form" onSubmit={handleSubmit}>
           <h1 className="rs-login-title">Sign in</h1>
           <p className="rs-login-sub">
-            Use the gym&apos;s admin email and password.
+            Use your admin or coach email and password.
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -390,7 +391,7 @@ export default function LoginPage() {
             >
               Forgot password
             </button>
-            <div className="rs-login-stamp">Admin access only</div>
+            <div className="rs-login-stamp">Staff access only</div>
           </div>
         </form>
       </div>
