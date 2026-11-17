@@ -41,8 +41,8 @@ async function prepareUse(tx: Transaction, db: Firestore, personId: string, now:
   if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable");
   const current = currentPackage(await clientPackages(tx, db, personId), now);
   const start = current?.status === "approved" ? await prepareStartPackage(tx, db, personId, person, now, { actorId }) : null;
+  if (current?.status === "expired" || (start && now >= start.coachingExpiresAt)) throw new ApiError(409, "coaching-expired");
   if (!current || current.status === "used_up" || current.sessionsLeft <= 0 || (current.status === "approved" && !start)) throw new ApiError(409, "no-sessions-left");
-  if (current.status === "expired" || (start && now >= start.coachingExpiresAt)) throw new ApiError(409, "coaching-expired");
   return { packageRecordId: current.record.id, commit() {
     start?.commit();
     tx.update(db.doc(`coachingPackages/${current.record.id}`), { sessionsUsed: current.record.sessionsUsed + 1 });
