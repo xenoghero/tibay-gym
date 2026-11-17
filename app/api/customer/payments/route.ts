@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     async function project(id: string, data: Record<string, unknown>) {
       const charge = data.chargeId ? (await db.doc(`charges/${data.chargeId}`).get()).data() : undefined;
       return { id, status: data.status, amountMinor: data.amountMinor, method: data.method,
-        kind: charge?.kind === "daily_session" || charge?.kind === "new_membership" || charge?.kind === "renewal" ? charge.kind : null,
+        kind: ["daily_session", "new_membership", "renewal", "coaching_package"].includes(charge?.kind) ? charge!.kind : null,
         ...(data.paymentAccountSnapshot ? { paymentAccountSnapshot: data.paymentAccountSnapshot } : {}), submittedAt: data.submittedAt, rejectionReason: data.rejectionReason ?? null,
         ...(charge?.abandonedAt ? { closed: true } : {}),
         ...(charge?.voucherSnapshot ? { voucherCode: charge.voucherSnapshot.code, discountAmountMinor: charge.discountAmountMinor, baseAmountMinor: charge.baseAmountMinor } : {}) };

@@ -8,7 +8,8 @@ import { ApiError } from "./rfid/http";
 import { dailyChargeId } from "./daily-charges";
 import { operationId, philippineDate, snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
-import { purchaseChargeId, purchaseRequestId } from "./purchases";
+import { coachingProduct, purchaseChargeId, purchaseRequestId } from "./purchases";
+import { getCoachingSettings } from "./coaching";
 import type { Charge } from "@/lib/finance/contracts";
 import { previewVoucher } from "./vouchers";
 export const RECEIPT_BUCKET = "payment-receipts";
@@ -29,7 +30,7 @@ export async function receiptsAvailable() {
   catch { return false; }
 }
 export async function uploadDailyReceipt(input: { personId: string; category: unknown; operationId: unknown; expectedAmountMinor: number; bytes: Buffer; registration?: boolean;
-  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string; months?: number }) {
+  paymentMethod?: PaymentMethod; paymentRevision?: number; kind?: Charge["kind"]; previousRequestId?: string; voucherCode?: string; months?: number; packageId?: string }) {
   const paymentMethod = input.paymentMethod ?? "gcash";
   if (paymentMethod === "cash") throw new ApiError(400, "invalid-payment-method");
   let operation: string;
@@ -46,13 +47,14 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
     if (!previous || previous.abandonedAt || previous.confirmedPaymentRequestId || previous.activePaymentRequestId !== input.previousRequestId) throw new ApiError(409, "replacement-unavailable");
     kind = previous.kind;
   }
+  let price;
   if (kind !== "daily_session") {
     const person = (await db.doc(`persons/${input.personId}`).get()).data();
     if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
-    if (!previous && kind !== (person.type === "member" ? "renewal" : "new_membership")) throw new ApiError(409, "purchase-quote-changed");
+    if (!previous && kind === "coaching_package") price = coachingProduct(await getCoachingSettings(), person, input.packageId).price;
+    else if (!previous && kind !== (person.type === "member" ? "renewal" : "new_membership")) throw new ApiError(409, "purchase-quote-changed");
   }
-  let price;
-  try { price = previous ?? snapshotRate(settings, input.category, kind, input.months); } catch { throw new ApiError(409, "category-required"); }
+  try { price ??= previous ?? snapshotRate(settings, input.category, kind, input.months); } catch { throw new ApiError(409, "category-required"); }
   if (!previous && input.voucherCode) price = { ...price, ...await previewVoucher({ code: input.voucherCode, personId: input.personId,
     kind, category: price.categorySnapshot, baseAmountMinor: price.amountMinor, at: now }) };
   if (price.amountMinor !== input.expectedAmountMinor) throw new ApiError(409, "daily-price-changed");

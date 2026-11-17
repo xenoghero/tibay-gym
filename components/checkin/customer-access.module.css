@@ -265,7 +265,7 @@
 
 .headerActions { display: flex; align-items: center; gap: 16px; }
 .headerActions :is(a, button) { white-space: nowrap; font-size: 11px; }
-.portalNav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 5px; margin: 0 0 26px; border: 1px solid var(--rs-line); border-radius: 9px; background: var(--rs-panel); }
+.portalNav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 5px; margin: 0 0 26px; border: 1px solid var(--rs-line); border-radius: 9px; background: var(--rs-panel); }
 .portalNav a { position: relative; display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 10px 6px; border-radius: 5px; color: var(--rs-muted); font-size: 12px; font-weight: 500; }
 .portalNav svg { width: 22px; height: 22px; flex-shrink: 0; }
 .portalNav a:hover { color: var(--rs-fg); background: var(--rs-accent-soft); }

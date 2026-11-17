@@ -220,3 +220,4 @@
   .paymentAccounts td:last-child { grid-column: 1 / -1; grid-row: 3; }
   .paymentAccounts td:last-child button { width: 100%; background: var(--rs-bg); }
 }
+.stack:not([hidden]) { display: grid; gap: 40px; min-width: 0; }

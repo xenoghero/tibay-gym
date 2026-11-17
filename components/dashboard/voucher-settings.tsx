@@ -17,7 +17,8 @@ import styles from "./settings.module.css";
 
 const money = (v: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(v / 100);
 const date = (v: number | null) => v === null ? "No limit" : new Date(v).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
-const kindNames: Record<ChargeKind, string> = { daily_session: "Daily session", renewal: "Membership renewal", new_membership: "New membership" };
+// Coaching kinds are left out: existing vouchers stay gym-only unless edited.
+const kindNames: Partial<Record<ChargeKind, string>> = { daily_session: "Daily session", renewal: "Membership renewal", new_membership: "New membership" };
 function generatedCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(8)), alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return `GYM-${Array.from(bytes, b => alphabet[b % alphabet.length]).join("")}`;

@@ -2,7 +2,7 @@ import type { PaymentMethod } from "@/lib/finance/payment-methods";
 /** Non-SMS financial records. All times are epoch milliseconds; money is PHP centavos. */
 export type RateCategory = "student" | "regular";
 export type LeadSource = "ads" | "facebook" | "google" | "friends" | "signage" | "others";
-export type ChargeKind = "daily_session" | "new_membership" | "renewal";
+export type ChargeKind = "daily_session" | "new_membership" | "renewal" | "coaching_package";
 export interface Rates {
   studentDailyMinor: number;
   regularDailyMinor: number;
@@ -30,6 +30,8 @@ export interface Charge extends RateSnapshot {
   baseAmountMinor?: number;
   discountAmountMinor?: number;
   voucherSnapshot?: import("./vouchers").VoucherSnapshot | null;
+  /** Coaching package bought, copied from the catalog when the purchase was submitted. */
+  coachingPackage?: { packageId: string; sessions: number; validityDays: number } | null;
   abandonedAt?: number | null;
   abandonmentReason?: string | null;
   confirmedPaymentRequestId?: string | null;

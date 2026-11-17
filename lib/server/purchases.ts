@@ -4,7 +4,9 @@ import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
 import type { Charge, ChargeKind, Coverage, GymSettings, PaymentRequest, RateSnapshot } from "@/lib/finance/contracts";
-import { snapshotRate, operationId, philippineDate, membershipMonths } from "@/lib/finance/rules";
+import { snapshotRate, operationId, philippineDate, membershipMonths, rateCategory } from "@/lib/finance/rules";
+import type { ClientPackage, CoachingSettings } from "@/lib/coaching/catalog";
+import { assertNoActivePackage, coachingSettings, getCoachingSettings } from "./coaching";
 import { membershipCoverage, snapshotMembership, coverageExpiryMs, type MembershipSnapshot } from "@/lib/finance/coverage";
 import { adminDb } from "./firebase-admin";
 import { ApiError } from "./rfid/http";
@@ -22,30 +24,41 @@ export const purchaseRequestId = (personId: string, operation: string) => `pay-$
 export interface PurchaseQuote {
   baseAmountMinor?: number; discountAmountMinor?: number; voucherSnapshot?: DiscountQuote["voucherSnapshot"];
   kind: Charge["kind"]; amountMinor: number; categorySnapshot: string; rateRevision: number;
-  coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null;
+  coverage: Charge["requestedCoverage"]; quoteToken: string; previousRequestId: string | null; coachingPackage?: Charge["coachingPackage"];
 }
 /** What a purchase buys, its price, and the membership coverage approving it applies (null: none). New products plug in here. */
-export interface PurchaseProduct { kind: ChargeKind; price: RateSnapshot; coverage(membership: MembershipSnapshot, at: number): Coverage | null }
+export interface PurchaseProduct { kind: ChargeKind; price: RateSnapshot; coverage(membership: MembershipSnapshot, at: number): Coverage | null; coachingPackage?: Charge["coachingPackage"] }
+const isMembership = (kind: ChargeKind) => kind === "renewal" || kind === "new_membership";
 const coverageFor = (kind: ChargeKind, months: number) => (membership: MembershipSnapshot, at: number) =>
-  kind === "daily_session" ? null : membershipCoverage(membership, at, months);
+  isMembership(kind) ? membershipCoverage(membership, at, months) : null;
+/** A visible catalog package at its one price; its membership month is applied at Package start, not approval. */
+export function coachingProduct(catalog: CoachingSettings, person: Record<string, unknown>, packageId: unknown): PurchaseProduct {
+  const item = catalog.packages.find(entry => entry.id === packageId && entry.visible);
+  if (!item) throw new ApiError(409, "coaching-package-unavailable");
+  const category = rateCategory(person.rateCategory);
+  if (!category) throw new ApiError(409, "category-required");
+  return { kind: "coaching_package", coverage: () => null, coachingPackage: { packageId: item.id, sessions: item.sessions, validityDays: item.validityDays },
+    price: { categorySnapshot: category, rateRevision: catalog.revision, unitRateMinor: item.priceMinor, quantity: 1, amountMinor: item.priceMinor } };
+}
 function membershipProduct(settings: GymSettings, person: Person, months: number): PurchaseProduct {
   const kind = person.type === "member" ? "renewal" : "new_membership";
   try { return { kind, price: snapshotRate(settings, person.rateCategory, kind, months), coverage: coverageFor(kind, months) }; }
   catch { throw new ApiError(409, "monthly-price-or-category-unset"); }
 }
 /** The product a saved charge bought, for replacements and approval. */
-const chargeProduct = (charge: Charge): PurchaseProduct => ({ kind: charge.kind, price: charge, coverage: coverageFor(charge.kind, charge.quantity) });
+const chargeProduct = (charge: Charge): PurchaseProduct => ({ kind: charge.kind, price: charge, coverage: coverageFor(charge.kind, charge.quantity),
+  ...(charge.coachingPackage ? { coachingPackage: charge.coachingPackage } : {}) });
 function quoteFor(person: Person, product: PurchaseProduct, at: number, previous?: { charge: Charge; requestId: string }, discount?: DiscountQuote, quoteOwner = "new-profile"): PurchaseQuote {
   const { kind, price: snapshot } = product, coverage = product.coverage(snapshotMembership(person), at);
   const fields = { kind, amountMinor: discount?.amountMinor ?? snapshot.amountMinor, categorySnapshot: snapshot.categorySnapshot,
     ...(previous ? { baseAmountMinor: previous.charge.baseAmountMinor ?? snapshot.amountMinor, discountAmountMinor: previous.charge.discountAmountMinor ?? 0, voucherSnapshot: previous.charge.voucherSnapshot ?? null } : discount ? { baseAmountMinor: discount.baseAmountMinor, discountAmountMinor: discount.discountAmountMinor, voucherSnapshot: discount.voucherSnapshot } : {}),
-    rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null };
+    rateRevision: snapshot.rateRevision, coverage, previousRequestId: previous?.requestId ?? null, ...(product.coachingPackage ? { coachingPackage: product.coachingPackage } : {}) };
   return { ...fields, quoteToken: hash([quoteOwner, fields, snapshotMembership(person), philippineDate(at)]) };
 }
 function purchaseMonths(value: unknown) {
   try { return membershipMonths(value); } catch { throw new ApiError(400, "invalid-membership-months"); }
 }
-export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number) {
+export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number, packageId?: string) {
   const duration = purchaseMonths(months);
   const db = adminDb(), person = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
   if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
@@ -61,7 +74,8 @@ export async function getPurchaseQuote(personId: string, previousRequestId?: str
   }
   if (previous && voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   if (previous && months !== undefined && months !== previous.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const product = previous ? chargeProduct(previous.charge) : membershipProduct(settings, person, duration);
+  const product = previous ? chargeProduct(previous.charge) : packageId !== undefined ? coachingProduct(await getCoachingSettings(), person, packageId) : membershipProduct(settings, person, duration);
+  if (product.kind === "coaching_package") await assertNoActivePackage(personId, previous?.charge.id);
   const basic = quoteFor(person, product, Date.now(), previous, undefined, personId);
   const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId, kind: basic.kind,
     category: basic.categorySnapshot as "student" | "regular", baseAmountMinor: basic.amountMinor, at: Date.now() }) : undefined;
@@ -93,7 +107,16 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   }
   const months = purchaseMonths(body.months);
   if (prior && body.months !== undefined && months !== prior.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
-  const product = prior ? chargeProduct(prior.charge) : membershipProduct(settings, person, months);
+  const product = prior ? chargeProduct(prior.charge) : body.packageId !== undefined
+    ? coachingProduct(coachingSettings((await tx.get(db.doc("gymSettings/coaching"))).data()), person, body.packageId) : membershipProduct(settings, person, months);
+  const coaching = product.kind === "coaching_package", packageRef = db.doc(`coachingPackages/${prior?.charge.id ?? purchaseChargeId(personId, operation)}`);
+  // A per-client lock document serializes concurrent package submissions for the one-active-package rule.
+  const coachingLock = db.doc(`coachingPurchaseState/${personId}`);
+  if (coaching) {
+    await tx.get(coachingLock);
+    await assertNoActivePackage(personId, prior?.charge.id, tx, db);
+    if (prior && !(await tx.get(packageRef)).data()) throw new ApiError(409, "replacement-unavailable");
+  }
   const now = Date.now(), basic = quoteFor(person, product, now, prior, undefined, newProfile ? "new-profile" : personId);
   if (prior && body.voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   const voucher = !prior && body.voucherCode ? await prepareVoucher(tx, db, { code: body.voucherCode, personId, actorId, kind: basic.kind,
@@ -101,7 +124,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   const quote = quoteFor(person, product, now, prior, voucher ?? undefined, newProfile ? "new-profile" : personId);
   if (body.quoteToken !== quote.quoteToken) throw new ApiError(409, "purchase-quote-changed");
   const stateRef = db.doc(`membershipPurchaseState/${personId}`), state = (await tx.get(stateRef)).data();
-  if (quote.kind !== "daily_session" && state?.activeRequestId) {
+  if (isMembership(quote.kind) && state?.activeRequestId) {
     const active = (await tx.get(db.doc(`paymentRequests/${state.activeRequestId}`))).data();
     if (active?.status === "pending") throw new ApiError(409, "pending-purchase-exists");
     if (active?.status === "rejected" && active.id !== prior?.requestId) {
@@ -116,7 +139,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     receiptId: typeof body.receiptId === "string" ? body.receiptId : undefined, receiptToken: typeof body.receiptToken === "string" ? body.receiptToken : undefined }) : null;
   if (proof && proof.paymentRequestId !== requestId) throw new ApiError(409, "valid-receipt-required");
   const number = prior ? null : await prepareTransactionNumber(tx, db);
-  const charge: Charge = prior?.charge ?? { id: chargeId, ...product.price,
+  const charge: Charge = prior?.charge ?? { id: chargeId, ...product.price, ...(product.coachingPackage ? { coachingPackage: product.coachingPackage } : {}),
     ...(voucher ? { baseAmountMinor: voucher.baseAmountMinor, discountAmountMinor: voucher.discountAmountMinor, amountMinor: voucher.amountMinor, voucherSnapshot: voucher.voucherSnapshot } : {}),
     tibayTransactionNumber: number!.number, personId, kind: quote.kind, chargeDate: philippineDate(now),
     createdAt: now, recognizedPurchaseAt: null, requestedCoverage: quote.coverage, approvedCoverage: null, dailyVisitDate: null, attendanceLogId: null, uniqueDailyKey: null, operationId: operation };
@@ -127,8 +150,13 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
     number?.commit(); proof?.commit(); voucher?.commit(chargeId, charge.tibayTransactionNumber);
     tx.set(db.doc(`charges/${chargeId}`), { ...charge, activePaymentRequestId: requestId });
     tx.set(db.doc(`paymentRequests/${requestId}`), payment);
-    if (quote.kind !== "daily_session") tx.set(stateRef, { activeRequestId: requestId });
-    appendAudit(tx, db, { actorId, action: prior ? "payment-replacement-submitted" : "membership-purchase-submitted", entityType: "paymentRequest", entityId: requestId,
+    if (isMembership(quote.kind)) tx.set(stateRef, { activeRequestId: requestId });
+    if (coaching) tx.set(coachingLock, { lastRequestId: requestId, updatedAt: now });
+    if (coaching && prior) tx.update(packageRef, { paymentRequestId: requestId, status: "pending" });
+    else if (coaching) tx.set(packageRef, { id: chargeId, personId, chargeId, paymentRequestId: requestId, packageId: product.coachingPackage!.packageId,
+      priceMinor: product.price.unitRateMinor, sessions: product.coachingPackage!.sessions, validityDays: product.coachingPackage!.validityDays, status: "pending",
+      submittedAt: now, approvedAt: null, startedAt: null, coachingExpiresAt: null, sessionsUsed: 0, topUpSessions: 0, coachId: null } satisfies ClientPackage);
+    appendAudit(tx, db, { actorId, action: prior ? "payment-replacement-submitted" : coaching ? "coaching-purchase-submitted" : "membership-purchase-submitted", entityType: "paymentRequest", entityId: requestId,
       personId, operationId: operation, after: { kind: quote.kind, method: payment.method, amountMinor: quote.amountMinor, status: "pending" } });
   } };
 }
@@ -176,6 +204,8 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     const chargeRef = db.doc(`charges/${payment.chargeId}`), charge = (await tx.get(chargeRef)).data() as Charge | undefined;
     if (!charge || charge.confirmedPaymentRequestId || charge.abandonedAt || charge.activePaymentRequestId !== id) throw new ApiError(409, "charge-review-changed");
     if (payment.amountMinor !== charge.amountMinor) throw new ApiError(409, "payment-amount-conflict");
+    const packageRef = charge.kind === "coaching_package" ? db.doc(`coachingPackages/${charge.id}`) : null;
+    if (packageRef && !(await tx.get(packageRef)).data()) throw new ApiError(409, "charge-review-changed");
     const personRef = db.doc(`persons/${payment.personId}`), person = (await tx.get(personRef)).data() as Person | undefined;
     const pending = !person ? (await tx.get(db.doc(`unverifiedPersons/${payment.personId}`))).data() as Person | undefined : undefined;
     const customer = person ?? pending;
@@ -197,6 +227,7 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
     }
     const approved = body.decision === "approve";
     const settleVoucher = approved ? await prepareVoucherSettlement(tx, db, charge, "confirmed", actorId, now) : null;
+    if (packageRef) tx.update(packageRef, approved ? { status: "approved", approvedAt: now } : { status: "rejected" });
     tx.update(paymentRef, { status: approved ? "approved" : "rejected", reviewedBy: actorId, reviewedAt: now, rejectionReason: approved ? null : reason,
       confirmedAt: approved ? now : null, appliedCoverage: approved ? preview.coverage : null, gcashReferenceSnapshot: reference?.normalizedReference ?? null });
     if (approved) {
@@ -230,9 +261,12 @@ export async function abandonPurchase(actorId: string, body: Record<string, unkn
     const paymentRef = charge.activePaymentRequestId ? db.doc(`paymentRequests/${charge.activePaymentRequestId}`) : null;
     const payment = paymentRef ? (await tx.get(paymentRef)).data() : null;
     const stateRef = db.doc(`membershipPurchaseState/${charge.personId}`), state = (await tx.get(stateRef)).data();
+    const packageRef = charge.kind === "coaching_package" ? db.doc(`coachingPackages/${charge.id}`) : null;
+    if (packageRef && !(await tx.get(packageRef)).data()) throw new ApiError(409, "purchase-cannot-close");
     if (payment?.status === "approved") throw new ApiError(409, "purchase-cannot-close");
     const now = Date.now(), release = await prepareVoucherSettlement(tx, db, charge, "released", actorId, now);
     release(); tx.update(ref, { abandonedAt: now, abandonmentReason: reason });
+    if (packageRef) tx.update(packageRef, { status: "closed" });
     if (paymentRef && payment?.status === "pending") tx.update(paymentRef, { status: "rejected", reviewedAt: now, reviewedBy: actorId, rejectionReason: `Closed: ${reason}` });
     if (state?.activeRequestId === charge.activePaymentRequestId) tx.set(stateRef, { activeRequestId: null });
     appendAudit(tx, db, { actorId, action: "membership-purchase-abandoned", entityType: "charge", entityId: id, personId: charge.personId,

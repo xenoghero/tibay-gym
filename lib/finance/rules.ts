@@ -63,17 +63,19 @@ export function operationId(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(value)) throw new Error("Invalid operation identifier.");
   return value;
 }
+/** The per-kind total a charge's money is reported under. */
+export const kindTotal = (kind: ChargeKind) => ({ daily_session: "dailyMinor", renewal: "renewalMinor", new_membership: "newMembershipMinor", coaching_package: "coachingPackageMinor" } as const)[kind];
 /** Pure reconciliation of source records. Purchase dates and confirmation dates are deliberately separate. */
 export function collectionTotals(charges: Charge[], requests: PaymentRequest[], from: string, through: string) {
   const between = (date: string) => date >= from && date <= through;
   const byId = new Map(charges.map(charge => [charge.id, charge]));
-  const totals = { expectedMinor: 0, dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0,
+  const totals = { expectedMinor: 0, dailyMinor: 0, renewalMinor: 0, newMembershipMinor: 0, coachingPackageMinor: 0,
     pendingDailyMinor: 0, pendingRenewalMinor: 0, confirmedMinor: 0, confirmedCount: 0, cashMinor: 0, gcashMinor: 0, otherElectronicMinor: 0 };
   for (const charge of charges) {
     const recognized = charge.kind === "daily_session" ? charge.chargeDate : charge.recognizedPurchaseAt === null ? null : philippineDate(charge.recognizedPurchaseAt);
     if (recognized && between(recognized)) {
       totals.expectedMinor += charge.amountMinor;
-      totals[charge.kind === "daily_session" ? "dailyMinor" : charge.kind === "renewal" ? "renewalMinor" : "newMembershipMinor"] += charge.amountMinor;
+      totals[kindTotal(charge.kind)] += charge.amountMinor;
     }
   }
   const confirmedCharges = new Set<string>();
