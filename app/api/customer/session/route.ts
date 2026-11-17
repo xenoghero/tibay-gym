@@ -1,3 +1,4 @@
+import { startDuePackages } from "@/lib/server/coaching";
 import { createCustomerSession, requireCustomer, revokeCustomerSession, sameOrigin, sessionCookie } from "@/lib/server/customer-session";
 import { publicCaller, publicRateLimiter } from "@/lib/server/public-rate-limit";
 import { resolveAccountPhone } from "@/lib/server/attendance-request";
@@ -26,7 +27,9 @@ export async function DELETE(request: Request) {
 }
 export async function GET(request: Request) {
   return handleApi(async () => {
-    const { person, official, session } = await requireCustomer(request);
+    const { person: stored, official, session } = await requireCustomer(request);
+    // A 15-day automatic package start adds the membership month, so show the saved result.
+    const person = official && await startDuePackages(session.personId) ? (await adminDb().doc(`persons/${session.personId}`).get()).data()! : stored;
     const monthStart = Date.parse(`${philippineDate(Date.now()).slice(0, 7)}-01T00:00:00+08:00`);
     const visits = await adminDb().collection("attendanceLogs").where("personId", "==", session.personId)
       // desc matches the existing (personId, checkInAt DESC) index in firestore.indexes.json

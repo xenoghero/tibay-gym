@@ -1,3 +1,5 @@
+import { packageState } from "./clocks";
+
 /** Coaching package catalog. One price for every Rate category; packages are hidden, never deleted. */
 export interface CoachingPackage { id: string; priceMinor: number; sessions: number; validityDays: number; visible: boolean }
 export interface CoachingSettings { packages: CoachingPackage[]; revision: number; updatedAt: number | null; updatedBy: string | null }
@@ -37,7 +39,8 @@ export interface ClientPackage {
   priceMinor: number; sessions: number; validityDays: number; status: PackageStatus;
   submittedAt: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null;
   sessionsUsed: number; topUpSessions: number; coachId: string | null;
+  /** The check-in that started the package, so that visit can say so. */
+  startedByLogId?: string | null;
 }
-/** Only one package at a time: pending, approved-not-started, or active with sessions left. */
-export const blocksNewPackage = (record: Pick<ClientPackage, "status" | "sessions" | "sessionsUsed">) =>
-  record.status === "pending" || record.status === "approved" || (record.status === "active" && record.sessionsUsed < record.sessions);
+/** Only one package at a time: pending, approved-not-started, or active with sessions left and not expired. */
+export const blocksNewPackage = (record: ClientPackage, now: number) => ["pending", "approved", "active"].includes(packageState(record, now).status);

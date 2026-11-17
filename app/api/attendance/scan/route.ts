@@ -1,5 +1,6 @@
 import { isPaymentMethod } from "@/lib/finance/payment-methods";
 import { createHash } from "node:crypto";
+import { checkinCoaching } from "@/lib/server/coaching";
 import { scanAttendance } from "@/lib/server/attendance";
 import { adminDb } from "@/lib/server/firebase-admin";
 import { ApiError, handleApi, json, readBody } from "@/lib/server/rfid/http";
@@ -59,9 +60,10 @@ export async function POST(request: Request) {
       const person = official ?? (await tx.get(adminDb().doc(`unverifiedPersons/${personId}`))).data();
       const log = (await tx.get(adminDb().doc(`${unverified ? "unverifiedAttendanceLogs" : "attendanceLogs"}/${result.logId}`))).data();
       if (!log || !person || person.deletingAt) throw new ApiError(409, "person-unavailable");
-      return { checkInAtMs: log.checkInAt.toMillis(), visitCount: person.visitCount,
+      return { checkInAtMs: log.checkInAt.toMillis(), visitCount: person.visitCount, type: person.type, membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null,
         ...(unverified ? { unverified: true } : {}) };
     });
-    return json({ action: result.action, personId, ...details });
+    const coaching = details.unverified ? null : await checkinCoaching(personId, result.logId);
+    return json({ action: result.action, personId, ...details, ...(coaching ? { coaching } : {}) });
   }, "qr-scan");
 }

@@ -14,6 +14,7 @@ import type { RegistrationFields } from "@/lib/registration";
 import { appendAudit } from "./audit";
 import { prepareDailyCharge } from "./daily-charges";
 import { registrationSettings } from "@/lib/registration-settings";
+import { prepareStartPackage } from "./coaching";
 
 export const RESCAN_WINDOW_MS = 3_000;
 export const ATTENDANCE_COOLDOWN_MS = 30_000;
@@ -92,12 +93,16 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
       if (storedPerson || !matching.empty || !matchingPending.empty) throw new ApiError(409, "guest-conflict");
     }
     const standing = person ? effectiveMemberStatusAt(person, now) : null;
+    // An approved Coaching package starts at the first check-in; its membership month covers this visit.
+    const packageStart = official && !checkoutOnly && official.deletingAt == null
+      ? await prepareStartPackage(tx, db, personId!, official, now, { logId: generatedLogId, actorId: input.source === "qr" ? `customer:${personId}` : `device:${ENTRANCE_DEVICE_ID}` }) : null;
+    const coveredByPackage = !!packageStart?.covers(now);
     let rejection: RfidTapEvent["resultCode"] | null = null;
     if (command?.active) rejection = "enrollment-active";
     else if (!personId) rejection = "unknown-card";
     else if (!person || person.deletingAt != null) rejection = "person-unavailable";
     else if (input.source === "rfid" && person.rfidTagId !== target) rejection = "unknown-card";
-    else if (input.source === "rfid" && person.type === "member" && standing !== "active") rejection = "expired-member";
+    else if (input.source === "rfid" && person.type === "member" && standing !== "active" && !coveredByPackage) rejection = "expired-member";
     const save = (resultCode: string, action: ScanResult["action"], logId: string | null) => {
       command?.finish();
       const result = makeReceipt(identity, digest, now, { resultCode, action, logId, personId, assignmentId: null });
@@ -157,7 +162,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     assertCooldown();
     const stale = open && now - open.checkInAt.toMillis() >= STALE_SESSION_MS;
     const action = open && !stale ? "checked-out" : "checked-in";
-    const commitCharge = action === "checked-in" && (person!.type !== "member" || standing !== "active")
+    const commitCharge = action === "checked-in" && !coveredByPackage && (person!.type !== "member" || standing !== "active")
       ? await prepareDailyCharge(tx, db, { personId: personId!, category: guest?.rateCategory ?? storedPerson?.rateCategory,
         at: now, logId: newLog.id, source: input.source, eventId: input.eventId,
         paymentMethod: input.source === "qr" ? input.paymentMethod : undefined,
@@ -180,6 +185,7 @@ export async function scanAttendance(input: ScanRequest): Promise<ScanResult> {
     const logId = action === "checked-out" ? openRef!.id : newLog.id;
     if (action === "checked-in") {
       commitCharge();
+      packageStart?.commit();
       tx.set(newLog, { personId, source: input.source, checkInAt: stamp, checkOutAt: null, closedReason: null });
       tx.update(personRef!, { visitCount: FieldValue.increment(1), lastVisitAt: stamp, updatedAt: stamp });
     }

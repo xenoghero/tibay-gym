@@ -9,6 +9,7 @@ import { snapshotRate } from "@/lib/finance/rules";
 import type { GymSettings } from "@/lib/finance/contracts";
 import { STALE_SESSION_MS } from "@/lib/server/attendance";
 import { receiptsAvailable } from "@/lib/server/receipt-store";
+import { checkinCoaching, startDuePackages } from "@/lib/server/coaching";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -36,8 +37,12 @@ export async function POST(request: Request) {
     const doc = snapshot.docs[0];
     const person = doc.data();
     if (person.deletingAt != null) throw new ApiError(409, "person-unavailable");
-    const result = { id: doc.id, name: person.name, type: person.type, status: person.status,
-      membershipExpiryMs: person.membershipExpiry?.toMillis() ?? null, visitCount: person.visitCount,
+    // An automatic start may just have added the membership month, so read the profile again.
+    const membership = !unverified && await startDuePackages(doc.id) ? (await db.doc(`persons/${doc.id}`).get()).data()! : person;
+    const coaching = unverified ? null : await checkinCoaching(doc.id);
+    const result = { id: doc.id, name: person.name, type: membership.type, status: membership.status,
+      membershipExpiryMs: membership.membershipExpiry?.toMillis() ?? null, visitCount: person.visitCount,
+      ...(coaching ? { coaching } : {}),
       rateCategory: person.rateCategory === "student" || person.rateCategory === "regular" ? person.rateCategory : null,
       ...(unverified ? { unverified: true } : {}) };
     // Recheck the expected session inside the checkout transaction.
@@ -45,7 +50,8 @@ export async function POST(request: Request) {
       const state = (await db.doc(`${unverified ? "unverifiedAttendanceState" : "attendanceState"}/${doc.id}`).get()).data();
       return json({ person: result, expectedLogId: state?.openLogId ?? null });
     }
-    if (enabled && (person.type !== "member" || effectiveMemberStatusAt({ type: person.type, status: person.status, membershipExpiry: person.membershipExpiry ?? null }, Date.now()) !== "active")) {
+    // An approved package starts at this check-in and its membership month covers the visit.
+    if (enabled && coaching?.status !== "approved" && (membership.type !== "member" || effectiveMemberStatusAt({ type: membership.type, status: membership.status, membershipExpiry: membership.membershipExpiry ?? null }, Date.now()) !== "active")) {
       const state = (await db.doc(`${unverified ? "unverifiedAttendanceState" : "attendanceState"}/${doc.id}`).get()).data();
       const open = state?.openLogId ? (await db.doc(`${unverified ? "unverifiedAttendanceLogs" : "attendanceLogs"}/${state.openLogId}`).get()).data() : null;
       const charge = (await db.doc(`charges/${dailyChargeId(doc.id, Date.now())}`).get()).data();

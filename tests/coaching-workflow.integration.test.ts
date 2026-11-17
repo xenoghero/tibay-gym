@@ -6,9 +6,12 @@ vi.mock("server-only", () => ({}));
 const state = vi.hoisted(() => ({ store: null as ReturnType<typeof import("./memory-firestore").memoryFirestore> | null }));
 vi.mock("@/lib/server/firebase-admin", () => ({ adminDb: () => state.store!.db }));
 vi.mock("@/lib/server/rfid/rate-limit", () => ({ throttle: vi.fn() }));
+vi.mock("@/lib/server/public-rate-limit", () => ({ publicCaller: () => "synthetic", publicRateLimiter: { consume: vi.fn() } }));
 import { getPurchaseQuote, submitPurchase, paymentReviewPreview, decidePayment, abandonPurchase, purchaseChargeId } from "@/lib/server/purchases";
 import { customerCoaching, getCoachingSettings, saveCoachingSettings } from "@/lib/server/coaching";
 import { financeReport } from "@/lib/server/finance-report";
+import { POST as scan } from "@/app/api/attendance/scan/route";
+import { POST as lookup } from "@/app/api/attendance/lookup/route";
 
 const NOW = Date.parse("2026-11-17T02:00:00Z");
 const rows = (name: string) => [...state.store!.data].filter(([path]) => path.startsWith(`${name}/`)).map(([, value]) => value);
@@ -26,8 +29,8 @@ async function decide(id: string, decision = "approve") {
 beforeEach(() => {
   state.store = memoryFirestore(); sequence = 0; vi.useFakeTimers(); vi.setSystemTime(NOW);
   state.store.data.set("gymSettings/finance", { ...DEFAULT_SETTINGS, financialCutoverAt: NOW - 1, studentMonthlyMinor: 100000, regularMonthlyMinor: 120000 });
-  state.store.data.set("persons/p1", { name: "Client", phone: "09123456789", type: "guest", status: null, rateCategory: "student", membershipExpiry: null });
-  state.store.data.set("persons/p2", { name: "Member", phone: "09123456780", type: "member", status: "active", rateCategory: "regular", membershipExpiry: Timestamp.fromMillis(NOW + 5 * 86400000) });
+  state.store.data.set("persons/p1", { name: "Client", phone: "09123456789", type: "guest", status: null, rateCategory: "student", membershipExpiry: null, visitCount: 0, lastVisitAt: null, rfidTagId: null });
+  state.store.data.set("persons/p2", { name: "Member", phone: "09123456780", type: "member", status: "active", rateCategory: "regular", membershipExpiry: Timestamp.fromMillis(Date.parse("2026-11-21T16:00:00Z")), visitCount: 0, lastVisitAt: null, rfidTagId: null });
 });
 afterEach(() => vi.useRealTimers());
 
@@ -95,4 +98,55 @@ it("leaves membership purchases on their own lock alongside a coaching package",
   const quote = await getPurchaseQuote("p1");
   expect(quote.kind).toBe("new_membership");
   await expect(submitPurchase("customer:p1", "p1", { method: "cash", quoteToken: quote.quoteToken, operationId: "membership-alongside-001" })).resolves.toMatchObject({ id: expect.any(String) });
+});
+
+const post = (body: unknown) => new Request("https://synthetic.test/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const checkIn = async (personId: string, eventId: string) => (await scan(post({ personId, eventId, requestedAt: Date.now() }))).json();
+const expiryOf = (personId: string) => (state.store!.data.get(`persons/${personId}`)!.membershipExpiry as Timestamp).toMillis();
+
+it("starts an approved package at the first check-in and covers that visit with the membership month", async () => {
+  const bought = await buy("p1", "pkg-4");
+  await decide(bought.id);
+  vi.setSystemTime(NOW + 2 * 86400000);
+  const looked = await (await lookup(post({ phone: "09123456789" }))).json();
+  expect(looked.paymentDue).toBeUndefined();
+  expect(looked.person.coaching).toMatchObject({ status: "approved", sessionsLeft: 4 });
+  const visit = await checkIn("p1", "first-coaching-visit-01");
+  expect(visit).toMatchObject({ action: "checked-in", coaching: { status: "active", sessionsLeft: 4, started: true } });
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ status: "active", startedAt: NOW + 2 * 86400000, coachingExpiresAt: Date.parse("2026-11-25T16:00:00Z") });
+  // Nov 19 + one month: gym access runs on its own clock, past the 7-day coaching validity.
+  expect(state.store!.data.get("persons/p1")).toMatchObject({ type: "member", status: "active" });
+  expect(expiryOf("p1")).toBe(Date.parse("2026-12-18T16:00:00Z"));
+  expect(rows("charges").filter(charge => charge.kind === "daily_session")).toHaveLength(0);
+  // The included month is not a membership sale.
+  const report = await financeReport(new URLSearchParams({ date: "2026-11-19" }));
+  expect(report.totals).toMatchObject({ newMembershipMinor: 0, renewalMinor: 0 });
+  vi.setSystemTime(NOW + 2 * 86400000 + 60 * 60000);
+  await checkIn("p1", "checkout-coaching-visit-1");
+  vi.setSystemTime(NOW + 3 * 86400000);
+  expect(await checkIn("p1", "second-coaching-visit-01")).toMatchObject({ coaching: { started: false } });
+  // Unused sessions expire with the coaching validity.
+  vi.setSystemTime(Date.parse("2026-11-25T16:00:00Z"));
+  expect((await customerCoaching("p1")).current).toMatchObject({ status: "expired", sessionsLeft: 0 });
+  expect((await customerCoaching("p1")).canBuy).toBe(true);
+});
+
+it("adds the membership month after an existing member's current expiry", async () => {
+  const bought = await buy("p2", "pkg-8");
+  await decide(bought.id);
+  await checkIn("p2", "member-coaching-visit-01");
+  expect(packageOf("p2", bought.operationId)).toMatchObject({ status: "active", startedAt: NOW });
+  // Paid through Nov 21 (expiry Nov 22 00:00 Manila): the package month runs Nov 22 to Dec 22.
+  expect(expiryOf("p2")).toBe(Date.parse("2026-12-21T16:00:00Z"));
+});
+
+it("starts an unused package automatically at approval + 15 days, dated at the deadline", async () => {
+  const bought = await buy("p1", "pkg-12");
+  await decide(bought.id);
+  vi.setSystemTime(NOW + 20 * 86400000);
+  expect((await customerCoaching("p1")).current).toMatchObject({ status: "active", sessionsLeft: 12 });
+  const deadline = NOW + 15 * 86400000;
+  expect(packageOf("p1", bought.operationId)).toMatchObject({ status: "active", startedAt: deadline, coachingExpiresAt: Date.parse("2027-01-10T16:00:00Z") });
+  expect(expiryOf("p1")).toBe(Date.parse("2027-01-01T16:00:00Z"));
+  expect(rows("auditEvents").find(event => event.action === "coaching-package-started")).toMatchObject({ actorId: "system:coaching-auto-start" });
 });

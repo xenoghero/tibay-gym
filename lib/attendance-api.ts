@@ -56,4 +56,7 @@ export interface QrLookupPerson { id: string; name: string; type: "member" | "gu
 export interface DailyRates { studentDailyMinor: number; regularDailyMinor: number; studentMonthlyMinor?: number | null; regularMonthlyMinor?: number | null; gcashAvailable?: boolean; paymentRevision?: number; paymentAccounts?: import("./finance/payment-methods").PaymentAccount[] }
 export interface DailyPaymentDue { amountMinor: number | null; expiredMember: boolean; gcashAvailable: boolean; paymentRevision?: number; paymentAccounts?: import("./finance/payment-methods").PaymentAccount[] }
 export interface QrLookupResponse { person: QrLookupPerson | null; expectedLogId?: string | null; dailyRates?: DailyRates; paymentDue?: DailyPaymentDue }
-export interface QrResponse { action: "checked-in" | "checked-out"; personId: string; checkInAtMs: number; visitCount: number; unverified?: boolean }
+/** A client's coaching package as check-in shows it; `started` is true on the visit that started it. */
+export interface CheckinCoaching { status: import("@/lib/coaching/catalog").PackageStatus; sessionsLeft: number; coachingExpiresAt: number | null; started: boolean }
+export interface QrResponse { action: "checked-in" | "checked-out"; personId: string; checkInAtMs: number; visitCount: number; unverified?: boolean;
+  type?: "member" | "guest"; membershipExpiryMs?: number | null; coaching?: CheckinCoaching }
