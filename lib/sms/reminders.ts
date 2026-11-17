@@ -12,8 +12,23 @@ export function dailySmsTime(now: number, settings: SmsSettings) {
   return Date.parse(`${philippineDate(now)}T${settings.sendTime}:00+08:00`);
 }
 export interface ReminderCandidate {
-  key: string; purpose: "expiry" | "inactivity"; text: string; scheduledAt: number;
-  expirySnapshot: string | null; reminderOffset: number | null; lastVisitSnapshot: number | null;
+  key: string; purpose: "expiry" | "inactivity" | "coaching_expiry"; text: string; scheduledAt: number;
+  expirySnapshot: string | null; reminderOffset: number | null; lastVisitSnapshot: number | null; coachingPackageId?: string;
+}
+/** A package or top-up holding as the coaching reminder sees it; `expiresAt` already includes any Freeze. */
+export interface CoachingHolding { id: string; expiresAt: number; sessionsLeft: number; frozen?: boolean }
+export const COACHING_REMINDER_DAYS = 3;
+// No session count: it could change between queueing and sending.
+const coachingText = (lastDay: string) =>
+  `Tibay Gym: Your coaching ends on ${lastDay} and you still have coaching sessions left. Book them with your coach. To stop SMS, ask the gym admin.`;
+const coachingOffset = (expiresAt: number, now: number) => Math.round((Date.parse(philippineDate(expiresAt - 1)) - Date.parse(philippineDate(now))) / DAY);
+
+/** One text 3 days before the last day of coaching validity, only when sessions are left. */
+export function coachingReminder(personId: string, holding: CoachingHolding, settings: SmsSettings, now: number): ReminderCandidate | null {
+  if (holding.sessionsLeft <= 0 || holding.frozen || now < dailySmsTime(now, settings) || coachingOffset(holding.expiresAt, now) !== COACHING_REMINDER_DAYS) return null;
+  return { key: `coaching-expiry:${personId}:${holding.id}:${holding.expiresAt}`, purpose: "coaching_expiry", scheduledAt: dailySmsTime(now, settings),
+    text: coachingText(philippineDate(holding.expiresAt - 1)), expirySnapshot: String(holding.expiresAt),
+    reminderOffset: COACHING_REMINDER_DAYS, lastVisitSnapshot: null, coachingPackageId: holding.id };
 }
 export function dueReminders(personId: string, person: Record<string, unknown>, settings: SmsSettings, now: number): ReminderCandidate[] {
   if (person.type !== "member" || person.deletingAt || now < dailySmsTime(now, settings)) return [];
@@ -30,7 +45,13 @@ export function dueReminders(personId: string, person: Record<string, unknown>, 
     text: settings.inactivityTemplate, expirySnapshot: null, reminderOffset: null, lastVisitSnapshot: lastVisit });
   return result;
 }
-export function reminderStillCurrent(message: Pick<SmsMessage, "purpose" | "scheduledAt" | "expirySnapshot" | "reminderOffset" | "lastVisitSnapshot">, person: Record<string, unknown>, settings: SmsSettings, now: number): "current" | "wait" | "obsolete" {
+export function reminderStillCurrent(message: Pick<SmsMessage, "purpose" | "scheduledAt" | "expirySnapshot" | "reminderOffset" | "lastVisitSnapshot">, person: Record<string, unknown>, settings: SmsSettings, now: number,
+  coaching?: CoachingHolding | null): "current" | "wait" | "obsolete" {
+  if (message.purpose === "coaching_expiry") {
+    if (!coaching || coaching.sessionsLeft <= 0 || coaching.frozen || String(coaching.expiresAt) !== message.expirySnapshot
+      || philippineDate(message.scheduledAt) !== philippineDate(now) || coachingOffset(coaching.expiresAt, now) !== message.reminderOffset) return "obsolete";
+    return now < dailySmsTime(now, settings) ? "wait" : "current";
+  }
   if (message.purpose !== "expiry" && message.purpose !== "inactivity") return "current";
   if (person.type !== "member" || person.deletingAt) return "obsolete";
   if (message.purpose === "expiry") {

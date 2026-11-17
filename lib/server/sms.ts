@@ -9,6 +9,8 @@ import { DEFAULT_SMS_SETTINGS, type SmsContact, type SmsMessage, type SmsSetting
 import { eligibleContact, smsPhone, smsText, validateSmsSettings } from "@/lib/sms/rules";
 import { lookupSms, sendSms, smsProviderReady } from "./sms-provider";
 import { reminderStillCurrent } from "@/lib/sms/reminders";
+import { effectiveExpiry, packageState } from "@/lib/coaching/clocks";
+import type { ClientPackage } from "@/lib/coaching/catalog";
 
 export const smsKey = (value: string) => createHash("sha256").update(value).digest("hex");
 function smsOperation(value: unknown) {
@@ -101,6 +103,8 @@ export async function runSmsWorker() {
       const settings = { ...DEFAULT_SMS_SETTINGS, ...(await tx.get(db.doc("gymSettings/sms"))).data() };
       const person = (await tx.get(db.doc(`persons/${message.personId}`))).data();
       const contact = (await tx.get(db.doc(`smsContacts/${message.personId}`))).data() as SmsContact | undefined;
+      const coachingRecord = message.purpose === "coaching_expiry" && message.coachingPackageId
+        ? (await tx.get(db.doc(`coachingPackages/${message.coachingPackageId}`))).data() as ClientPackage | undefined : undefined;
       if (!settings.enabled || message.leaseUntil > now || message.scheduledAt > now || ["delivered", "failed", "cancelled"].includes(message.status)) return null;
       const reconcile = message.status !== "queued";
       if (!reconcile && now - message.createdAt > 86_400_000) {
@@ -110,7 +114,9 @@ export async function runSmsWorker() {
         tx.update(row.ref, { status: "cancelled", errorCode: "contact-ineligible", completedAt: now }); return null;
       }
       if (!reconcile) {
-        const reminder = reminderStillCurrent(message, person!, settings, now);
+        const holding = coachingRecord && packageState(coachingRecord, now);
+        const reminder = reminderStillCurrent(message, person!, settings, now, holding && holding.status === "active"
+          ? { id: coachingRecord.id, expiresAt: effectiveExpiry(coachingRecord, now)!, sessionsLeft: holding.sessionsLeft, frozen: holding.frozen } : null);
         if (reminder === "wait") return null;
         if (reminder === "obsolete") {
           tx.update(row.ref, { status: "cancelled", errorCode: "reminder-obsolete", completedAt: now });

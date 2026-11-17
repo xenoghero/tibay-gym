@@ -41,3 +41,40 @@ it("generates a new inactivity episode only after another visit", async () => {
   vi.spyOn(Date, "now").mockReturnValue(now + 11 * DAY);
   expect((await scanSmsReminders()).queued).toBe(1);
 });
+
+const pkg = (extra: Record<string, unknown> = {}) => ({ id: "pkg-1", personId: "p2", chargeId: "pkg-1", paymentRequestId: "r", packageId: "pkg-8", priceMinor: 150000,
+  sessions: 8, validityDays: 15, status: "active", submittedAt: now - 20 * DAY, approvedAt: now - 20 * DAY, startedAt: now - 12 * DAY,
+  // Last day of coaching is 3 days from today (Oct 31); validity ends Nov 1 00:00 Manila.
+  coachingExpiresAt: Date.parse("2026-11-01T00:00:00+08:00"), sessionsUsed: 5, topUpSessions: 0, ...extra });
+const coachingMessages = () => [...data()].filter(([key, value]) => key.startsWith("smsMessages/") && value.purpose === "coaching_expiry").map(([, value]) => value);
+function coachingClient(extra: Record<string, unknown> = {}) {
+  data().set("persons/p2", { type: "guest", phone: "09171234568", membershipExpiry: null, lastVisitAt: now });
+  data().set("smsContacts/p2", { phone: "+639171234568", permission: true, optedOut: false });
+  data().set("coachingPackages/pkg-1", pkg(extra));
+}
+it("texts a client 3 days before coaching ends when sessions are left, once across retries", async () => {
+  coachingClient();
+  await scanSmsReminders(); await scanSmsReminders();
+  expect(coachingMessages()).toEqual([expect.objectContaining({ personId: "p2", coachingPackageId: "pkg-1", status: "queued",
+    text: expect.stringContaining("ends on 2026-10-31") })]);
+  await runSmsWorker();
+  expect(state.send).toHaveBeenCalledWith(expect.objectContaining({ destination: "+639171234568", purpose: "coaching_expiry" }));
+});
+it("sends nothing when no sessions are left, and cancels a queued text once they are used", async () => {
+  coachingClient({ sessionsUsed: 8 });
+  await scanSmsReminders(); expect(coachingMessages()).toHaveLength(0);
+  data().set("coachingPackages/pkg-1", pkg());
+  await scanSmsReminders(); data().set("coachingPackages/pkg-1", pkg({ sessionsUsed: 8 }));
+  await runSmsWorker();
+  expect(coachingMessages()).toEqual([expect.objectContaining({ status: "cancelled", errorCode: "reminder-obsolete" })]);
+  // Opted-out clients get nothing.
+  data().set("coachingPackages/pkg-1", pkg({ coachingExpiresAt: pkg().coachingExpiresAt + DAY })); data().get("smsContacts/p2")!.optedOut = true;
+  vi.spyOn(Date, "now").mockReturnValue(now + DAY);
+  await scanSmsReminders(); expect(coachingMessages()).toHaveLength(1);
+});
+it("applies the automatic 15-day Package start for packages it reads", async () => {
+  coachingClient({ status: "approved", approvedAt: now - 16 * DAY, startedAt: null, coachingExpiresAt: null });
+  await scanSmsReminders();
+  expect(data().get("coachingPackages/pkg-1")).toMatchObject({ status: "active", startedAt: now - DAY });
+  expect(data().get("persons/p2")).toMatchObject({ type: "member", status: "active" });
+});
