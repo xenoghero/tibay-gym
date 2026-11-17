@@ -49,7 +49,8 @@ export async function uploadDailyReceipt(input: { personId: string; category: un
   }
   let price;
   if (kind !== "daily_session") {
-    const person = (await db.doc(`persons/${input.personId}`).get()).data();
+    const person = (await db.doc(`persons/${input.personId}`).get()).data()
+      ?? (kind === "coaching_package" ? (await db.doc(`unverifiedPersons/${input.personId}`).get()).data() : undefined);
     if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
     if (!previous && kind === "coaching_package") price = coachingProduct(await getCoachingSettings(), person, input.packageId).price;
     else if (!previous && kind !== (person.type === "member" ? "renewal" : "new_membership")) throw new ApiError(409, "purchase-quote-changed");

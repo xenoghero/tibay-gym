@@ -207,14 +207,14 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       <strong className={styles.historyAmount}>{money(payment.amountMinor)}</strong>
       <div className={styles.historyState}>{badge}{payment.rejectionReason && <p>{payment.rejectionReason}</p>}{!payment.closed && payment.status === "pending" && <p>Awaiting gym approval.</p>}</div>
       {payment.voucherCode && <p className={styles.historyVoucher}>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}
-      {showCorrection && allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.historyCorrection} onClick={() => replace(payment.id)}>Correct submission →</button>}
+      {showCorrection && (allowPurchases || payment.kind === "coaching_package") && !payment.closed && payment.status === "rejected" && <button className={styles.historyCorrection} onClick={() => replace(payment.id)}>Correct submission →</button>}
     </article>;
     return <article className={styles.paymentRow} key={payment.id}>
       <div className={styles.paymentRowHeading}><strong>{money(payment.amountMinor)}</strong>{badge}</div>
       <p>{paymentLabel(payment)} <span aria-hidden="true">·</span> {formatDate(payment.submittedAt)} at {new Date(payment.submittedAt).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}</p>
       {payment.voucherCode && <p>Voucher {payment.voucherCode} · Saved {money(payment.discountAmountMinor ?? 0)}</p>}
       {payment.rejectionReason && <p className={styles.rejectionReason}>Reason: {payment.rejectionReason}</p>}
-      {showCorrection && allowPurchases && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}
+      {showCorrection && (allowPurchases || payment.kind === "coaching_package") && !payment.closed && payment.status === "rejected" && <button className={styles.textButton} onClick={() => replace(payment.id)}>Correct submission →</button>}
     </article>;
   }
   const title = screen === "history" ? "Payment history" : screen === "coaching" ? "Coaching" : screen === "renew" ? previous ? "Correct your payment" : membershipAction : "Your membership";
@@ -253,13 +253,14 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       {allowPurchases && <a href="#renew" className={`${styles.primaryButton} ${styles.membershipCta}`} onClick={event => { event.preventDefault(); setPrevious(undefined); setConfirmation(""); navigate("renew"); }}><span aria-hidden="true">↻</span>{membershipAction}<span aria-hidden="true">›</span></a>}
       {(!isMember || summary.status !== "active") && <Link className={styles.actionLink} href="/checkin"><span>Daily check-in<small>Training for the day? Choose a daily session at check-in.</small></span><span aria-hidden="true">→</span></Link>}
     </>}
-    {screen === "coaching" && <CoachingPanel allowPurchases={allowPurchases} onSubmitted={() => {
+    {/* Unverified profiles (from the Coaching sign-up link) may buy coaching; the server enforces it. */}
+    {screen === "coaching" && <CoachingPanel onSubmitted={() => {
       setConfirmation("Payment request submitted for gym review. Your coaching package is pending until approval.");
       void load();
     }} />}
-    {screen !== "history" && screen !== "coaching" && !allowPurchases && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Please ask the front desk to verify your account to start membership. You can still view your payment status and history.</p>
+    {screen !== "history" && screen !== "coaching" && !allowPurchases && !previous && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Please ask the front desk to verify your account to start membership. You can still view your payment status and history.</p>
       {checkin && <Link href="/checkin" className={styles.backLink}>Choose a daily session →</Link>}</div></div>}
-    {screen === "renew" && allowPurchases && <>
+    {screen === "renew" && (allowPurchases || previous) && <>
       {checkin && !previous && loading ? <LoadingSkeleton label="Checking existing membership requests…" /> : checkin && !previous && error ?
         <button className={styles.secondaryButton} disabled={refreshing} onClick={() => void load()}>Retry payment status</button> : checkin && !previous && pendingMembership ?
         <section className={styles.paymentPanel} aria-label="Pending membership request"><h2>Membership pending approval</h2>
@@ -285,7 +286,7 @@ function CustomerPurchases({ summary, onRefreshMembership, checkin = false }: { 
       {!loading && screen === "overview" && latest && <>
         {paymentRow(latest, !needsAttention)}
         {!latest.closed && latest.status === "pending" && <p className={styles.pendingNote}>Awaiting gym approval. Your membership updates once payment is approved.</p>}
-        {needsAttention && allowPurchases && <button className={styles.primaryButton} onClick={() => replace(latest.id)}>Correct submission<span aria-hidden="true">→</span></button>}
+        {needsAttention && (allowPurchases || latest.kind === "coaching_package") && <button className={styles.primaryButton} onClick={() => replace(latest.id)}>Correct submission<span aria-hidden="true">→</span></button>}
       </>}
       {!loading && screen === "history" && <>
         {browsingOlder && <span className={styles.eyebrow}>Earlier requests</span>}

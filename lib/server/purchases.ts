@@ -16,6 +16,7 @@ import { readyReceipt } from "./receipt-proof";
 import { appendAudit } from "./audit";
 import { prepareReferenceClaim } from "./gcash-references";
 import { prepareVoucher, previewVoucher, prepareVoucherSettlement } from "./vouchers";
+import { approveUnverified } from "./unverified";
 import type { DiscountQuote } from "@/lib/finance/vouchers";
 type Person = Record<string, unknown> & { type: string; status: string | null; membershipExpiry: Timestamp | null };
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -60,7 +61,9 @@ function purchaseMonths(value: unknown) {
 }
 export async function getPurchaseQuote(personId: string, previousRequestId?: string, voucherCode?: string, months?: number, packageId?: string) {
   const duration = purchaseMonths(months);
-  const db = adminDb(), person = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
+  const db = adminDb(), official = (await db.doc(`persons/${documentId(personId)}`).get()).data() as Person | undefined;
+  // Unverified profiles (from the Coaching sign-up link) may buy coaching only.
+  const person = official ?? (await db.doc(`unverifiedPersons/${personId}`).get()).data() as Person | undefined;
   if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
   const settings = (await db.doc("gymSettings/finance").get()).data() as GymSettings | undefined;
   if (!settings?.financialCutoverAt) throw new ApiError(409, "finance-not-enabled");
@@ -75,6 +78,7 @@ export async function getPurchaseQuote(personId: string, previousRequestId?: str
   if (previous && voucherCode) throw new ApiError(409, "replacement-voucher-locked");
   if (previous && months !== undefined && months !== previous.charge.quantity) throw new ApiError(409, "replacement-duration-locked");
   const product = previous ? chargeProduct(previous.charge) : packageId !== undefined ? coachingProduct(await getCoachingSettings(), person, packageId) : membershipProduct(settings, person, duration);
+  if (!official && product.kind !== "coaching_package") throw new ApiError(409, "verified-profile-required");
   if (product.kind === "coaching_package") await assertNoActivePackage(personId, previous?.charge.id);
   const basic = quoteFor(person, product, Date.now(), previous, undefined, personId);
   const discount = voucherCode ? await previewVoucher({ code: voucherCode, personId, kind: basic.kind,
@@ -146,7 +150,7 @@ export async function preparePurchase(tx: Transaction, db: Firestore, actorId: s
   const payment: PaymentRequest & { membershipSnapshot: MembershipSnapshot } = { id: requestId, chargeId, personId, method: body.method, paymentAccountSnapshot, status: "pending", amountMinor: quote.amountMinor,
     receiptId: proof?.receiptId ?? null, submittedAt: now, previousRequestId: prior?.requestId ?? null, reviewedBy: null, reviewedAt: null, rejectionReason: null,
     confirmedAt: null, appliedCoverage: null, gcashReferenceSnapshot: null, operationId: operation, membershipSnapshot: snapshotMembership(person) };
-  return { result: { id: requestId, chargeId }, commit: () => {
+  return { result: { id: requestId, chargeId }, kind: product.kind, commit: () => {
     number?.commit(); proof?.commit(); voucher?.commit(chargeId, charge.tibayTransactionNumber);
     tx.set(db.doc(`charges/${chargeId}`), { ...charge, activePaymentRequestId: requestId });
     tx.set(db.doc(`paymentRequests/${requestId}`), payment);
@@ -168,9 +172,11 @@ export async function submitPurchase(actorId: string, personId: string, body: Re
   return db.runTransaction(async tx => {
     const prior = (await tx.get(operationRef)).data();
     if (prior) { if (prior.digest !== digest) throw new ApiError(409, "operation-conflict"); return prior.result; }
-    const person = (await tx.get(db.doc(`persons/${personId}`))).data() as Person | undefined;
+    const official = (await tx.get(db.doc(`persons/${personId}`))).data() as Person | undefined;
+    const person = official ?? (await tx.get(db.doc(`unverifiedPersons/${personId}`))).data() as Person | undefined;
     if (!person || person.deletingAt) throw new ApiError(409, "verified-profile-required");
     const staged = await preparePurchase(tx, db, actorId, personId, person, body);
+    if (!official && staged.kind !== "coaching_package") throw new ApiError(409, "verified-profile-required");
     staged.commit(); tx.set(operationRef, { digest, result: staged.result }); return staged.result;
   });
 }
@@ -196,7 +202,7 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
   if (body.decision === "reject" && (!reason || reason.length > 500)) throw new ApiError(400, "rejection-reason-required");
   if (body.reviewed !== true) throw new ApiError(400, "payment-review-required");
   const db = adminDb();
-  return db.runTransaction(async tx => {
+  const decided = await db.runTransaction(async tx => {
     const paymentRef = db.doc(`paymentRequests/${id}`), payment = (await tx.get(paymentRef)).data() as (PaymentRequest & { membershipSnapshot?: MembershipSnapshot }) | undefined;
     if (!payment) throw new ApiError(404, "payment-unavailable");
     if (payment.status === (body.decision === "approve" ? "approved" : "rejected")) return { ok: true, status: payment.status };
@@ -246,6 +252,18 @@ export async function decidePayment(actorId: string, body: Record<string, unknow
         ...(preview.coverage && approved ? { membershipExpiry: coverageExpiryMs(preview.coverage) } : {}), normalizedReference: reference?.normalizedReference ?? null }, reason: approved ? "Payment received and reviewed" : reason });
     return { ok: true, status: approved ? "approved" : "rejected" };
   });
+  // Retrying an approval re-runs this, so a failed verification is never left behind.
+  if (decided.status === "approved") await verifyCoachingBuyer(actorId, id);
+  return decided;
+}
+
+/** Approving the first coaching payment of an unverified profile also verifies it, using the existing approval. */
+async function verifyCoachingBuyer(actorId: string, paymentRequestId: string) {
+  const db = adminDb(), payment = (await db.doc(`paymentRequests/${paymentRequestId}`).get()).data() as PaymentRequest | undefined;
+  if (!payment || payment.status !== "approved") return;
+  const charge = (await db.doc(`charges/${payment.chargeId}`).get()).data() as Charge | undefined;
+  if (charge?.kind !== "coaching_package" || (await db.doc(`persons/${payment.personId}`).get()).exists) return;
+  if ((await db.doc(`unverifiedPersons/${payment.personId}`).get()).exists) await approveUnverified(payment.personId, actorId);
 }
 
 /** Final close is separate from a rejection: it prevents correction at the held price. */

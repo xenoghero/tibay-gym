@@ -13,6 +13,10 @@ import { financeReport } from "@/lib/server/finance-report";
 import { POST as scan } from "@/app/api/attendance/scan/route";
 import { adjustSessions, fixMark, markSession, monthlyCoachCounts, sessionHistory, undoMark } from "@/lib/server/session-marks";
 import { assignCoach } from "@/lib/server/coach-clients";
+import { POST as signup } from "@/app/api/coaching/signup/route";
+import { GET as purchaseQuote, POST as purchaseSubmit } from "@/app/api/customer/purchase/route";
+import { GET as customerPayments } from "@/app/api/customer/payments/route";
+import { voucherFixture } from "./voucher-fixture";
 import { POST as lookup } from "@/app/api/attendance/lookup/route";
 
 const NOW = Date.parse("2026-11-17T02:00:00Z");
@@ -222,4 +226,62 @@ it("records Session adjustments with a reason and keeps marks credited after rea
   expect((await customerCoaching("p1")).current).toMatchObject({ sessionsLeft: 3 });
   expect(rows("auditEvents").find(event => event.action === "session-adjustment")).toMatchObject({
     relevantBefore: { sessionsLeft: 6 }, relevantAfter: { sessionsLeft: 3 }, reason: "Coach marked two sessions by mistake" });
+});
+
+const signupBody = (extra: Record<string, unknown> = {}) => ({ operationId: "coaching-signup-operation-01", name: "New Client", phone: "09170000001", rateCategory: "regular",
+  fbName: "New Client FB", startDate: "2026-11-20", weekdays: ["mon", "wed", "fri"], timeSlot: "evening", address: "Secret address", goals: "Lose weight", remarks: "", ...extra });
+const portal = (path: string, cookie: string, body?: unknown) => new Request(`https://synthetic.test${path}`, { method: body ? "POST" : "GET",
+  headers: { cookie, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+
+async function signUpAndPay() {
+  state.store!.data.set("vouchers/voucher-1", { ...voucherFixture({ kinds: ["coaching_package"] }) });
+  state.store!.data.set("voucherCodeClaims/TRAIN10", { voucherId: "voucher-1" });
+  const response = await signup(post(signupBody()));
+  expect(response.status).toBe(200);
+  const cookie = response.headers.get("Set-Cookie")!.split(";")[0];
+  expect(cookie).toMatch(/^tibay_customer=/);
+  const { personId } = await response.json();
+  const quote = await (await purchaseQuote(portal("/api/customer/purchase?packageId=pkg-8&voucherCode=TRAIN10", cookie))).json();
+  expect(quote).toMatchObject({ kind: "coaching_package", amountMinor: 135000, discountAmountMinor: 15000 });
+  const submitted = await purchaseSubmit(portal("/api/customer/purchase", cookie, { method: "cash", packageId: "pkg-8", voucherCode: "TRAIN10", quoteToken: quote.quoteToken, operationId: "signup-purchase-operation" }));
+  expect(submitted.status).toBe(200);
+  return { personId, cookie, payment: await submitted.json() };
+}
+
+it("signs up from the link, pays with a voucher, and sees the pending payment in the portal", async () => {
+  const { personId, cookie } = await signUpAndPay();
+  expect(state.store!.data.get(`unverifiedPersons/${personId}`)).toMatchObject({ name: "New Client", phone: "09170000001", rateCategory: "regular", leadSource: "facebook",
+    coachingProfile: { fbName: "New Client FB", startDate: "2026-11-20", goals: "Lose weight", remarks: null, preferredSchedule: { weekdays: ["mon", "wed", "fri"], timeSlot: "evening" } } });
+  const payments = await (await customerPayments(portal("/api/customer/payments", cookie))).json();
+  expect(payments.requests).toEqual([expect.objectContaining({ status: "pending", kind: "coaching_package", amountMinor: 135000, voucherCode: "TRAIN10" })]);
+  // Unverified profiles may buy coaching only.
+  const membership = await purchaseQuote(portal("/api/customer/purchase", cookie));
+  expect([membership.status, (await membership.json()).error]).toEqual([409, "verified-profile-required"]);
+});
+
+it("verifies the profile when the first coaching payment is approved, and leaves it unverified when rejected", async () => {
+  const { personId, payment } = await signUpAndPay();
+  await decide(payment.id, "reject");
+  expect(state.store!.data.has(`unverifiedPersons/${personId}`)).toBe(true);
+  expect(state.store!.data.has(`persons/${personId}`)).toBe(false);
+  const replacementQuote = await getPurchaseQuote(personId, payment.id);
+  const replacement = await submitPurchase(`customer:${personId}`, personId, { method: "cash", previousRequestId: payment.id, quoteToken: replacementQuote.quoteToken, operationId: "signup-replacement-0001" });
+  await decide(replacement.id);
+  expect(state.store!.data.has(`unverifiedPersons/${personId}`)).toBe(false);
+  expect(state.store!.data.get(`persons/${personId}`)).toMatchObject({ name: "New Client", leadSource: "facebook", verifiedBy: "admin",
+    coachingProfile: { fbName: "New Client FB", goals: "Lose weight", preferredSchedule: { weekdays: ["mon", "wed", "fri"], timeSlot: "evening" } } });
+  expect(state.store!.data.get(`profileDetails/${personId}`)).toMatchObject({ address: "Secret address" });
+  expect(state.store!.data.get(`coachingPackages/${payment.chargeId}`)).toMatchObject({ status: "approved", personId });
+});
+
+it("refuses a phone that already has a profile without changing it, and validates required fields", async () => {
+  const before = structuredClone(state.store!.data.get("persons/p1"));
+  const taken = await signup(post(signupBody({ phone: "09123456789" })));
+  expect([taken.status, (await taken.json()).error]).toEqual([409, "phone-already-registered"]);
+  expect(state.store!.data.get("persons/p1")).toEqual(before);
+  for (const [field, value] of [["fbName", ""], ["weekdays", []], ["weekdays", ["sat"]], ["timeSlot", "night"], ["startDate", "2026-11-01"], ["rateCategory", undefined]] as const) {
+    const response = await signup(post(signupBody({ operationId: `invalid-signup-${field}-${String(value).length}`, [field]: value })));
+    expect([response.status, (await response.json()).error]).toEqual([400, `signup-invalid-${field}`]);
+  }
+  expect(rows("unverifiedPersons")).toHaveLength(0);
 });

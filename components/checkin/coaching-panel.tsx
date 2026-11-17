@@ -15,7 +15,7 @@ const statusText: Record<PackageStatus, string> = {
 const money = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(minor / 100);
 
 /** Members portal coaching: the client's package status, and buying a package when none is in use. */
-export function CoachingPanel({ allowPurchases, onSubmitted }: { allowPurchases: boolean; onSubmitted(): void }) {
+export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
   const [data, setData] = useState<{ packages: CoachingPackage[]; canBuy: boolean; coachName: string | null; current: Current | null } | null>(null);
   const [error, setError] = useState(""), [reload, setReload] = useState(0), [chosen, setChosen] = useState<string | null>(null);
   useEffect(() => {
@@ -43,7 +43,7 @@ export function CoachingPanel({ allowPurchases, onSubmitted }: { allowPurchases:
       {current.status === "approved" && <p className={styles.pendingNote}>Approved. Your sessions and your included month of gym membership start at your first check-in or coaching session, or 15 days after approval.</p>}
       {current.status === "rejected" && <p className={styles.pendingNote}>Your payment was rejected. Correct it from your latest payment on the Overview tab.</p>}
     </section>}
-    {allowPurchases && canBuy && current?.status !== "rejected" && (item
+    {canBuy && current?.status !== "rejected" && (item
       ? <div className={styles.purchasePanel}>
           <p className={own.chosen}>{item.sessions} coaching sessions · {item.validityDays} days · includes 1 month of gym membership <button className={styles.textButton} onClick={() => setChosen(null)}>Change</button></p>
           <PurchaseForm portal heading="Pay for your coaching package" key={item.id} packageId={item.id} onSubmitted={() => { setChosen(null); setReload(v => v + 1); onSubmitted(); }} />
@@ -55,6 +55,5 @@ export function CoachingPanel({ allowPurchases, onSubmitted }: { allowPurchases:
             <strong>{money(p.priceMinor)}</strong><span>{p.sessions} sessions</span><small>Valid {p.validityDays} days</small></button></li>)}</ul>
           {!packages.length && <p className={own.lead}>No coaching packages are available right now.</p>}
         </section>)}
-    {!allowPurchases && <div className={styles.notice}><div><strong>Profile verification needed</strong><p>Ask the front desk to verify your account before buying coaching.</p></div></div>}
   </>;
 }
