@@ -3,12 +3,13 @@
 import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { IconOverview, IconPeople, IconStatistics, IconAudit, IconPayment, IconMessage, IconQr, IconSettings, IconSignOut, IconPanel, IconMenu, IconClose, IconCoaching } from "./nav-icons";
 import styles from "./dashboard-nav.module.css";
 
-const NAV = [
+export interface NavItem { label: string; href: string; Icon: (props: { size?: number }) => ReactElement }
+const NAV: NavItem[] = [
   { label: "Overview", href: "/dashboard", Icon: IconOverview },
   { label: "People", href: "/dashboard/people", Icon: IconPeople },
   { label: "Statistics", href: "/dashboard/statistics", Icon: IconStatistics },
@@ -36,7 +37,8 @@ function subscribe(onChange: () => void) {
 }
 const serverSnapshot = () => false;
 
-export function DashboardNav() {
+/** The admin's sidebar and mobile drawer; the coach portal passes its own items, name and role. The first item is the home route. */
+export function DashboardNav({ items = NAV, name, role = "Owner / Admin" }: { items?: NavItem[]; name?: string; role?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
@@ -47,7 +49,8 @@ export function DashboardNav() {
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
-  const activeIndex = NAV.findIndex(({ href }) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`)));
+  const home = items[0].href;
+  const activeIndex = items.findIndex(({ href }) => pathname === href || (href !== home && pathname.startsWith(`${href}/`)));
 
   const finishClosing = useCallback(() => {
     if (closeTimer.current !== null) clearTimeout(closeTimer.current);
@@ -107,15 +110,15 @@ export function DashboardNav() {
       </button>}
       <nav className={styles.nav} aria-label={mobile ? "Mobile navigation" : "Sidebar navigation"}>
         {activeIndex >= 0 && <span aria-hidden="true" className={styles.activeIndicator} style={{ "--active-index": activeIndex } as CSSProperties} />}
-        {NAV.map(({ href, label, Icon }, index) => <Link key={href} href={href} className={`${styles.link} ${styles.tipTarget}`} aria-label={label} aria-current={index === activeIndex ? "page" : undefined} onClick={() => { if (mobile) closeDrawer(); }}>
+        {items.map(({ href, label, Icon }, index) => <Link key={href} href={href} className={`${styles.link} ${styles.tipTarget}`} aria-label={label} aria-current={index === activeIndex ? "page" : undefined} onClick={() => { if (mobile) closeDrawer(); }}>
           <Icon size={20} /><span className={styles.label}>{label}</span>
           {compact && <span className={styles.tooltip} aria-hidden="true">{label}</span>}
         </Link>)}
       </nav>
       <div className={styles.footer}>
         <div className={styles.identity} title={user?.email ?? undefined}>
-          <div className={styles.avatar}>{(user?.email ?? "?").slice(0, 2).toUpperCase()}</div>
-          <div className={styles.identityDetails}><div className={styles.email}>{user?.email ?? "—"}</div><div className={styles.role}>Owner / Admin</div></div>
+          <div className={styles.avatar}>{(name ? name.split(/\s+/).map(part => part[0]).join("") : user?.email ?? "?").slice(0, 2).toUpperCase()}</div>
+          <div className={styles.identityDetails}><div className={styles.email}>{name ?? user?.email ?? "—"}</div><div className={styles.role}>{role}</div></div>
         </div>
         <button type="button" className={`${styles.signOut} ${styles.tipTarget}`} aria-label={signingOut ? "Signing out" : "Sign out"} disabled={signingOut} onClick={handleSignOut}>
           <IconSignOut /><span className={styles.label}>{signingOut ? "Signing out…" : "Sign out"}</span>

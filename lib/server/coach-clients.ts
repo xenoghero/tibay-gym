@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import type { Firestore, Transaction } from "firebase-admin/firestore";
 import { currentPackage, effectiveExpiry, packageState } from "@/lib/coaching/clocks";
 import type { ClientPackage, CoachAssignment, CoachingProfile } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
@@ -50,21 +51,25 @@ export async function coachAssignments() {
 
 export async function assignCoach(actorId: string, body: Record<string, unknown>) {
   const personId = documentId(body.personId), coachId = documentId(body.coachId), db = adminDb();
-  return db.runTransaction(async tx => {
-    const coach = (await tx.get(db.doc(`coaches/${coachId}`))).data() as Coach | undefined;
-    if (!coach?.active) throw new ApiError(409, "coach-unavailable");
-    const person = (await tx.get(db.doc(`persons/${personId}`))).data();
-    if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable");
-    const packages = await tx.get(db.collection("coachingPackages").where("personId", "==", personId));
-    if (!packages.docs.some(row => ["approved", "active"].includes((row.data() as ClientPackage).status))) throw new ApiError(409, "coaching-client-required");
-    const ref = db.doc(`coachAssignments/${personId}`), previous = (await tx.get(ref)).data() as CoachAssignment | undefined;
-    if (previous?.coachId === coachId) return { ok: true };
+  return db.runTransaction(async tx => { (await prepareAssignment(tx, db, actorId, personId, coachId))(); return { ok: true }; });
+}
+
+/** Reads and checks a coach assignment inside a transaction; returns the audited write (a no-op when unchanged). */
+export async function prepareAssignment(tx: Transaction, db: Firestore, actorId: string, personId: string, coachId: string) {
+  const coach = (await tx.get(db.doc(`coaches/${coachId}`))).data() as Coach | undefined;
+  if (!coach?.active) throw new ApiError(409, "coach-unavailable");
+  const person = (await tx.get(db.doc(`persons/${personId}`))).data();
+  if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable");
+  const packages = await tx.get(db.collection("coachingPackages").where("personId", "==", personId));
+  if (!packages.docs.some(row => ["approved", "active"].includes((row.data() as ClientPackage).status))) throw new ApiError(409, "coaching-client-required");
+  const ref = db.doc(`coachAssignments/${personId}`), previous = (await tx.get(ref)).data() as CoachAssignment | undefined;
+  return () => {
+    if (previous?.coachId === coachId) return;
     const now = Date.now();
     tx.set(ref, { personId, coachId, assignedAt: now, assignedBy: actorId } satisfies CoachAssignment);
     appendAudit(tx, db, { actorId, action: "coach-assigned", entityType: "coachAssignment", entityId: personId, personId,
       operationId: randomUUID(), before: { coachId: previous?.coachId ?? null }, after: { coachId }, occurredAt: now });
-    return { ok: true };
-  });
+  };
 }
 
 /** The client's coach name for check-in and the members portal, or null. */
@@ -74,7 +79,7 @@ export async function coachNameFor(personId: string) {
   return coach?.active ? coach.name : null;
 }
 
-async function loadClient(id: string, now: number) {
+export async function loadClient(id: string, now: number) {
   await settleDuePackages(id, now);
   const db = adminDb(), [person, packages] = await Promise.all([db.doc(`persons/${id}`).get(), db.collection("coachingPackages").where("personId", "==", id).get()]);
   const data = person.data();

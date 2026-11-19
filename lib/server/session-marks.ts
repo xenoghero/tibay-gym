@@ -9,6 +9,7 @@ import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
 import { prepareStartPackage, settleDuePackages } from "./coaching";
+import { hasStarted, manilaHour, type Booking } from "@/lib/coaching/bookings";
 import type { Coach } from "./coaches";
 
 /** One coach-accompanied workout (done) or a No-show, credited to the coach who recorded it. */
@@ -16,6 +17,8 @@ export interface SessionMark {
   id: string; personId: string; coachId: string; date: string; outcome: "done" | "no_show"; note: string | null;
   /** The package a done session was used from. */
   packageRecordId: string | null;
+  /** The booking this mark settles, when marked from the Schedule. */
+  bookingId?: string | null;
   createdAt: number; undoneAt: number | null; undoneBy: string | null;
 }
 
@@ -52,6 +55,16 @@ async function prepareUse(tx: Transaction, db: Firestore, personId: string, now:
   } };
 }
 
+/** The coach's own uncancelled booking for this client, once its hour has begun and while it has no mark. */
+async function bookingToMark(tx: Transaction, db: Firestore, bookingId: string, coachId: string, personId: string, now: number) {
+  const booking = (await tx.get(db.doc(`coachBookings/${bookingId}`))).data() as Booking | undefined;
+  if (!booking || booking.cancelledAt || booking.coachId !== coachId || booking.personId !== personId) throw new ApiError(404, "booking-unavailable");
+  if (!hasStarted(booking.date, booking.hour, philippineDate(now), manilaHour(now))) throw new ApiError(409, "booking-not-started");
+  const marks = await tx.get(db.collection("sessionMarks").where("bookingId", "==", bookingId));
+  if (marks.docs.some(row => !(row.data() as SessionMark).undoneAt)) throw new ApiError(409, "booking-marked");
+  return booking;
+}
+
 /** A coach marks a session done or records a No-show for one of their clients. */
 export async function markSession(coachId: string, body: Record<string, unknown>) {
   const personId = documentId(body.personId), result = outcome(body.outcome), text = note(body.note);
@@ -60,16 +73,20 @@ export async function markSession(coachId: string, body: Record<string, unknown>
   const db = adminDb(), id = `mark-${createHash("sha256").update(JSON.stringify([coachId, operation])).digest("hex").slice(0, 40)}`;
   // Save a due 15-day start first, so it stays saved even if this mark is refused.
   await settleDuePackages(personId);
+  const bookingId = body.bookingId === undefined ? null : documentId(body.bookingId);
   return db.runTransaction(async tx => {
-    const now = Date.now(), date = markDate(body.date ?? philippineDate(now), now), ref = db.doc(`sessionMarks/${id}`);
+    const now = Date.now(), ref = db.doc(`sessionMarks/${id}`);
     const existing = (await tx.get(ref)).data() as SessionMark | undefined;
     if (existing) return { id, outcome: existing.outcome };
     const assignment = (await tx.get(db.doc(`coachAssignments/${personId}`))).data() as CoachAssignment | undefined;
     if (assignment?.coachId !== coachId) throw new ApiError(403, "client-not-assigned");
+    const booking = bookingId ? await bookingToMark(tx, db, bookingId, coachId, personId, now) : null;
+    const date = markDate(booking?.date ?? body.date ?? philippineDate(now), now);
     const use = result === "done" ? await prepareUse(tx, db, personId, now, `coach:${coachId}`) : null;
     if (!use) { const person = (await tx.get(db.doc(`persons/${personId}`))).data(); if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable"); }
     use?.commit();
-    tx.set(ref, { id, personId, coachId, date, outcome: result, note: text, packageRecordId: use?.packageRecordId ?? null, createdAt: now, undoneAt: null, undoneBy: null } satisfies SessionMark);
+    tx.set(ref, { id, personId, coachId, date, outcome: result, note: text, packageRecordId: use?.packageRecordId ?? null, createdAt: now, undoneAt: null, undoneBy: null,
+      ...(booking ? { bookingId } : {}) } satisfies SessionMark);
     return { id, outcome: result };
   });
 }
