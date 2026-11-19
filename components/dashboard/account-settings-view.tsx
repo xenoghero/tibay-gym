@@ -19,15 +19,28 @@ import {
 import { useAuth } from "@/lib/auth/auth-context";
 import { auth } from "@/lib/firebase";
 import { useToastQueue } from "@/lib/use-toast-queue";
-import { IconSignOut } from "@/components/dashboard/nav-icons";
+import { IconClose, IconSignOut } from "@/components/dashboard/nav-icons";
 import { FinanceSettings } from "@/components/dashboard/finance-settings";
 import { VoucherSettings } from "./voucher-settings";
 import settingsStyles from "./settings.module.css";
 
+const SECTIONS = [
+  { id: "pricing", label: "Pricing", hint: "Daily visits and monthly memberships", icon: "M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM6 7.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0" },
+  { id: "vouchers", label: "Vouchers", hint: "Discount codes and usage limits", icon: "M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4zM14 7v2M14 11v2M14 15v2" },
+  { id: "payments", label: "Payment methods", hint: "Cash and GCash accounts", icon: "M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM3 10h18M16 15h2" },
+  { id: "promotions", label: "Promotions", hint: "Banners on the check-in screen", icon: "M3 11v2a1 1 0 0 0 1 1h3l6 4V6l-6 4H4a1 1 0 0 0-1 1zM17 9a4 4 0 0 1 0 6" },
+  { id: "coaching", label: "Coaching", hint: "Packages, top-ups and coaches", icon: "M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12" },
+  { id: "account", label: "Account & security", hint: "Login, password and registration", icon: "M12 3L5 6v6c0 4 3 7.5 7 9 4-1.5 7-5 7-9V6zM9 12l2 2 4-4" },
+];
+
+function SectionIcon({ d, size = 20 }: { d: string; size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false"><path d={d} /></svg>;
+}
+
 // Hash navigation retains the settings section on refresh/back. Hidden sections
 // remain mounted to preserve drafts when switching between pricing and vouchers.
 const subscribeSection = (listener: () => void) => { window.addEventListener("hashchange", listener); return () => window.removeEventListener("hashchange", listener); };
-const currentSection = () => ["vouchers", "payments", "promotions", "coaching", "account"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "pricing";
+const currentSection = () => SECTIONS.some(({ id }) => id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : "pricing";
 
 const displayFont =
   "var(--font-barlow-condensed), 'Barlow Condensed', sans-serif";
@@ -101,6 +114,10 @@ export function AccountSettingsView() {
   const section = useSyncExternalStore(subscribeSection, currentSection, () => "pricing");
   const tabContent = useRef<HTMLDivElement>(null);
   useContentTransition(tabContent, section);
+  const sheet = useRef<HTMLDialogElement>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [coachingTab, setCoachingTab] = useState<"packages" | "coaches">("packages");
+  const active = SECTIONS.find(({ id }) => id === section) ?? SECTIONS[0];
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -214,14 +231,42 @@ export function AccountSettingsView() {
 
       <div className={settingsStyles.layout}>
       <nav className={settingsStyles.navigation} aria-label="Settings sections">
-        {[["pricing", "Pricing"], ["vouchers", "Vouchers"], ["payments", "Payment methods"], ["promotions", "Promotions"], ["coaching", "Coaching"], ["account", "Account & security"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
+        {SECTIONS.map(({ id, label }) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined}>{label}</a>)}
       </nav>
+      {/* Phones swap the tab row for one picker that opens a bottom sheet. */}
+      <button type="button" className={settingsStyles.picker} aria-haspopup="dialog" aria-controls="settings-sections-sheet" aria-expanded={sheetOpen} onClick={() => { sheet.current?.showModal(); setSheetOpen(true); }}>
+        <span className={settingsStyles.pickerIcon}><SectionIcon d={active.icon} /></span>
+        <span className={settingsStyles.pickerText}><small>Section {SECTIONS.indexOf(active) + 1} of {SECTIONS.length}</small><strong>{active.label}</strong></span>
+        <span className={settingsStyles.pickerChange}>Change<SectionIcon d="M6 9l6 6 6-6" size={16} /></span>
+      </button>
+      <dialog id="settings-sections-sheet" ref={sheet} className={`${settingsStyles.drawer} ${settingsStyles.sheet}`} aria-labelledby="settings-sheet-title"
+        onClose={() => setSheetOpen(false)}
+        onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); if (event.target === event.currentTarget && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) event.currentTarget.close(); }}>
+        <div className={settingsStyles.sheetHeader}>
+          <h2 id="settings-sheet-title">Settings</h2>
+          <button type="button" aria-label="Close" onClick={() => sheet.current?.close()}><IconClose /></button>
+        </div>
+        <nav className={settingsStyles.sheetList} aria-label="Settings sections">
+          {SECTIONS.map(({ id, label, hint, icon }) => <a key={id} href={`#${id}`} aria-current={section === id ? "page" : undefined} onClick={() => sheet.current?.close()}>
+            <span className={settingsStyles.sheetIcon}><SectionIcon d={icon} /></span>
+            <span className={settingsStyles.sheetText}><strong>{label}</strong><small>{hint}</small></span>
+            {section === id && <span className={settingsStyles.sheetCheck}><SectionIcon d="M5 12l5 5 9-10" /></span>}
+          </a>)}
+        </nav>
+      </dialog>
       <div ref={tabContent} className={settingsStyles.content}>
       <div hidden={section !== "pricing"}><FinanceSettings /></div>
       <div hidden={section !== "vouchers"}><VoucherSettings /></div>
       <div hidden={section !== "payments"}><PaymentMethodSettings /></div>
       <div hidden={section !== "promotions"}><PromotionSettings /></div>
-      <div hidden={section !== "coaching"} className={settingsStyles.stack}><CoachingCatalogSettings /><CoachSettings /></div>
+      <div hidden={section !== "coaching"} className={settingsStyles.coaching}>
+        <div className={settingsStyles.segmented} role="group" aria-label="Coaching settings">
+          <button type="button" aria-pressed={coachingTab === "packages"} onClick={() => setCoachingTab("packages")}>Packages</button>
+          <button type="button" aria-pressed={coachingTab === "coaches"} onClick={() => setCoachingTab("coaches")}>Coaches</button>
+        </div>
+        <div hidden={coachingTab !== "packages"}><CoachingCatalogSettings onSaved={flash} /></div>
+        <div hidden={coachingTab !== "coaches"}><CoachSettings onSaved={flash} /></div>
+      </div>
       <div hidden={section !== "account"} className={settingsStyles.account}>
 
       <RegistrationSettings />
