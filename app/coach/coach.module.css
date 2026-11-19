@@ -1,38 +1,55 @@
-.page { min-height: 100dvh; max-width: 720px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); background: var(--rs-bg); color: var(--rs-fg); display: grid; gap: 20px; align-content: start; }
-.header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.logo { font-size: 28px; }
-.intro h1 { margin: 0 0 4px; font-family: var(--font-barlow-condensed), 'Barlow Condensed', sans-serif; font-size: 36px; line-height: 1.05; font-weight: 600; text-transform: uppercase; overflow-wrap: anywhere; }
-.kicker { margin: 0 0 8px; color: var(--rs-muted); font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
-.muted { margin: 0; color: var(--rs-muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-.card { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); }
-.card h2 { margin: 0; font-size: 18px; font-weight: 600; }
-.card label { display: grid; gap: 7px; font-size: 13px; font-weight: 500; }
-.card input { min-height: 46px; padding: 10px 12px; font: inherit; font-size: 16px; color: var(--rs-fg); background: var(--rs-bg); border: 1px solid var(--rs-line); border-radius: 6px; width: 100%; }
-.card input:focus-visible, .primary:focus-visible, .ghost:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 2px; }
-.primary, .ghost { min-height: 44px; padding: 10px 16px; border-radius: 6px; font: inherit; font-size: 14px; cursor: pointer; }
-.primary { justify-self: start; border: 0; background: var(--rs-accent); color: var(--rs-on-accent); font-weight: 600; }
-.primary:disabled { opacity: .6; cursor: wait; }
-.ghost { border: 1px solid var(--rs-line); background: transparent; color: var(--rs-fg); }
-.error { margin: 0; color: var(--rs-danger, #b22f2f); font-size: 13px; }
-.message { margin: 0; padding: 10px 12px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); font-size: 13px; }
-.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin: 0; }
-.facts dt { color: var(--rs-muted); font-size: 12px; margin-bottom: 4px; }
-.facts dd { margin: 0; font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
-.facts a { color: inherit; }
+/* Coach portal: built on the member portal's frame and tokens (customer-access.module.css); only coach-specific pieces live here. */
+nav.nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.stack { display: grid; gap: 18px; }
+.panel { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-panel); }
+.title { position: relative; margin: 0; padding-left: 16px; font: 700 22px/1.1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+.title::before { content: ""; position: absolute; left: 0; top: 2px; width: 5px; height: 18px; transform: skew(-20deg); background: var(--rs-accent); }
+.hint { margin: 0; color: var(--rs-muted); font-size: 12px; overflow-wrap: anywhere; }
+.full { width: 100%; }
+/* The brand spinner fills the screen by default; here it sits between the header and the nav. */
+.loading > [role="status"] { min-height: 50dvh; }
+
+/* Coach statuses ("Not started", "No sessions left") run longer than the member's, so they shrink to stay clear of the photo. */
+.pass h1 { font-size: clamp(26px, 9vw, 52px); }
+.passFacts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+.passFacts > div { align-content: start; }
+.passFacts small { color: var(--rs-muted); font-size: 11px; line-height: 1.4; }
+
+/* Client list: one card per client, sessions left as the big number. */
+.clients { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.client { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; width: 100%; padding: 16px 18px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-panel); color: var(--rs-fg); text-align: left; }
+.client:hover { border-color: var(--rs-accent-text); }
+.client[data-low] { border-color: var(--rs-accent); }
+.client > strong { font: 800 24px/1.1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
+.count { grid-column: 2; grid-row: 1 / 3; display: grid; justify-items: end; font: 800 44px/.9 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
+.client[data-low] .count { color: var(--rs-accent-text); }
+.count small { margin-top: 4px; color: var(--rs-muted); font: 500 10px/1.4 var(--font-geist-sans), sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--rs-muted); font-size: 11px; }
+
+/* Forms: record a session, change password. */
+.form label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.form input { width: 100%; min-height: 52px; padding: 12px 14px; border: 1px solid var(--rs-line); border-radius: 7px; background: var(--rs-bg); color: var(--rs-fg); font-size: 16px; color-scheme: dark; }
+.form input::placeholder { color: var(--rs-muted); }
+.form > :is(p, button) { margin-block: 0; }
+
+.history { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.history li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 12px; padding: 16px 14px; border: 1px solid var(--rs-line); border-radius: 9px; background: var(--rs-panel); }
+.history li > div { display: grid; gap: 2px; font-size: 12px; }
+.history time { font-weight: 600; }
+.history li > div > span { color: var(--rs-muted); font-size: 11px; }
+.history p { grid-column: 1 / -1; margin: 0; color: var(--rs-muted); font-size: 12px; overflow-wrap: anywhere; }
+.undo { grid-column: 1 / -1; justify-self: end; min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: var(--rs-accent-text); font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.facts dt { margin-bottom: 4px; color: var(--rs-muted); font-size: 11px; }
+.facts dd { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.facts a { color: var(--rs-accent-text); }
 .wide { grid-column: 1 / -1; }
-.list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.list button { display: grid; gap: 3px; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-fg); font: inherit; cursor: pointer; }
-.list button:hover { border-color: var(--rs-accent-text); }
-.list button:focus-visible { outline: 2px solid var(--rs-accent-text); outline-offset: 2px; }
-.list strong { font-size: 15px; }
-.list span { font-size: 13px; }
-.list small { color: var(--rs-muted); font-size: 12px; }
-@media (max-width: 420px) { .facts { grid-template-columns: minmax(0, 1fr); } }
-.subhead { margin: 0; font-size: 16px; font-weight: 600; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; }
-.history { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
-.history li { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--rs-line); }
-.history span { color: var(--rs-muted); font-size: 13px; }
-.history p { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
-.history button { justify-self: start; min-height: 40px; }
-.stack { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--rs-line); }
+
+.identity { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; padding: 16px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-panel); }
+.identity > span { display: grid; place-items: center; flex-shrink: 0; width: 52px; height: 52px; border-radius: 10px; background: var(--rs-accent-soft); color: var(--rs-accent-text); font: 800 24px/1 var(--font-barlow-condensed), sans-serif; }
+.identity > div { display: grid; min-width: 0; }
+.identity strong { font: 800 22px/1.15 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; overflow-wrap: anywhere; }
+.identity small { color: var(--rs-muted); font-size: 12px; overflow-wrap: anywhere; }
+.identity + .panel { margin-bottom: 16px; }
+@media (max-width: 380px) { .facts { grid-template-columns: minmax(0, 1fr); } }

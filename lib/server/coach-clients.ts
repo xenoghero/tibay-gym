@@ -30,6 +30,7 @@ function clientView(id: string, person: Record<string, unknown>, current: { stat
   const profile = (person.coachingProfile ?? null) as CoachingProfile | null;
   return { id, name: String(person.name ?? ""), phone: String(person.phone ?? ""), fbName: profile?.fbName ?? null, goals: profile?.goals ?? null,
     preferredSchedule: profile?.preferredSchedule ?? null, remarks: profile?.remarks ?? null,
+    hasPhoto: Boolean(person.profileImagePath), photoPosition: (person.profileImagePosition ?? null) as { x: number; y: number } | null,
     status: current.status, sessionsLeft: current.sessionsLeft, coachingExpiresAt: current.coachingExpiresAt, frozen: !!current.frozen };
 }
 
@@ -89,10 +90,16 @@ export async function coachClients(coachId: string) {
   return { clients: rows.filter(row => row !== null).sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
-/** A coach reads only their own clients. */
-export async function coachClient(coachId: string, personId: string) {
+/** The client's id when they are assigned to this coach; otherwise 403. */
+export async function assignedClientId(coachId: string, personId: unknown) {
   const id = documentId(personId), assignment = (await adminDb().doc(`coachAssignments/${id}`).get()).data() as CoachAssignment | undefined;
   if (assignment?.coachId !== coachId) throw new ApiError(403, "client-not-assigned");
+  return id;
+}
+
+/** A coach reads only their own clients. */
+export async function coachClient(coachId: string, personId: string) {
+  const id = await assignedClientId(coachId, personId);
   const client = await loadClient(id, Date.now());
   if (!client) throw new ApiError(404, "client-unavailable");
   return { client, history: await sessionHistory(id) };

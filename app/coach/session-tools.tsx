@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { philippineDate } from "@/lib/finance/rules";
+import portal from "@/components/checkin/customer-access.module.css";
 import { coachFetch, type CoachClient } from "./coach-clients";
 import styles from "./coach.module.css";
 
@@ -13,6 +14,7 @@ const messages: Record<string, string> = {
   "invalid-session-date": "Choose today or a day in the last 30 days.", "mark-undo-closed": "Marks can only be undone on the day you made them. Ask the admin.",
 };
 const manilaToday = () => philippineDate(Date.now());
+const shortDate = (date: string) => new Date(`${date}T00:00:00+08:00`).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
 
 /** Mark a Coaching session done or a No-show, see the client's history, and undo today's own marks. */
 export function SessionTools({ user, coachId, client, onChanged }: { user: User; coachId: string; client: CoachClient; onChanged(): void }) {
@@ -46,27 +48,31 @@ export function SessionTools({ user, coachId, client, onChanged }: { user: User;
   const today = manilaToday(), canMark = !client.frozen && client.sessionsLeft > 0 && client.status !== "expired";
 
   return <>
-    <form className={styles.stack} onSubmit={record("done")} aria-labelledby="mark-title">
-      <h3 id="mark-title" className={styles.subhead}>Record a session</h3>
+    <form className={`${styles.panel} ${styles.form}`} onSubmit={record("done")} aria-labelledby="mark-title">
+      <h2 id="mark-title" className={styles.title}>Record a session</h2>
       <label>Date<input type="date" required value={date} max={today} onChange={e => setDate(e.target.value)} /></label>
-      <label>Note (optional)<input maxLength={500} value={note} onChange={e => setNote(e.target.value)} /></label>
-      {!canMark && <p className={styles.muted}>{client.frozen ? "Frozen: sessions can't be marked." : client.status === "expired" ? "Coaching validity has ended." : "No sessions left."} You can still record a No-show.</p>}
-      <div className={styles.row}>
-        <button type="submit" className={styles.primary} disabled={busy || !canMark}>{busy ? "Saving…" : "Mark session done"}</button>
-        <button type="button" className={styles.ghost} disabled={busy} onClick={() => record("no_show")()}>Record No-show</button>
-      </div>
-      {error && <p className={styles.error} role="alert">{error}</p>}
-      {message && <p className={styles.message} role="status">{message}</p>}
+      <label>Note (optional)<input maxLength={500} placeholder="What did you work on?" value={note} onChange={e => setNote(e.target.value)} /></label>
+      {!canMark && <p className={styles.hint}>{client.frozen ? "Frozen: sessions can't be marked." : client.status === "expired" ? "Coaching validity has ended." : "No sessions left."} You can still record a No-show.</p>}
+      {error && <p className={portal.error} role="alert">{error}</p>}
+      {message && <p className={portal.confirmation} role="status">{message}</p>}
+      <button type="submit" className={`${portal.primaryButton} ${portal.membershipCta}`} disabled={busy || !canMark}>
+        <span aria-hidden="true">✓</span>{busy ? "Saving…" : "Mark session done"}<span aria-hidden="true">›</span>
+      </button>
+      <button type="button" className={`${portal.secondaryButton} ${styles.full}`} disabled={busy} onClick={() => record("no_show")()}>Record no-show</button>
+      <p className={styles.hint}>A no-show doesn’t use a session.</p>
     </form>
-    <section aria-labelledby="history-title">
-      <h3 id="history-title" className={styles.subhead}>Session history</h3>
-      {!history ? <p className={styles.muted}>Loading…</p> : !history.length ? <p className={styles.muted}>No sessions recorded yet.</p> :
-        <ul className={styles.history}>{history.map(mark => <li key={mark.id}>
-          <div><strong>{mark.outcome === "done" ? "Session done" : "No-show"}</strong> <span>{mark.date} · {mark.coachName}</span></div>
-          {mark.note && <p>{mark.note}</p>}
-          {mark.coachId === coachId && philippineDate(mark.createdAt) === today &&
-            <button type="button" className={styles.ghost} disabled={busy} onClick={() => void send({ action: "undo", markId: mark.id }, "Mark undone.")}>Undo</button>}
-        </li>)}</ul>}
+    <section className={styles.stack} aria-labelledby="history-title">
+      <h2 id="history-title" className={styles.title}>Session history</h2>
+      {!history ? <p className={styles.hint}>Loading…</p> : !history.length ? <p className={styles.hint}>No sessions recorded yet.</p> :
+        <ul className={styles.history}>{history.map(mark => {
+          const mine = mark.coachId === coachId, todayMark = philippineDate(mark.createdAt) === today;
+          return <li key={mark.id}>
+            <div><time dateTime={mark.date}>{shortDate(mark.date)}</time><span>{mine ? "By you" : `By ${mark.coachName}`}</span></div>
+            <span className={portal.badge} data-status={mark.outcome === "done" ? "approved" : "closed"}><span aria-hidden="true">{mark.outcome === "done" ? "✓" : "−"}</span>{mark.outcome === "done" ? "Session done" : "No-show"}</span>
+            {mark.note && <p>{mark.note}</p>}
+            {mine && todayMark && <button type="button" className={styles.undo} disabled={busy} onClick={() => void send({ action: "undo", markId: mark.id }, "Mark undone.")}>Undo</button>}
+          </li>;
+        })}</ul>}
     </section>
   </>;
 }

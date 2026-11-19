@@ -30,6 +30,16 @@ export async function readPrivateImage(request: Request, lossless = false) {
     return await (lossless ? resized.png() : resized.webp({ quality: 85 })).toBuffer();
   } catch { throw new ApiError(400, "invalid-image"); }
 }
+/** The person's private profile photo as a no-store image response. Callers authorize first. */
+export async function profileImageResponse(personId: string) {
+  const db = adminDb();
+  const person = (await db.doc(`persons/${personId}`).get()).data() ?? (await db.doc(`unverifiedPersons/${personId}`).get()).data();
+  if (!person || person.deletingAt || !person.profileImagePath) throw new ApiError(404, "image-unavailable");
+  const result = await supabaseAdmin().storage.from(PROFILE_BUCKET).download(person.profileImagePath);
+  if (result.error) throw new ApiError(404, "image-unavailable");
+  return new Response(await result.data.arrayBuffer(), { headers: { "Content-Type": "image/webp", "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox" } });
+}
 export async function saveProfileImage(personId: string, bytes: Buffer, rawOperationId: unknown, actorId: string) {
   let id: string;
   try { id = operationId(rawOperationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
