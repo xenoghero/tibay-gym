@@ -22,6 +22,10 @@ const POSTERS = {
     label: "Customer page", url: "https://tibay-gym.vercel.app/customer", image: "/qr/customer-poster.png",
     description: "For the counter: customers scan to view their membership, request a renewal, and follow payment status.", file: "tibay-gym-customer-qr",
   },
+  coaching: {
+    label: "Personal training", url: "https://tibay-gym.vercel.app/coaching", image: "/qr/coaching-poster.png",
+    description: "For the training area: anyone scans to sign up for personal training and pay for a package.", file: "tibay-gym-personal-training-qr",
+  },
 } as const;
 type PosterKind = keyof typeof POSTERS;
 
