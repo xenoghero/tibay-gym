@@ -9,7 +9,9 @@ import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
 import { settleDuePackages } from "./coaching";
 import type { Coach } from "./coaches";
-import { sessionHistory } from "./session-marks";
+import { sessionHistory, type SessionMark } from "./session-marks";
+import { lengthOf, overlaps, startOf, type Booking } from "@/lib/coaching/bookings";
+import { philippineDate } from "@/lib/finance/rules";
 
 const available = (current: ReturnType<typeof currentPackage>) => !!current && (current.status === "approved" || current.status === "active");
 
@@ -51,7 +53,7 @@ export async function coachAssignments() {
 
 export async function assignCoach(actorId: string, body: Record<string, unknown>) {
   const personId = documentId(body.personId), coachId = documentId(body.coachId), db = adminDb();
-  return db.runTransaction(async tx => { (await prepareAssignment(tx, db, actorId, personId, coachId))(); return { ok: true }; });
+  return db.runTransaction(async tx => ({ ok: true, ...(await prepareAssignment(tx, db, actorId, personId, coachId))() }));
 }
 
 /** Reads and checks a coach assignment inside a transaction; returns the audited write (a no-op when unchanged). */
@@ -63,12 +65,28 @@ export async function prepareAssignment(tx: Transaction, db: Firestore, actorId:
   const packages = await tx.get(db.collection("coachingPackages").where("personId", "==", personId));
   if (!packages.docs.some(row => ["approved", "active"].includes((row.data() as ClientPackage).status))) throw new ApiError(409, "coaching-client-required");
   const ref = db.doc(`coachAssignments/${personId}`), previous = (await tx.get(ref)).data() as CoachAssignment | undefined;
+  // Switching coach: the client's upcoming unmarked sessions move to the new coach, except ones that clash with the new coach's sessions, which are cancelled.
+  const moved: Booking[] = [], cancelled: Booking[] = [];
+  if (previous && previous.coachId !== coachId) {
+    const today = philippineDate(Date.now()), live = (rows: { docs: { data(): unknown }[] }) => rows.docs.map(row => row.data() as Booking).filter(row => !row.cancelledAt && row.date >= today);
+    const [mine, theirs, marks] = await Promise.all([tx.get(db.collection("coachBookings").where("personId", "==", personId)),
+      tx.get(db.collection("coachBookings").where("coachId", "==", coachId)), tx.get(db.collection("sessionMarks").where("personId", "==", personId))]);
+    const marked = new Set(marks.docs.map(row => row.data() as SessionMark).filter(mark => !mark.undoneAt).map(mark => mark.bookingId));
+    const busy = live(theirs).map(row => ({ date: row.date, start: startOf(row), minutes: lengthOf(row) }));
+    for (const row of live(mine).filter(row => !marked.has(row.id)).sort((a, b) => a.date.localeCompare(b.date) || startOf(a) - startOf(b))) {
+      const at = { date: row.date, start: startOf(row), minutes: lengthOf(row) };
+      if (busy.some(other => overlaps(other, at))) cancelled.push(row); else { moved.push(row); busy.push(at); }
+    }
+  }
   return () => {
-    if (previous?.coachId === coachId) return;
+    if (previous?.coachId === coachId) return { moved: 0, cancelled: [] };
     const now = Date.now();
     tx.set(ref, { personId, coachId, assignedAt: now, assignedBy: actorId } satisfies CoachAssignment);
+    for (const row of moved) tx.update(db.doc(`coachBookings/${row.id}`), { coachId });
+    for (const row of cancelled) tx.update(db.doc(`coachBookings/${row.id}`), { cancelledAt: now });
     appendAudit(tx, db, { actorId, action: "coach-assigned", entityType: "coachAssignment", entityId: personId, personId,
-      operationId: randomUUID(), before: { coachId: previous?.coachId ?? null }, after: { coachId }, occurredAt: now });
+      operationId: randomUUID(), before: { coachId: previous?.coachId ?? null }, after: { coachId }, reason: moved.length || cancelled.length ? `${moved.length} sessions moved, ${cancelled.length} cancelled` : null, occurredAt: now });
+    return { moved: moved.length, cancelled: cancelled.map(row => ({ date: row.date, start: startOf(row) })) };
   };
 }
 

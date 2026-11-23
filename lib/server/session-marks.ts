@@ -9,7 +9,7 @@ import { ApiError } from "./rfid/http";
 import { documentId } from "./rfid/validation";
 import { appendAudit } from "./audit";
 import { prepareStartPackage, settleDuePackages } from "./coaching";
-import { hasStarted, manilaHour, type Booking } from "@/lib/coaching/bookings";
+import { hasStarted, lengthOf, manilaMinute, startOf, type Booking } from "@/lib/coaching/bookings";
 import type { Coach } from "./coaches";
 
 /** One coach-accompanied workout (done) or a No-show, credited to the coach who recorded it. */
@@ -55,38 +55,47 @@ async function prepareUse(tx: Transaction, db: Firestore, personId: string, now:
   } };
 }
 
-/** The coach's own uncancelled booking for this client, once its hour has begun and while it has no mark. */
-async function bookingToMark(tx: Transaction, db: Firestore, bookingId: string, coachId: string, personId: string, now: number) {
+/** The client's uncancelled session (the coach's own, unless the admin marks it), once it has started and while it has no mark. */
+async function bookingToMark(tx: Transaction, db: Firestore, bookingId: string, coachId: string | null, personId: string, now: number) {
   const booking = (await tx.get(db.doc(`coachBookings/${bookingId}`))).data() as Booking | undefined;
-  if (!booking || booking.cancelledAt || booking.coachId !== coachId || booking.personId !== personId) throw new ApiError(404, "booking-unavailable");
-  if (!hasStarted(booking.date, booking.hour, philippineDate(now), manilaHour(now))) throw new ApiError(409, "booking-not-started");
+  if (!booking || booking.cancelledAt || (coachId && booking.coachId !== coachId) || booking.personId !== personId) throw new ApiError(404, "booking-unavailable");
+  if (!hasStarted(booking.date, startOf(booking), philippineDate(now), manilaMinute(now))) throw new ApiError(409, "booking-not-started");
   const marks = await tx.get(db.collection("sessionMarks").where("bookingId", "==", bookingId));
   if (marks.docs.some(row => !(row.data() as SessionMark).undoneAt)) throw new ApiError(409, "booking-marked");
   return booking;
 }
 
-/** A coach marks a session done or records a No-show for one of their clients. */
-export async function markSession(coachId: string, body: Record<string, unknown>) {
+/**
+ * Mark a session done or record a No-show. A coach marks their own clients (within 30 days); the admin marks any session,
+ * credited to that session's coach and audited.
+ */
+export async function markSession(actor: { coachId: string; adminId?: undefined } | { adminId: string; coachId?: undefined }, body: Record<string, unknown>) {
   const personId = documentId(body.personId), result = outcome(body.outcome), text = note(body.note);
   let operation: string;
   try { operation = operationId(body.operationId); } catch { throw new ApiError(400, "invalid-operation-id"); }
-  const db = adminDb(), id = `mark-${createHash("sha256").update(JSON.stringify([coachId, operation])).digest("hex").slice(0, 40)}`;
+  const db = adminDb(), id = `mark-${createHash("sha256").update(JSON.stringify([actor.coachId ?? `admin:${actor.adminId}`, operation])).digest("hex").slice(0, 40)}`;
   // Save a due 15-day start first, so it stays saved even if this mark is refused.
   await settleDuePackages(personId);
   const bookingId = body.bookingId === undefined ? null : documentId(body.bookingId);
+  if (actor.adminId && !bookingId) throw new ApiError(400, "booking-required");
   return db.runTransaction(async tx => {
     const now = Date.now(), ref = db.doc(`sessionMarks/${id}`);
     const existing = (await tx.get(ref)).data() as SessionMark | undefined;
     if (existing) return { id, outcome: existing.outcome };
-    const assignment = (await tx.get(db.doc(`coachAssignments/${personId}`))).data() as CoachAssignment | undefined;
-    if (assignment?.coachId !== coachId) throw new ApiError(403, "client-not-assigned");
-    const booking = bookingId ? await bookingToMark(tx, db, bookingId, coachId, personId, now) : null;
-    const date = markDate(booking?.date ?? body.date ?? philippineDate(now), now);
-    const use = result === "done" ? await prepareUse(tx, db, personId, now, `coach:${coachId}`) : null;
+    if (actor.coachId) {
+      const assignment = (await tx.get(db.doc(`coachAssignments/${personId}`))).data() as CoachAssignment | undefined;
+      if (assignment?.coachId !== actor.coachId) throw new ApiError(403, "client-not-assigned");
+    }
+    const booking = bookingId ? await bookingToMark(tx, db, bookingId, actor.coachId ?? null, personId, now) : null;
+    const coachId = booking?.coachId ?? actor.coachId!;
+    const date = markDate(booking?.date ?? body.date ?? philippineDate(now), now, actor.adminId ? 3650 : 30);
+    const use = result === "done" ? await prepareUse(tx, db, personId, now, actor.adminId ?? `coach:${coachId}`) : null;
     if (!use) { const person = (await tx.get(db.doc(`persons/${personId}`))).data(); if (!person || person.deletingAt) throw new ApiError(409, "person-unavailable"); }
     use?.commit();
     tx.set(ref, { id, personId, coachId, date, outcome: result, note: text, packageRecordId: use?.packageRecordId ?? null, createdAt: now, undoneAt: null, undoneBy: null,
       ...(booking ? { bookingId } : {}) } satisfies SessionMark);
+    if (actor.adminId) appendAudit(tx, db, { actorId: actor.adminId, action: "session-marked", entityType: "sessionMark", entityId: id, personId,
+      operationId: id, after: { outcome: result, markDate: date, coachId }, occurredAt: now });
     return { id, outcome: result };
   });
 }
@@ -155,13 +164,21 @@ export async function adjustSessions(adminId: string, body: Record<string, unkno
   });
 }
 
-/** A client's marks, newest first, with the name of the coach each is credited to. */
+/** A client's marks, newest first, with the coach each is credited to and the session's time and plan when it was scheduled. */
 export async function sessionHistory(personId: string) {
-  const db = adminDb(), [rows, coaches] = await Promise.all([db.collection("sessionMarks").where("personId", "==", documentId(personId)).get(), db.collection("coaches").get()]);
+  const id = documentId(personId), db = adminDb();
+  const [rows, coaches, bookings] = await Promise.all([db.collection("sessionMarks").where("personId", "==", id).get(), db.collection("coaches").get(),
+    db.collection("coachBookings").where("personId", "==", id).get()]);
   const names = new Map(coaches.docs.map(row => [row.id, (row.data() as Coach).name]));
+  const sessions = new Map(bookings.docs.map(row => [row.id, row.data() as Booking]));
   return rows.docs.map(row => row.data() as SessionMark).filter(mark => !mark.undoneAt)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
-    .map(mark => ({ id: mark.id, date: mark.date, outcome: mark.outcome, note: mark.note, coachId: mark.coachId, coachName: names.get(mark.coachId) ?? "Former coach", createdAt: mark.createdAt }));
+    .map(mark => {
+      const booking = mark.bookingId ? sessions.get(mark.bookingId) : undefined, exercises = booking?.exercises ?? [];
+      return { id: mark.id, date: mark.date, outcome: mark.outcome, note: booking?.note ?? mark.note, coachId: mark.coachId, coachName: names.get(mark.coachId) ?? "Former coach", createdAt: mark.createdAt,
+        start: booking ? startOf(booking) : null, minutes: booking ? lengthOf(booking) : null, muscles: booking?.muscles ?? [],
+        exercisesDone: exercises.filter(row => row.done).length, exercisesTotal: exercises.length };
+    });
 }
 
 /** Monthly Coaching sessions and No-shows per coach (YYYY-MM, Manila), credited to whoever made each mark. */

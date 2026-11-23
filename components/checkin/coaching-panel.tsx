@@ -6,6 +6,7 @@ import { PurchaseForm } from "@/components/people/purchase-form";
 import { MAX_TOP_UP_SESSIONS, type CoachingPackage, type PackageStatus } from "@/lib/coaching/catalog";
 import styles from "./customer-access.module.css";
 import own from "./coaching-panel.module.css";
+import { MemberSessions } from "./member-sessions";
 
 interface Current { frozen?: true; canRequestFreeze: boolean; freeze: { status: string; startedAt: number | null; endsBy: number | null; days: number | null } | null;
   status: PackageStatus; sessions: number; sessionsLeft: number; validityDays: number; priceMinor: number; approvedAt: number | null; startedAt: number | null; coachingExpiresAt: number | null }
@@ -92,6 +93,8 @@ export function CoachingPanel({ onSubmitted }: { onSubmitted(): void }) {
       {freezeMessage && <p className={styles.pendingNote} role="status">{freezeMessage}</p>}
       {current.status === "rejected" && <p className={styles.pendingNote}>Your payment was rejected. Correct it from your latest payment on the Overview tab.</p>}
     </section>}
+    {(data.coachName || (current && !["pending", "rejected", "closed"].includes(current.status)) || data.topUps.length > 0) &&
+      <MemberSessions sessionsLeft={data.sessionsLeft || current?.sessionsLeft || 0} sessions={data.topUps.length ? null : current?.sessions ?? null} />}
     {!current && data.topUps.length > 0 && <section className={styles.paymentPanel} aria-labelledby="coaching-topups">
       <div className={styles.sectionHeading}><h2 id="coaching-topups">Your session top-ups</h2></div>
       <dl className={own.facts}><div><dt>Sessions left</dt><dd>{data.sessionsLeft}</dd></div><div><dt>Coach</dt><dd>{data.coachName ?? "Not assigned yet"}</dd></div></dl>

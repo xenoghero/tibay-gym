@@ -1,6 +1,9 @@
 import "server-only";
 import { Timestamp, type Firestore, type Transaction } from "firebase-admin/firestore";
-import { autoStartDeadline, coachingExpiryMs, currentPackage, effectiveExpiry, freezeAutoEnd, freezeDays, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
+import { FREEZE_MAX_DAYS, addManilaDays, autoStartDeadline, coachingExpiryMs, currentPackage, effectiveExpiry, freezeAutoEnd, freezeDays, membershipMonth, packageStartAt, packageState } from "@/lib/coaching/clocks";
+import { startOf, type Booking } from "@/lib/coaching/bookings";
+import { philippineDate } from "@/lib/finance/rules";
+import type { SessionMark } from "./session-marks";
 import { coverageExpiryMs, snapshotMembership } from "@/lib/finance/coverage";
 import { DEFAULT_COACHING, blocksNewPackage, validateCatalog, validateTopUps, type ClientPackage, type CoachingPackage, type CoachingSettings, type Freeze } from "@/lib/coaching/catalog";
 import { adminDb } from "./firebase-admin";
@@ -154,10 +157,19 @@ export async function decideFreeze(adminId: string, body: Record<string, unknown
     const ref = db.doc(`coachingPackages/${id}`), record = (await tx.get(ref)).data() as ClientPackage | undefined, now = Date.now();
     if (!record || record.freeze?.status !== "requested" || freezeDue(record, now) || packageState(record, now).status === "expired") throw new ApiError(409, "freeze-request-unavailable");
     const approved = body.decision === "approve";
+    // An approved Freeze cancels the client's unmarked sessions on the days it can cover (today and the next 13).
+    const today = philippineDate(now), lastDay = addManilaDays(today, FREEZE_MAX_DAYS - 1);
+    const [sessions, marks] = approved ? await Promise.all([tx.get(db.collection("coachBookings").where("personId", "==", record.personId)),
+      tx.get(db.collection("sessionMarks").where("personId", "==", record.personId))]) : [null, null];
+    const marked = new Set(marks?.docs.map(row => row.data() as SessionMark).filter(mark => !mark.undoneAt).map(mark => mark.bookingId));
+    const cancelled = (sessions?.docs.map(row => row.data() as Booking) ?? [])
+      .filter(row => !row.cancelledAt && row.date >= today && row.date <= lastDay && !marked.has(row.id)).sort((a, b) => a.date.localeCompare(b.date) || startOf(a) - startOf(b));
+    for (const row of cancelled) tx.update(db.doc(`coachBookings/${row.id}`), { cancelledAt: now });
     tx.update(ref, { freeze: { ...record.freeze, status: approved ? "active" : "rejected", startedAt: approved ? now : null, endedAt: approved ? null : now } });
     appendAudit(tx, db, { actorId: adminId, action: approved ? "freeze-approved" : "freeze-rejected", entityType: "coachingPackage", entityId: id, personId: record.personId,
-      operationId: `freeze-${approved ? "approve" : "reject"}-${id}`, before: { status: "requested" }, after: { status: approved ? "active" : "rejected" }, occurredAt: now });
-    return { ok: true };
+      operationId: `freeze-${approved ? "approve" : "reject"}-${id}`, before: { status: "requested" }, after: { status: approved ? "active" : "rejected" },
+      reason: cancelled.length ? `${cancelled.length} sessions cancelled` : null, occurredAt: now });
+    return { ok: true, cancelled: cancelled.map(row => ({ date: row.date, start: startOf(row) })) };
   });
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
+import { timeLabel } from "@/lib/coaching/bookings";
 import styles from "./settings.module.css";
 import view from "./coaching-view.module.css";
 
@@ -21,7 +22,7 @@ function useAdminFetch() {
 export function FreezeRequests({ onChanged }: { onChanged(): void }) {
   const call = useAdminFetch();
   const [requests, setRequests] = useState<{ packageRecordId: string; name: string; requestedAt: number; sessionsLeft: number }[] | null>(null);
-  const [reload, setReload] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [reload, setReload] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState(""), [report, setReport] = useState("");
   useEffect(() => {
     let active = true;
     call("/api/admin/freezes").then(result => { if (active) { setRequests(result.requests); setError(""); } }).catch(err => { if (active) setError(err.message); });
@@ -30,15 +31,23 @@ export function FreezeRequests({ onChanged }: { onChanged(): void }) {
   }, [reload]);
   async function decide(packageRecordId: string, decision: "approve" | "reject") {
     if (busy) return;
-    setBusy(true); setError("");
-    try { await call("/api/admin/freezes", { packageRecordId, decision }); setReload(v => v + 1); onChanged(); }
+    setBusy(true); setError(""); setReport("");
+    try {
+      const result: { cancelled?: { date: string; start: number }[] } = await call("/api/admin/freezes", { packageRecordId, decision });
+      const cancelled = result.cancelled ?? [], day = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-PH", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+      setReport(decision === "reject" ? "Freeze request rejected." : cancelled.length
+        ? `Freeze approved. Cancelled ${cancelled.length} session${cancelled.length === 1 ? "" : "s"} inside it: ${cancelled.map(row => `${day(row.date)} ${timeLabel(row.start)}`).join(", ")}.`
+        : "Freeze approved. No sessions were booked inside it.");
+      setReload(v => v + 1); onChanged();
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Could not decide the request."); }
     finally { setBusy(false); }
   }
-  if (!requests?.length && !error) return null;
+  if (!requests?.length && !error && !report) return null;
   return <section aria-labelledby="freeze-requests-title" style={{ marginTop: 24 }}>
     <h2 id="freeze-requests-title" className={view.subhead}>Freeze requests</h2>
     <p className={styles.error} role="alert">{error}</p>
+    {report && <p role="status" style={{ margin: "0 0 12px", fontSize: 13 }}>{report}</p>}
     {requests && <table className={styles.table}><thead><tr><th scope="col">Client</th><th scope="col">Requested</th><th scope="col">Sessions left</th><th scope="col" aria-label="Actions" /></tr></thead>
       <tbody>{requests.map(row => <tr key={row.packageRecordId}>
         <td>{row.name}</td><td>{new Date(row.requestedAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" })}</td>

@@ -1,41 +1,42 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { hourLabel, shortHour } from "@/lib/coaching/bookings";
-import { SLOT_RANGES, bookableClient, dateLabel, firstName } from "@/app/coach/schedule";
+import { shortTime, timeLabel } from "@/lib/coaching/bookings";
+import { bookableClient, dateLabel, firstName, initials } from "@/app/coach/schedule";
+import { TIME_SLOTS } from "@/lib/coaching/catalog";
 import { FreezeRequests } from "./coaching-sessions";
-import { coachVar, initials, type AdminClient, type AdminData } from "./coaching-admin";
+import { coachVar, type AdminClient, type AdminData } from "./coaching-admin";
 import settings from "./settings.module.css";
 import s from "./coaching-admin.module.css";
 
 const days = (client: AdminClient) => client.preferredSchedule?.weekdays.map(day => day[0].toUpperCase() + day.slice(1)).join(", ");
-const prefers = (client: AdminClient) => client.preferredSchedule ? `${days(client)} · ${SLOT_RANGES[client.preferredSchedule.timeSlot]}` : "Not given";
+const prefers = (client: AdminClient) => client.preferredSchedule ? `${days(client)} · ${TIME_SLOTS[client.preferredSchedule.timeSlot]}` : "Not given";
 /** 09666928971 → 0966 692 8971 */
 const phone = (value: string) => /^09\d{9}$/.test(value) ? `${value.slice(0, 4)} ${value.slice(4, 7)} ${value.slice(7)}` : value;
 const contact = (client: AdminClient) => [phone(client.phone), client.fbName && `FB ${client.fbName}`].filter(Boolean).join(" · ");
 const until = (ms: number | null) => ms ? new Date(ms - 1).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" }) : null;
 const status = (client: AdminClient) => client.frozen ? "Frozen" : client.status === "approved" ? "Not started" : until(client.coachingExpiresAt) ? `Until ${until(client.coachingExpiresAt)}` : "Active";
 
-/** The Clients tab: who needs a coach, then everyone with one. Phones get cards; desktops a table. */
-export function AdminClients({ data, colorOf, coachName, tabs, busy, onAssign, onBook, onOpen }: {
+/** The Clients tab: one list, clients without a coach first. Phones get rows; desktops a table. */
+export function AdminClients({ data, colorOf, coachName, tabs, busy, onAssign, onBook, onOpen, onChanged }: {
   data: AdminData; colorOf(id: string | null | undefined): string; coachName(id: string | null | undefined): string; tabs: ReactNode; busy: boolean;
-  onAssign(personId: string): void; onBook(personId: string): void; onOpen(personId: string): void;
+  onAssign(personId: string): void; onBook(personId: string): void; onOpen(personId: string): void; onChanged(): void;
 }) {
-  const [filter, setFilter] = useState(""), [query, setQuery] = useState(""), [freezeKey, setFreezeKey] = useState(0);
+  const [filter, setFilter] = useState(""), [query, setQuery] = useState("");
   const { today } = data, month = today.slice(0, 7), monthName = dateLabel(today, { month: "long" });
   const nextText = (client: AdminClient) => {
     const next = client.next;
     if (!next) return null;
     const day = next.date === today ? "Today" : dateLabel(next.date, { weekday: "short" });
-    return { short: `${day} ${shortHour(next.hour)}`, long: `${next.date === today ? "Today" : dateLabel(next.date, { weekday: "short", month: "short", day: "numeric" })}, ${hourLabel(next.hour)}` };
+    return { short: `${day} ${shortTime(next.start)}`, long: `${next.date === today ? "Today" : dateLabel(next.date, { weekday: "short", month: "short", day: "numeric" })}, ${timeLabel(next.start)}` };
   };
   const matches = (client: AdminClient) => (!query.trim() || `${client.name} ${client.phone} ${client.fbName ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     && (!filter || (filter === "none" ? !client.coachId : client.coachId === filter));
   const list = data.clients.filter(matches).sort((a, b) => Number(!!a.coachId) - Number(!!b.coachId) || a.name.localeCompare(b.name));
-  const unassigned = list.filter(client => !client.coachId), assigned = list.filter(client => client.coachId);
   const low = data.clients.filter(client => !client.frozen && client.sessionsLeft <= 1);
   const perCoach = data.coaches.map(coach => {
-    const marks = data.marks.filter(row => row.coachId === coach.id && row.date.startsWith(month));
+    // shortcut: counts marks on scheduled sessions only; walk-ins recorded before scheduling existed are left out of these tiles.
+    const marks = data.bookings.filter(row => row.mark?.coachId === coach.id && row.date.startsWith(month)).map(row => row.mark!);
     return { ...coach, done: marks.filter(row => row.outcome === "done").length, noShows: marks.filter(row => row.outcome === "no_show").length };
   });
   const filters = [{ id: "", label: "All", count: data.clients.length }, { id: "none", label: "Needs a coach", count: data.clients.filter(client => !client.coachId).length },
@@ -51,7 +52,7 @@ export function AdminClients({ data, colorOf, coachName, tabs, busy, onAssign, o
     if (client.frozen) return ["Frozen", undefined];
     if (next && client.sessionsLeft === 1) return [`Last session ${next.short}`, "accent"];
     if (next) return [client.next?.date === today ? next.short : `Next ${next.short}`, undefined];
-    if (client.needsBooking) return ["Nothing booked this week", "accent"];
+    if (client.coachId && bookableClient(client)) return ["Nothing booked", "accent"];
     return [client.preferredSchedule ? `${days(client)} · ${client.preferredSchedule.timeSlot}s` : "No preferred schedule", undefined];
   };
 
@@ -60,7 +61,7 @@ export function AdminClients({ data, colorOf, coachName, tabs, busy, onAssign, o
       {tabs}
       <div className={`${s.tools} ${s.desktopOnly}`}>{chipRow}{search}</div>
     </div>
-    <div className={settings.section} key={freezeKey}><FreezeRequests onChanged={() => setFreezeKey(v => v + 1)} /></div>
+    <div className={settings.section}><FreezeRequests onChanged={onChanged} /></div>
 
     <div className={s.mobileOnly}>
       <section className={s.tiles} aria-label={`Sessions per coach in ${monthName}`} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
@@ -71,30 +72,16 @@ export function AdminClients({ data, colorOf, coachName, tabs, busy, onAssign, o
       </section>
       <div style={{ marginTop: 14 }}>{search}</div>
       <div style={{ marginTop: 10 }}>{chipRow}</div>
-      {(!filter || filter === "none") && <section aria-labelledby="needs-coach" className={s.feed} style={{ marginTop: 16 }}>
-        <div className={s.sectionHead}><h2 id="needs-coach">Needs a coach</h2><span>{unassigned.length} client{unassigned.length === 1 ? "" : "s"}</span></div>
-        {unassigned.length ? unassigned.map(client => <article key={client.id} className={s.needsCard}>
-          <div className={s.cardTop}>
-            <div><strong>{client.name}</strong><small>{contact(client)}</small><span style={{ fontSize: 12 }}>{prefers(client)}</span></div>
-            <div className={s.leftCount}><strong>{client.sessionsLeft}</strong><span>{status(client)}</span></div>
-          </div>
-          <div className={s.cardActions}>
-            <button type="button" className={`${s.button} ${s.primary}`} disabled={busy} onClick={() => onAssign(client.id)}>Assign a coach</button>
-            <button type="button" className={s.button} onClick={() => onOpen(client.id)}>Sessions</button>
-          </div>
-        </article>) : <p className={s.feedNote} style={{ marginTop: 0 }}>Everyone has a coach.</p>}
-      </section>}
-      {filter !== "none" && <section aria-labelledby="with-coach" style={{ marginTop: 18 }}>
-        <div className={s.sectionHead} style={{ paddingTop: 0, borderBottom: "1px solid var(--rs-line)", paddingBottom: 8 }}><h2 id="with-coach">With a coach</h2><span>{assigned.length} client{assigned.length === 1 ? "" : "s"}</span></div>
-        {assigned.map(client => { const [note, tone] = noteFor(client);
-          return <button key={client.id} type="button" className={s.clientRow} onClick={() => onOpen(client.id)}>
+      <section aria-label="Clients" style={{ marginTop: 18 }}>
+        {list.map(client => { const [note, tone] = client.coachId ? noteFor(client) : ["No coach yet · tap to assign", "accent"];
+          return <button key={client.id} type="button" className={s.clientRow} onClick={() => client.coachId ? onOpen(client.id) : onAssign(client.id)}>
             <span className={s.avatar} aria-hidden="true">{initials(client.name)}</span>
-            <span className={s.who}><strong>{client.name}</strong><span className={s.meta}><span className={s.dot} style={coachVar(colorOf(client.coachId))} aria-hidden="true" />{firstName(coachName(client.coachId))} · <span data-tone={tone}>{note}</span></span></span>
+            <span className={s.who}><strong>{client.name}</strong><span className={s.meta}>{client.coachId && <><span className={s.dot} style={coachVar(colorOf(client.coachId))} aria-hidden="true" />{firstName(coachName(client.coachId))} · </>}<span data-tone={tone}>{note}</span></span></span>
             <span className={s.left} data-tone={client.sessionsLeft <= 1 && !client.frozen ? "accent" : undefined} style={client.frozen ? { color: "var(--rs-muted)" } : undefined}>{client.sessionsLeft}<small>Left</small></span>
             <span className={s.chev} aria-hidden="true">›</span>
           </button>; })}
-        {!assigned.length && <p className={s.empty}>No clients match.</p>}
-      </section>}
+        {!list.length && <p className={s.empty}>No clients match.</p>}
+      </section>
     </div>
 
     <section className={`${s.tiles} ${s.desktopOnly}`} aria-label={`${monthName} at a glance`} style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
