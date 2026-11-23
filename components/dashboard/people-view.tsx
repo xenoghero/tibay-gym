@@ -19,7 +19,7 @@ import {
 } from "@/lib/db";
 import { formatLongDate, formatShortDateTime } from "@/lib/dates";
 import { visitsThisMonth } from "@/lib/month-visits";
-import { ACTIVE_GREEN, statusBadgeStyle } from "@/lib/status-badge";
+import { statusBadgeStyle } from "@/lib/status-badge";
 import { IconUserPlus } from "./nav-icons";
 import styles from "./people-filter-select.module.css";
 
@@ -349,9 +349,9 @@ export function PeopleView() {
             Unverified members
           </Link>
         </div>
-        <Link href="/dashboard/people/new" style={addButtonStyle}>
-          <IconUserPlus size={28} />
-          Add profile
+        <Link href="/dashboard/people/new" className="rs-ppl-add" aria-label="Add profile">
+          <span className="rs-ppl-add-top" aria-hidden="true">New<IconUserPlus size={18} /></span>
+          <span className="rs-ppl-add-label" aria-hidden="true">Add<br />profile</span>
         </Link>
       </header>
 
@@ -553,28 +553,6 @@ const kickerStyle: CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.16em",
   color: "var(--rs-muted)",
-};
-
-// Square: stretches to the left block's height, width follows via aspect-ratio.
-const addButtonStyle: CSSProperties = {
-  aspectRatio: "1",
-  flex: "none",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  padding: "0 8px",
-  borderRadius: 8,
-  background: ACTIVE_GREEN,
-  color: "#ffffff",
-  fontSize: 14,
-  fontWeight: 600,
-  textDecoration: "none",
-  fontFamily: displayFont,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  textAlign: "center",
 };
 
 const newButtonStyle: CSSProperties = {

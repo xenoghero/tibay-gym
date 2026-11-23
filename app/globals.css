@@ -584,6 +584,70 @@ input[data-form-input]:focus-visible {
   overflow: hidden;
 }
 
+/* Add Profile tile: a compact square sitting flush with the bottom of the
+   title + Unverified button stack. Type-led like the header beside it — a
+   mono kicker over a big condensed label. Green matches the Active badge
+   (lib/status-badge.ts). */
+.rs-ppl-add {
+  width: 98px;
+  height: 98px;
+  align-self: flex-end;
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 11px 11px;
+  border-radius: 10px;
+  background: #1c6b3c;
+  color: #ffffff;
+  text-decoration: none;
+  transition: background-color 0.14s ease, transform 0.14s ease;
+}
+
+.rs-ppl-add-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #bfe3cb;
+}
+
+.rs-ppl-add-top svg {
+  color: #ffffff;
+  stroke-width: 2;
+}
+
+.rs-ppl-add-label {
+  font-family: var(--font-barlow-condensed), "Barlow Condensed", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.rs-ppl-add:hover {
+  background: color-mix(in srgb, #1c6b3c 85%, #ffffff);
+}
+
+.rs-ppl-add:active {
+  transform: translateY(1px);
+}
+
+.rs-ppl-add:focus-visible {
+  outline: 2px solid var(--rs-accent-text);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-ppl-add { transition: none; }
+  .rs-ppl-add:active { transform: none; }
+}
+
 .rs-ppl-list {
   flex: 1 1 auto;
   min-height: 0;
@@ -615,6 +679,11 @@ input[data-form-input]:focus-visible {
   .rs-ppl-title {
     font-size: 40px !important;
     margin: 6px 0 0 !important;
+  }
+
+  .rs-ppl-add {
+    width: 92px;
+    height: 92px;
   }
 
   /* Search owns its row; the custom filters pair up beneath it, with sort on
