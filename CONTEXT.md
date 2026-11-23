@@ -55,9 +55,13 @@ A person with coaching sessions assigned to a coach.
 _Avoid_: Trainee, student
 
 **Preferred schedule**:
-The weekdays and single time slot a client would like to train in; a preference, not a booking.
+The days of the week and single time slot a client would like to train in; a preference, not a booking. The coach sets the actual schedule with the client at their first coaching session.
 _Avoid_: Booking, appointment
 
 **Coaching sign-up link**:
 The one fixed public page where new people register for coaching and pay for a package or top-up.
 _Avoid_: Promo link, referral link
+
+**Personal training**:
+The public name for Coaching, used only on the coaching sign-up link; it is not a separate product.
+_Avoid_: One-on-one coaching

@@ -36,9 +36,14 @@
 .panel h2 { margin: 4px 0 0; font: 700 26px/1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
 .panel h2:focus { outline: none; }
 
-/* Weekday and time-slot tiles: native inputs, styled by their checked state. */
+.note { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--rs-accent-soft); font-size: 13px; line-height: 1.5; }
+.note .toastIcon { margin-top: -3px; }
+
+/* Day and time-slot tiles: native inputs, styled by their checked state. */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.tiles[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+/* Seven days don't fit a phone at tap size: one row that bleeds to the panel edge and swipes sideways. */
+.tiles[data-scroll] { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 20px; scrollbar-width: none; margin-inline: -20px; padding: 4px 20px; }
+.tiles[data-scroll] .tile { flex: 1 0 56px; scroll-snap-align: start; }
 .tile { position: relative; display: grid !important; place-items: center; align-content: center; gap: 2px !important; min-height: 48px; padding: 6px 4px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); font-size: 14px !important; font-weight: 500 !important; text-align: center; cursor: pointer; }
 .tile[data-kind=slot] { min-height: 56px; font-weight: 600 !important; }
 .tile input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
@@ -86,4 +91,4 @@
 .next { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; padding: 12px 18px; border: 1px solid var(--rs-accent); border-radius: 6px; background: var(--rs-accent); color: var(--rs-on-accent); font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; }
 .next:hover:not(:disabled) { background: #e7b900; border-color: #e7b900; }
 :is(.back, .next):disabled { opacity: .6; cursor: default; }
-@media (max-width: 650px) { .actionBar { margin: auto -20px 0; padding-inline: 20px; border-radius: 0; } .panel { padding: 16px; } }
+@media (max-width: 650px) { .actionBar { margin: auto -20px 0; padding-inline: 20px; border-radius: 0; } .panel { padding: 16px; } .tiles[data-scroll] { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; } }

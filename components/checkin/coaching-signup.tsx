@@ -10,10 +10,10 @@ import { philippineDate } from "@/lib/finance/rules";
 import portal from "./customer-access.module.css";
 import styles from "./coaching-signup.module.css";
 
-const dayNames: Record<string, string> = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday" };
+const dayNames: Record<string, string> = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
 const fieldErrors: Record<string, string> = {
   firstName: "Enter your first name.", lastName: "Enter your last name.", phone: "Enter your 11-digit mobile number, like 09171234567.", rateCategory: "Choose Student or Regular.",
-  fbName: "Enter the name on your Facebook account.", startDate: "Choose a start date from today onwards.", weekdays: "Pick at least one weekday.",
+  fbName: "Enter the name on your Facebook account.", startDate: "Choose a start date from today onwards.", weekdays: "Pick at least one day.",
   timeSlot: "Pick one time slot.", "optional-too-long": "Keep address, goals and remarks under 500 characters.",
 };
 const money = (minor: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(minor / 100);
@@ -100,8 +100,8 @@ export function CoachingSignup() {
   const schedule = `${form.weekdays.map(day => dayNames[day].slice(0, 3)).join(", ")} · ${TIME_SLOTS[form.timeSlot as keyof typeof TIME_SLOTS] ?? ""}`;
 
   return <main className={`${portal.portal} ${portal.memberPortal} ${styles.signup}`}>
-    <PortalHeader label="Coaching sign-up" href="/coaching" brandLabel="Tibay Gym coaching sign-up"><Link href="/customer" className={portal.backLink}>Members portal ↗</Link></PortalHeader>
-    <div className={portal.portalHeading}><h1>One-on-one coaching</h1></div>
+    <PortalHeader label="Personal training sign-up" href="/coaching" brandLabel="Tibay Gym personal training sign-up"><Link href="/customer" className={portal.backLink}>Members portal ↗</Link></PortalHeader>
+    <div className={portal.portalHeading}><h1>Personal training</h1></div>
     <ol className={styles.rail} aria-label="Sign-up steps">{STEPS.map((label, index) => {
       const n = index + 1, state = n < step || step === 4 ? "done" : n === step ? "current" : "upcoming";
       return <li key={label} data-state={state} aria-current={n === step ? "step" : undefined}>
@@ -141,11 +141,12 @@ export function CoachingSignup() {
     {step === 2 && <form className={styles.form} onSubmit={submit} noValidate>
       <fieldset className={styles.panel} disabled={busy}>
         {heading("Preferred schedule")}
+        <p className={styles.note}><span className={styles.toastIcon}>{icon("M12 8v5m0 3.5v.5", 16, 2.5)}</span>These are only your preferences. Your coach will set your actual schedule with you at your first coaching session.</p>
         <label>Start date<input id="signup-startDate" type="date" min={today} value={form.startDate} onChange={e => set("startDate", e.target.value)} {...described("startDate")} />
           <small>A preference only: your package starts at your first visit.</small>{err("startDate")}</label>
         <div className={styles.group} role="group" aria-labelledby="signup-days-label" id="signup-weekdays" tabIndex={-1} {...described("weekdays")}>
-          <span id="signup-days-label">Weekdays</span>
-          <div className={styles.tiles} data-columns="5">{WEEKDAYS.map(day => <label key={day} className={styles.tile}>
+          <span id="signup-days-label">Days</span>
+          <div className={styles.tiles} data-scroll>{WEEKDAYS.map(day => <label key={day} className={styles.tile}>
             <input type="checkbox" aria-label={dayNames[day]} checked={form.weekdays.includes(day)} onChange={e => set("weekdays", e.target.checked ? [...form.weekdays, day] : form.weekdays.filter(d => d !== day))} />{dayNames[day].slice(0, 3)}</label>)}</div>{err("weekdays")}
         </div>
         <div className={styles.group} role="radiogroup" aria-labelledby="signup-slot-label" id="signup-timeSlot" tabIndex={-1} {...described("timeSlot")}>
@@ -192,7 +193,7 @@ export function CoachingSignup() {
         <dl className={styles.summary}>
           <div><dt>Package</dt><dd>{paid}</dd></div>
           <div><dt>Payment</dt><dd><span className={portal.badge} data-status="pending">Pending review</span></dd></div>
-          <div><dt>Schedule</dt><dd>{schedule}</dd></div>
+          <div><dt>Preferred schedule</dt><dd>{schedule}</dd></div>
         </dl>
       </section>
       <div className={styles.actionBar}><Link href="/members#coaching" className={styles.next}><span>Open members portal</span>{arrow}</Link></div>

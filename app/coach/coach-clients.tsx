@@ -13,7 +13,7 @@ export interface CoachClient {
   preferredSchedule: CoachingProfile["preferredSchedule"] | null; status: string; sessionsLeft: number; coachingExpiresAt: number | null; frozen: boolean;
   hasPhoto: boolean; photoPosition: PhotoPosition | null;
 }
-const days: Record<string, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri" };
+const days: Record<string, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
 const schedule = (value: CoachClient["preferredSchedule"]) => value ? `${value.weekdays.map(day => days[day]).join(", ")} · ${TIME_SLOTS[value.timeSlot]}` : "Not given";
 const statusLabel = (client: CoachClient) => client.frozen ? "Frozen" : ({ approved: "Not started", active: "Active", used_up: "No sessions left", expired: "Expired" } as Record<string, string>)[client.status] ?? client.status;
 /** The member portal's badge tones: approved = green, pending = yellow, closed = grey, rejected = red. */
