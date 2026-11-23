@@ -49,6 +49,10 @@ export function IconAccount({ size = 22 }: IconProps) {
   return <svg {...BASE} width={size} height={size}><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0" /></svg>;
 }
 
+export function IconUserPlus({ size = 22 }: IconProps) {
+  return <svg {...BASE} width={size} height={size}><path d="M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M3 21a7 7 0 0 1 12.5-4.3M19 15v6M16 18h6" /></svg>;
+}
+
 export function IconPanel({ size = 20 }: IconProps) {
   return <svg {...BASE} width={size} height={size}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 9l-3 3 3 3" /></svg>;
 }

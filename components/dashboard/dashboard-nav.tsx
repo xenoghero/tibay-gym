@@ -101,7 +101,7 @@ export function DashboardNav({ items = NAV, name, role = "Owner / Admin" }: { it
     const compact = collapsed && !mobile;
     return <>
       <div className={styles.brandRow}>
-        <div className={styles.brandClip}><BrandLogo sidebar /></div>
+        <Link href={home} aria-label="Home" className={styles.brandClip}><BrandLogo sidebar /></Link>
         {mobile && <button type="button" className={styles.control} aria-label="Close navigation" onClick={closeDrawer}><IconClose /></button>}
       </div>
       {!mobile && <button type="button" className={`${styles.collapse} ${styles.tipTarget}`} aria-label={compact ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!compact} onClick={toggleCollapsed}>
@@ -132,7 +132,7 @@ export function DashboardNav({ items = NAV, name, role = "Owner / Admin" }: { it
   return <>
     <aside className={`rs-dashboard-sidebar ${styles.sidebar}`} data-collapsed={collapsed}>{contents(false)}</aside>
     <header className={styles.mobileHeader}>
-      <BrandLogo sidebar />
+      <Link href={home} aria-label="Home" className={styles.homeLink}><BrandLogo sidebar /></Link>
       <button type="button" className={styles.control} aria-label="Open navigation" aria-haspopup="dialog" aria-controls="dashboard-navigation-drawer" aria-expanded={drawerOpen} onClick={() => { drawer.current?.showModal(); setDrawerOpen(true); }}><IconMenu /></button>
     </header>
     <dialog id="dashboard-navigation-drawer" ref={drawer} className={styles.drawer} data-closing={drawerClosing} aria-label="Navigation"

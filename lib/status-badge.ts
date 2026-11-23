@@ -14,7 +14,7 @@ export type StatusBadgeKind = "active" | "expired" | "guest";
 
 // No green token in the palette (globals.css is yellow/neutral only); the public
 // check-in receipt pins this same hex, so the two stay in step.
-const ACTIVE_GREEN = "#1c6b3c";
+export const ACTIVE_GREEN = "#1c6b3c";
 
 const badgeBase: CSSProperties = {
   display: "inline-flex",

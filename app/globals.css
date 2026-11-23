@@ -557,8 +557,8 @@ input[data-form-input]:focus-visible {
    People tab — narrow layout (max-width: 860px).
 
    Same moves as the Overview tab so the two read as one system: the header
-   collapses to a mono kicker over the big condensed title, the New Profile
-   button goes full-width beneath it, and the six-column roster table becomes
+   keeps a mono kicker over a compact condensed title beside the square Add
+   Profile button, and the six-column roster table becomes
    two-line list rows —
 
      Name .......................... [status badge]
@@ -608,26 +608,13 @@ input[data-form-input]:focus-visible {
     gap: 16px !important;
   }
 
-  .rs-ppl-head {
-    display: block !important;
-  }
-
   .rs-ppl-kicker {
     font-size: 11px !important;
   }
 
   .rs-ppl-title {
-    font-size: 58px !important;
+    font-size: 40px !important;
     margin: 6px 0 0 !important;
-  }
-
-  /* Primary action, full width, comfortable tap target. */
-  .rs-ppl-new {
-    display: flex !important;
-    width: 100%;
-    height: 44px !important;
-    margin-top: 14px;
-    justify-content: center;
   }
 
   /* Search owns its row; the custom filters pair up beneath it, with sort on
