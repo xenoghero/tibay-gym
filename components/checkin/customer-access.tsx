@@ -17,11 +17,6 @@ interface Summary { name: string; rateCategory: string | null; type: string; sta
 export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: boolean } = {}) {
   const [phone, setPhone] = useState(""), [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(membershipSetup);
-  useEffect(() => {
-    if (!summary) return;
-    const timer = window.setTimeout(() => { setSummary(null); setPhone(""); setError("Your session expired. Re-enter your phone number to continue."); }, Math.max(0, summary.expiresAt - Date.now()));
-    return () => window.clearTimeout(timer);
-  }, [summary]);
   const openAccount = useCallback(async (number: string, membership: boolean) => {
     setBusy(true); setError("");
     try {
@@ -85,13 +80,12 @@ export function CustomerAccess({ membershipSetup = false }: { membershipSetup?: 
           <small id="phone-help">Use your registered 11-digit mobile number, or just its last 4 digits.</small>
           {error && <p className={styles.error} role="alert">{error}</p>}
           <button className={styles.primaryButton} disabled={busy}>{busy ? "Opening your profile…" : "View my membership"}<span aria-hidden="true">→</span></button>
-        </form><p className={styles.privacyNote}>Limited profile access for 30 minutes. Membership changes take effect after gym approval.</p>
+        </form><p className={styles.privacyNote}>Limited profile access. Membership changes take effect after gym approval.</p>
       </section>
       {!membershipSetup && <PromotionBanner />}
     </div> : <div className={styles.memberWorkspace}>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <CustomerPurchases summary={summary} onRefreshMembership={refreshMembership} checkin={membershipSetup} />
-      <footer className={styles.sessionFooter}>30-minute access session</footer>
     </div>}
   </main>;
 }

@@ -99,14 +99,6 @@ it("shows pending visitors their limited payment status while withholding member
   expect(screen.queryByText("Restricted purchase form")).toBeNull();
   expect(screen.getByText("Profile verification needed")).toBeTruthy();
 });
-it("clears the displayed customer when the server-issued session expires", async () => {
-  vi.useFakeTimers(); await login();
-  expect(screen.getByText("Mara Santos", { exact: true })).toBeTruthy();
-  await act(async () => { vi.advanceTimersByTime(1800001); });
-  expect(screen.getByRole("alert").textContent).toContain("expired"); expect(screen.getByLabelText("Phone number")).toBeTruthy();
-  expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
-  expect(screen.queryByRole("navigation", { name: "Member navigation" })).toBeNull();
-});
 it("shows the selected customer's name and replaces it when using a different number", async () => {
   expect(screen.queryByText("Mara Santos", { exact: true })).toBeNull();
   await login();

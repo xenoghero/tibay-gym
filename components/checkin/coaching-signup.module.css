@@ -1,6 +1,10 @@
-.form { display: grid; gap: 20px; min-width: 0; }
-.form fieldset { display: grid; gap: 16px; margin: 0; padding: 20px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); min-width: 0; }
-.form legend { padding: 0 6px; font: 600 20px/1.1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+/* No members-portal nav on this page, so the payment form's mobile submit dock sits at the very bottom.
+   A flex column with no bottom padding lets each step's action bar rest on the page's bottom edge. */
+.signup { --portal-nav-height: 0px; display: flex; flex-direction: column; padding-bottom: 0 !important; } /* beats the portal's 104px phone padding kept for its bottom nav */
+.form { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; padding-bottom: 24px; }
+.form:has(> .actionBar) { padding-bottom: 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form fieldset { margin: 0; min-width: 0; }
 .form label, .group > span { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
 .form small { color: var(--rs-muted); font-size: 12px; font-weight: 400; }
 .form :is(input:not([type=radio]):not([type=checkbox]), textarea) { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-bg); color: var(--rs-fg); font-size: 16px; }
@@ -13,11 +17,78 @@
 .choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--rs-accent-text); }
 .fieldError { color: var(--rs-danger, #b22f2f); font-size: 12px; font-weight: 500; }
 .lead { margin: 0; color: var(--rs-muted); font-size: 13px; line-height: 1.6; }
-.packages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; padding: 0; list-style: none; }
-.packages button { display: grid; gap: 4px; width: 100%; min-height: 110px; padding: 16px; text-align: left; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-fg); }
-.packages button:hover { border-color: var(--rs-accent-text); }
-.packages strong { font: 700 30px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
-.packages span { font-size: 14px; font-weight: 500; }
-.packages small { color: var(--rs-muted); font-size: 12px; line-height: 1.5; }
-@media (max-width: 420px) { .packages { grid-template-columns: minmax(0, 1fr); } .form fieldset { padding: 16px; } }
 .subhead { margin: 0 0 10px; font: 600 18px/1.2 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Numbered rail: Details, Schedule, Payment, Done. */
+.rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 24px; padding: 0; list-style: none; }
+.rail li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--rs-muted); font-size: 12px; font-weight: 500; }
+.rail li + li::before { content: ""; position: absolute; top: 15px; right: calc(50% + 20px); width: calc(100% - 40px); height: 2px; border-radius: 1px; background: var(--rs-line); }
+.rail li:is([data-state=done], [data-state=current])::before { background: var(--rs-accent); }
+.node { display: grid; place-items: center; width: 32px; height: 32px; box-sizing: border-box; border: 2px solid color-mix(in srgb, var(--rs-muted) 45%, var(--rs-bg)); border-radius: 50%; background: var(--rs-bg); font: 700 17px/1 var(--font-barlow-condensed), sans-serif; }
+.rail [data-state=done] { color: var(--rs-fg); }
+.rail [data-state=done] .node { border-color: var(--rs-accent); background: var(--rs-accent); color: var(--rs-on-accent); }
+.rail [data-state=current] { color: var(--rs-fg); font-weight: 600; }
+.rail [data-state=current] .node { border-color: var(--rs-accent); color: var(--rs-accent-text); }
+
+.panel { display: grid; gap: 16px; padding: 20px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); min-width: 0; }
+.eyebrow { color: var(--rs-accent-text); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.panel h2 { margin: 4px 0 0; font: 700 26px/1 var(--font-barlow-condensed), sans-serif; text-transform: uppercase; }
+.panel h2:focus { outline: none; }
+
+.note { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--rs-accent-soft); font-size: 13px; line-height: 1.5; }
+.note .toastIcon { margin-top: -3px; }
+
+/* Day and time-slot tiles: native inputs, styled by their checked state. */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+/* Seven days don't fit a phone at tap size: one row that bleeds to the panel edge and swipes sideways. */
+.tiles[data-scroll] { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 20px; scrollbar-width: none; margin-inline: -20px; padding: 4px 20px; }
+.tiles[data-scroll] .tile { flex: 1 0 56px; scroll-snap-align: start; }
+.tile { position: relative; display: grid !important; place-items: center; align-content: center; gap: 2px !important; min-height: 48px; padding: 6px 4px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); font-size: 14px !important; font-weight: 500 !important; text-align: center; cursor: pointer; }
+.tile[data-kind=slot] { min-height: 56px; font-weight: 600 !important; }
+.tile input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.tile small { font-size: 11px !important; }
+.tile:has(input:checked) { border-color: var(--rs-accent); background: var(--rs-accent); color: var(--rs-on-accent); font-weight: 600 !important; }
+.tile[data-kind=slot]:has(input:checked) { background: var(--rs-accent-soft); color: var(--rs-fg); }
+.tile[data-kind=slot]:has(input:checked) small { color: var(--rs-accent-text); }
+.tile:has(input:focus-visible) { outline: 2px solid var(--rs-accent-text); outline-offset: 2px; }
+
+.packageRow { display: flex !important; align-items: center; gap: 12px !important; min-height: 56px; padding: 8px 14px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); cursor: pointer; }
+.packageRow input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; accent-color: var(--rs-accent-text); }
+.packageRow > span { flex: 1; display: grid; gap: 2px; }
+.packageRow strong { font-size: 14px; }
+.packageRow b { font: 700 22px/1 var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; }
+.packageRow:has(input:checked) { border-color: var(--rs-accent); background: var(--rs-accent-soft); }
+.packageRow:has(input:checked) b { color: var(--rs-accent-text); }
+
+.doneMark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--rs-accent); color: var(--rs-on-accent); }
+.summary { margin: 0; border-top: 1px solid var(--rs-line); }
+.summary div { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--rs-line); }
+.summary div:last-child { border-bottom: 0; }
+.summary dt { color: var(--rs-muted); font-size: 13px; }
+.summary dd { margin: 0; font-size: 14px; font-weight: 600; text-align: right; }
+
+/* Dismissible toast at the top of the screen, clear of the bottom action bar. */
+.toast { position: fixed; z-index: 30; top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); box-sizing: border-box; display: flex; align-items: flex-start; gap: 8px; padding: 14px 6px 12px 16px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-panel); box-shadow: 0 12px 32px rgb(0 0 0 / .45); animation: toastIn .28s cubic-bezier(.2, .9, .3, 1.15); }
+.toast[data-leaving] { animation: toastOut .2s ease-in forwards; }
+.toastIcon { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; background: var(--rs-accent-soft); color: var(--rs-accent-text); }
+.toast[data-tone=error] .toastIcon { background: color-mix(in srgb, var(--rs-danger, #b22f2f) 18%, transparent); color: var(--rs-danger, #b22f2f); }
+.toast > div { flex: 1; min-width: 0; padding-top: 6px; }
+.toast[data-tone=error] p { margin-top: 0; color: var(--rs-fg); }
+.toast strong { font-size: 14px; }
+.toast p { margin: 4px 0 0; color: var(--rs-muted); font-size: 13px; line-height: 1.5; }
+.toast a { display: inline-flex; align-items: center; min-height: 36px; margin-top: 2px; color: var(--rs-accent-text); font-size: 13px; font-weight: 600; text-underline-offset: 3px; }
+.toast button { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border: 0; border-radius: 8px; background: none; color: var(--rs-muted); cursor: pointer; }
+.toast button:hover { background: var(--rs-bg); color: var(--rs-fg); }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -16px) scale(.97); } }
+@keyframes toastOut { to { opacity: 0; transform: translate(-50%, -12px) scale(.97); } }
+/* Keep a near-zero animation (not none) so animationend still fires and removes the toast. */
+@media (prefers-reduced-motion: reduce) { .toast, .toast[data-leaving] { animation-duration: .01ms; } }
+
+/* Sticky bottom bar: Back plus the step's main action. */
+.actionBar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; margin: auto -24px 0; padding: 14px 24px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--rs-line); border-radius: 0 0 15px 15px; background: var(--rs-bg); }
+.back { display: grid; place-items: center; flex-shrink: 0; width: 52px; min-height: 52px; border: 1px solid var(--rs-line); border-radius: 6px; background: var(--rs-panel); color: var(--rs-fg); cursor: pointer; }
+.next { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; padding: 12px 18px; border: 1px solid var(--rs-accent); border-radius: 6px; background: var(--rs-accent); color: var(--rs-on-accent); font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.next:hover:not(:disabled) { background: #e7b900; border-color: #e7b900; }
+:is(.back, .next):disabled { opacity: .6; cursor: default; }
+@media (max-width: 650px) { .actionBar { margin: auto -20px 0; padding-inline: 20px; border-radius: 0; } .panel { padding: 16px; } .tiles[data-scroll] { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; } }

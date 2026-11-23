@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "app/coach/schedule.module.css"
+        ],
+        "createdAt": "2026-11-19T15:29:08.755Z",
+        "reason": "Claude: .notice/.nudge copy the admin dashboard's existing .message callout (components/dashboard/settings.module.css:90, border-left 3px accent); user asked the coach UI to match the admin dashboard"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "components/dashboard/coaching-admin.module.css"
+        ],
+        "createdAt": "2026-11-19T16:16:02.801Z",
+        "reason": "Claude: .notice and the last-session event mark copy the 'Admin Coaching Redesign' Claude design the user approved ('build it now… 99% close'); .notice mirrors settings.module.css .message"
+      }
+    ]
+  }
+}

@@ -20,6 +20,7 @@ import {
 import { formatLongDate, formatShortDateTime } from "@/lib/dates";
 import { visitsThisMonth } from "@/lib/month-visits";
 import { statusBadgeStyle } from "@/lib/status-badge";
+import { IconUserPlus } from "./nav-icons";
 import styles from "./people-filter-select.module.css";
 
 // TASKLIST Phase 8 - Admin Dashboard: People tab.
@@ -71,9 +72,9 @@ const statusOptions: readonly FilterOption<StatusFilter>[] = [
 ];
 
 const sortOptions: readonly FilterOption<SortKey>[] = [
-  { value: "lastVisit", label: "Last visit" },
-  { value: "name", label: "Name" },
   { value: "joinDate", label: "Member since" },
+  { value: "name", label: "Name" },
+  { value: "lastVisit", label: "Last visit" },
   { value: "visits", label: "Visits this month" },
 ];
 
@@ -244,7 +245,8 @@ export function PeopleView() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("lastVisit");
+  // Newest sign-ups first, so staff can find them to assign an RFID tag.
+  const [sortKey, setSortKey] = useState<SortKey>("joinDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   function sortBy(key: SortKey) {
@@ -307,7 +309,8 @@ export function PeopleView() {
         case "phone": return p.phone;
         case "type": return p.type;
         case "status": return p.type === "member" ? effectiveMemberStatus(p) ?? "" : "~"; // guests last A→Z
-        case "joinDate": return p.joinDate?.toMillis() ?? 0;
+        // Guests have no join date; their sign-up time keeps new guests near the top too.
+        case "joinDate": return (p.joinDate ?? p.createdAt)?.toMillis() ?? 0;
         case "lastVisit": return p.lastVisitAt?.toMillis() ?? 0;
         case "visits": return visitsThisMonth(p.monthVisits);
       }
@@ -339,22 +342,17 @@ export function PeopleView() {
           <h1 className="rs-ppl-title" style={headingStyle}>
             People
           </h1>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           <Link
             href="/dashboard/people/unverified"
-            style={{ ...newButtonStyle, background: "var(--rs-panel)", color: "var(--rs-fg)", border: "1px solid var(--rs-line)" }}
+            style={{ ...newButtonStyle, marginTop: 10, background: "var(--rs-panel)", color: "var(--rs-fg)", border: "1px solid var(--rs-line)" }}
           >
             Unverified members
           </Link>
-          <Link
-            href="/dashboard/people/new"
-            className="rs-ppl-new"
-            style={newButtonStyle}
-          >
-            New profile
-          </Link>
         </div>
+        <Link href="/dashboard/people/new" className="rs-ppl-add" aria-label="Add profile">
+          <span className="rs-ppl-add-top" aria-hidden="true">New<IconUserPlus size={18} /></span>
+          <span className="rs-ppl-add-label" aria-hidden="true">Add<br />profile</span>
+        </Link>
       </header>
 
       {listenerError && (
@@ -534,10 +532,9 @@ const pageStyle: CSSProperties = {
 
 const headerRow: CSSProperties = {
   display: "flex",
-  alignItems: "flex-end",
+  alignItems: "stretch",
   justifyContent: "space-between",
-  gap: 24,
-  flexWrap: "wrap",
+  gap: 16,
 };
 
 const headingStyle: CSSProperties = {

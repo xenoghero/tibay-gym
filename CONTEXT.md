@@ -27,8 +27,24 @@ The moment a paid coaching package's coaching validity and membership month begi
 _Avoid_: Activation, start date
 
 **Coaching session**:
-One coach-accompanied workout, consumed from a coaching package or session top-up when the coach marks it done.
-_Avoid_: Session (alone), class
+One coach-accompanied workout for one client, with a start time and duration, from the moment it is added to a date. Marking it done consumes a session from a coaching package or session top-up; until it is marked it is upcoming.
+_Avoid_: Session (alone), class, booking
+
+**Target muscle**:
+A muscle group from the gym's fixed list (Chest, Back, Shoulders, Arms, Core, Legs, Glutes, Full body, Cardio) that a coaching session focuses on; a session can have several.
+_Avoid_: Focus, body part
+
+**Exercise checklist**:
+The exercises planned for one coaching session, typed freely and ticked as the client completes them. It is a record only: unticked exercises never stop the session being marked done, and it stays editable after marking.
+_Avoid_: Workout plan, program
+
+**Set**:
+One round of an exercise on the exercise checklist, optionally recorded with the reps and weight the client did.
+_Avoid_: Round
+
+**Session note**:
+One optional note a coach or the admin writes on a coaching session; the client sees it in their session history.
+_Avoid_: Remark, comment
 
 **No-show**:
 A coaching session the client missed, noted by the coach without consuming a session.
@@ -39,7 +55,7 @@ Coaching sessions bought individually, in any quantity, at a single per-session 
 _Avoid_: Add-on, reload
 
 **Freeze**:
-An admin-approved pause of a started package's coaching sessions, at most once per package and 14 days, counted from the day the admin approves it, that pushes the coaching validity back by the days frozen; the membership month keeps running, and the client can end it early without approval.
+An admin-approved pause of a started package's coaching sessions, at most once per package and 14 days, counted from the day the admin approves it, that pushes the coaching validity back by the days frozen and cancels the upcoming coaching sessions inside it; the membership month keeps running, and the client can end it early without approval.
 _Avoid_: Hold, suspension
 
 **Session adjustment**:
@@ -55,9 +71,13 @@ A person with coaching sessions assigned to a coach.
 _Avoid_: Trainee, student
 
 **Preferred schedule**:
-The weekdays and single time slot a client would like to train in; a preference, not a booking.
+The days of the week and single time slot a client would like to train in; a preference, not a booking. The coach sets the actual schedule with the client at their first coaching session.
 _Avoid_: Booking, appointment
 
 **Coaching sign-up link**:
 The one fixed public page where new people register for coaching and pay for a package or top-up.
 _Avoid_: Promo link, referral link
+
+**Personal training**:
+The public name for Coaching, used only on the coaching sign-up link; it is not a separate product.
+_Avoid_: One-on-one coaching

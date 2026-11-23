@@ -5,7 +5,8 @@ import { ApiError } from "./rfid/http";
 import type { CustomerSession } from "@/lib/finance/contracts";
 import { publicCaller, publicRateLimiter } from "./public-rate-limit";
 export const CUSTOMER_COOKIE = "tibay_customer";
-export const CUSTOMER_SESSION_MS = 30 * 60_000;
+// No practical limit: browsers cap cookie Max-Age at 400 days, so sessions end on sign-out.
+export const CUSTOMER_SESSION_MS = 400 * 86_400_000;
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 function customerToken(request: Request) {
   const token = request.headers.get("cookie")?.split(";").map(s => s.trim()).find(s => s.startsWith(`${CUSTOMER_COOKIE}=`))?.slice(CUSTOMER_COOKIE.length + 1);

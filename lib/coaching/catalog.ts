@@ -62,7 +62,7 @@ export interface ClientPackage {
 /** Only one package at a time: pending, approved-not-started, or active with sessions left and not expired. */
 export const blocksNewPackage = (record: ClientPackage, now: number) => !record.topUp && ["pending", "approved", "active"].includes(packageState(record, now).status);
 
-export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri"] as const;
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type Weekday = typeof WEEKDAYS[number];
 export const TIME_SLOTS = { morning: "6 AM–12 PM", afternoon: "12 PM–6 PM", evening: "6 PM–10 PM" } as const;
 export type TimeSlot = keyof typeof TIME_SLOTS;

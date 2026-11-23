@@ -19,6 +19,7 @@
 .sidebar[data-collapsed="true"] { width: 76px; }
 .brandRow { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; flex-shrink: 0; }
 .sidebar[data-collapsed="true"] .brandRow { padding: 0 4px; }
+.brandClip, .homeLink { color: inherit; text-decoration: none; }
 .brandClip { overflow: hidden; width: 100%; }
 .brandClip :global(.rs-brand-sidebar) { width: 202px; max-width: none; }
 .brandClip :global(.rs-brand-name) { transition: opacity 150ms ease; }

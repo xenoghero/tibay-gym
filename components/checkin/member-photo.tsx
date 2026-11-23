@@ -6,30 +6,33 @@ const CENTER: PhotoPosition = { x: 50, y: 50 };
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
 
-/** Loads the signed-in member's private photo (session cookie auth) as an object URL. */
-export function useProfilePhotoUrl(hasPhoto: boolean, version: number) {
+const memberPhoto = (signal: AbortSignal) => fetch("/api/images/profile", { signal });
+
+/** Loads a private photo as an object URL: by default the signed-in member's (session cookie auth). Pass a stable `load` for other sources. */
+export function useProfilePhotoUrl(hasPhoto: boolean, version: number, load: (signal: AbortSignal) => Promise<Response> = memberPhoto) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!hasPhoto) return;
     const controller = new AbortController();
     let objectUrl: string | null = null;
-    fetch("/api/images/profile", { signal: controller.signal })
+    load(controller.signal)
       .then(async response => { if (!response.ok) return; objectUrl = URL.createObjectURL(await response.blob()); if (controller.signal.aborted) URL.revokeObjectURL(objectUrl); else setUrl(objectUrl); })
       .catch(() => {});
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [hasPhoto, version]);
+  }, [hasPhoto, version, load]);
   return hasPhoto ? url : null;
 }
 
-export function MemberPhoto({ url, position, name, onEdit }: { url: string | null; position: PhotoPosition | null; name: string; onEdit(): void }) {
+/** Without `onEdit` the photo is read-only and shows someone else (a coach's client). */
+export function MemberPhoto({ url, position, name, onEdit }: { url: string | null; position: PhotoPosition | null; name: string; onEdit?(): void }) {
   const at = position ?? CENTER;
   return <div className={styles.passPhoto}>
     {/* Private object URL; next/image optimization does not apply. */}
     {/* eslint-disable-next-line @next/next/no-img-element */}
-    {url ? <img src={url} alt="Your profile photo" style={{ objectPosition: `${at.x}% ${at.y}%` }} /> : <span aria-hidden="true">{initials(name)}</span>}
-    <button type="button" onClick={onEdit} aria-label={url ? "Change photo" : "Add photo"} title={url ? "Change photo" : "Add photo"}>
+    {url ? <img src={url} alt={onEdit ? "Your profile photo" : `Photo of ${name}`} style={{ objectPosition: `${at.x}% ${at.y}%` }} /> : <span aria-hidden="true">{initials(name)}</span>}
+    {onEdit && <button type="button" onClick={onEdit} aria-label={url ? "Change photo" : "Add photo"} title={url ? "Change photo" : "Add photo"}>
       <CameraIcon />
-    </button>
+    </button>}
   </div>;
 }
 

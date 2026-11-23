@@ -46,3 +46,8 @@ next-env.d.ts
 /firmware/reshape-rfid/build/
 /firmware/tibay-rfid/scanner_config.h
 /firmware/tibay-rfid/build/
+
+# playwright
+/e2e/report/
+/e2e/results/
+*-debug.log

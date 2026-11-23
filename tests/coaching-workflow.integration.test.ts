@@ -158,7 +158,7 @@ it("starts an unused package automatically at approval + 15 days, dated at the d
 });
 
 let markSequence = 0;
-const mark = (coachId: string, extra: Record<string, unknown> = {}) => markSession(coachId, { personId: "p1", outcome: "done", operationId: `mark-operation-${++markSequence}-000`, ...extra });
+const mark = (coachId: string, extra: Record<string, unknown> = {}) => markSession({ coachId }, { personId: "p1", outcome: "done", operationId: `mark-operation-${++markSequence}-000`, ...extra });
 async function coachedClient(packageId = "pkg-4") {
   for (const id of ["ana", "ben"]) state.store!.data.set(`coaches/${id}`, { name: id === "ana" ? "Ana" : "Ben", email: `${id}@example.com`, active: true, createdAt: NOW, deactivatedAt: null });
   const bought = await buy("p1", packageId);
@@ -176,8 +176,8 @@ it("marks sessions, starts the package on the first one, and refuses marks that 
   await mark("ana", { outcome: "no_show", note: "Overslept" });
   expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 1 });
   // Retrying the same request records it once.
-  await markSession("ana", { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
-  await markSession("ana", { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
+  await markSession({ coachId: "ana" }, { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
+  await markSession({ coachId: "ana" }, { personId: "p1", outcome: "done", operationId: "mark-retry-operation-01" });
   expect(packageOf("p1", bought.operationId)).toMatchObject({ sessionsUsed: 2 });
   await expect(mark("ben")).rejects.toMatchObject({ code: "client-not-assigned" });
   await expect(mark("ana", { date: "2026-12-30" })).rejects.toMatchObject({ code: "invalid-session-date" });

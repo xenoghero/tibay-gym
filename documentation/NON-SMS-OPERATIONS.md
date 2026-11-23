@@ -12,7 +12,7 @@ Only one daily session or one month has defined pricing. Package, longer-term an
 
 Customers choose Create Account or Check In. Registration requires Student / Regular and a lead source, with details for Others. The first visitor remains pending until admin verification; approval preserves the customer ID, category, photo, visits and financial links. Optional photo failure does not undo registration or attendance.
 
-The customer page uses a saved phone number without OTP, as requested. It exposes limited membership and payment status, not a full profile or admin controls. Its restricted session lasts 30 minutes. Sign out / use a different number revokes the server session and clears the cookie; retry if closing the session fails. The displayed account clears on expiry. Pending visitors can view their limited payment status; membership purchase submission requires a verified profile.
+The customer page uses a saved phone number without OTP, as requested. It exposes limited membership and payment status, not a full profile or admin controls. Its restricted session lasts until sign-out (capped at 400 days). Sign out / use a different number revokes the server session and clears the cookie; retry if closing the session fails. Pending visitors can view their limited payment status; membership purchase submission requires a verified profile.
 
 Covered active members retain normal check-in. An expired member can choose a daily visit through QR while retaining the expired membership. A daily request does not renew membership. RFID keeps the established expired-member rejection policy. Scanner visits without a payment selector can incur an expected charge with no submitted payment request.
 

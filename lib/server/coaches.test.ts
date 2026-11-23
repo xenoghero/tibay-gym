@@ -18,6 +18,7 @@ import { GET as coachMe } from "@/app/api/coach/me/route";
 import { requireAdmin } from "./rfid/auth";
 import { GET as assignments, POST as assign } from "@/app/api/admin/coach-assignments/route";
 import { GET as coachClients } from "@/app/api/coach/clients/route";
+import { GET as clientPhoto } from "@/app/api/coach/clients/photo/route";
 import { POST as coachSessions } from "@/app/api/coach/sessions/route";
 import { GET as adminSessions, POST as adminSessionChange } from "@/app/api/admin/coaching-sessions/route";
 const NOW = Date.parse("2026-11-17T02:00:00Z");
@@ -135,6 +136,11 @@ it("shows a coach only their own clients, without address or payments", async ()
   const other = await coachClients(new Request("https://tibay.test/api?id=c2", { headers: { authorization: `Bearer ${token("coach1")}` } }));
   expect([other.status, (await other.json()).error]).toEqual([403, "client-not-assigned"]);
   expect((await call(coachClients, "admin1")).status).toBe(403);
+  expect(body.client).toMatchObject({ hasPhoto: false, photoPosition: null });
+  const photo = (id: string, uid: string) => clientPhoto(new Request(`https://tibay.test/api?id=${id}`, { headers: { authorization: `Bearer ${token(uid)}` } }));
+  expect((await photo("c2", "coach1")).status).toBe(403);
+  expect((await photo("c1", "admin1")).status).toBe(403);
+  expect((await photo("c1", "coach1")).status).toBe(404);
 });
 
 it("returns a deactivated coach's clients to Unassigned clients", async () => {
