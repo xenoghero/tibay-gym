@@ -71,6 +71,24 @@ settings are embedded at build time, so rebuild when changing projects.
 For isolated attendance development with the local emulators, use
 `npm run dev:isolated`; this uses the separate demo project.
 
+## Coaching smoke tests (Playwright)
+
+`npm run test:e2e` runs the coaching journeys in `e2e/coaching.e2e.ts`
+against the Firebase emulators and the isolated demo project, never the live
+data. Each run wipes the emulators and seeds a test admin first. It needs the
+Firebase CLI and JDK 21+ on `PATH`; Playwright starts the emulators and an
+isolated dev server on port 3100 (in `.next/e2e`, so it can run beside
+`npm run dev`) unless they are already running. First time only:
+`npx playwright install chromium`.
+
+The journeys run in order and build on each other: catalog and coach set-up,
+sign-up on the Personal training link, payment approval, assigning a coach,
+scheduling, session plans and marks, no-shows and undo, moving and cancelling
+sessions, mark fixes and session adjustments, Freeze, top-ups, a first
+check-in starting a package, and coach password reset and deactivation.
+Failures leave a trace and screenshots in `e2e/results/`; open the report with
+`npx playwright show-report e2e/report`.
+
 ## Database rules and indexes
 
 `firebase.json` selects `firestore.cutover.rules` and `firestore.indexes.json`.

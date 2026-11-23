@@ -23,7 +23,8 @@
     "rfid:rules-probe": "node scripts/rfid-rules-probe.mjs",
     "rfid:maintenance": "node scripts/rfid-maintenance.mjs",
     "phone:backfill": "node scripts/phone-last4-backfill.mjs",
-    "visits:backfill": "node scripts/month-visits-backfill.mjs"
+    "visits:backfill": "node scripts/month-visits-backfill.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.11",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
