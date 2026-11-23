@@ -67,6 +67,7 @@ it("adds a session for an unassigned client with the coach the admin picks", asy
   render(<AdminCoaching />);
   fireEvent.click(await screen.findByRole("button", { name: "+ Add session" }));
   const sheet = screen.getByRole("dialog", { name: "Add session" });
+  fireEvent.click(within(sheet).getByRole("button", { name: "Client Search or pick a client" }));
   fireEvent.click(within(sheet).getByRole("radio", { name: /Adrian Luna/ }));
   expect(within(sheet).getByText(/adding assigns them to Adrian/)).toBeTruthy();
   fireEvent.click(within(sheet).getByRole("radio", { name: /Eris Boreas/ }));

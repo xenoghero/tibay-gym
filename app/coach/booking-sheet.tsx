@@ -205,7 +205,7 @@ export function AddSheet({ data, admin, busy, error, date, personId, coachId: pr
   const { today, minuteNow } = data, coaches = data.coaches ?? [];
   const [day, setDay] = useState(date), [chosen, setChosen] = useState(personId ?? null), [query, setQuery] = useState("");
   const [start, setStart] = useState<number | null>(null), [length, setLength] = useState(60), [muscles, setMuscles] = useState<Muscle[]>([]), [repeat, setRepeat] = useState(false);
-  const [pickedCoach, setCoach] = useState(presetCoach ?? "");
+  const [pickedCoach, setCoach] = useState(presetCoach ?? ""), [listing, setListing] = useState(false);
   const client = data.clients.find(row => row.id === chosen);
   // A coach's schedule holds only their own sessions, so every one of them counts as the coach's.
   const coachId = admin ? client?.coachId ?? (pickedCoach || coaches[0]?.id) : null;
@@ -239,7 +239,7 @@ export function AddSheet({ data, admin, busy, error, date, personId, coachId: pr
   const ready = !!pick && (!admin || !!coachId) && !clash && weeks > 0 && (past || day > today || at >= earliest);
   const label = !pick ? "Choose a client" : clash ? "That time is taken" : weeks === 0 ? "After their coaching ends"
     : repeating ? `Add ${weeks} ${dateLabel(day, { weekday: "long" })}s` : `Add ${firstName(pick.row.name)} · ${timeLabel(at)}`;
-  const pickClient = (row: ScheduleClient) => { setChosen(row.id); if (row.coachId) setCoach(row.coachId); };
+  const pickClient = (row: ScheduleClient) => { setChosen(row.id); if (row.coachId) setCoach(row.coachId); setListing(false); setQuery(""); };
 
   return <Sheet title="Add session" top={<button type="button" className={s.link} onClick={onBack}>‹ {shortDate(day)}</button>} onClose={onClose}
     footer={<>
@@ -249,19 +249,27 @@ export function AddSheet({ data, admin, busy, error, date, personId, coachId: pr
           repeating ? `Added ${pick.row.name} every ${dateLabel(day, { weekday: "long" })} at ${timeLabel(at)} (${weeks} sessions).` : `Added ${pick.row.name} on ${shortDate(day)} at ${timeLabel(at)}.`)}>
         <span>{busy ? "Adding…" : label}</span><span aria-hidden="true">✓</span></button>
     </>}>
-    <fieldset className={s.fieldset}>
-      <legend className={s.label}>Client</legend>
-      <input type="search" className={s.search} aria-label="Search clients" placeholder="Search clients" value={query} onChange={event => setQuery(event.target.value)} />
-      <div className={s.picker}>{ranked.map(({ row, ok, match, why }) => <label key={row.id} className={s.pick} data-disabled={!ok || undefined}>
-        <input type="radio" name="add-client" checked={chosen === row.id} disabled={!ok} onChange={() => pickClient(row)} />
-        <span className={s.who}><strong>{row.name}</strong><span data-tone={match && ok ? "success" : undefined}>{why}</span></span>
-        <span className={s.left}>{row.sessionsLeft}<small>left</small></span>
-      </label>)}
-        {!ranked.length && <p className={s.feedNote}>No clients match.</p>}</div>
-    </fieldset>
+    <div className={s.field}>
+      <span className={s.label} id="add-client-label">Client</span>
+      <button type="button" className={s.select} aria-labelledby="add-client-label add-client-value" aria-expanded={listing} aria-controls="add-client-list" onClick={() => setListing(v => !v)}>
+        {pick ? <span id="add-client-value" className={s.who}><strong>{pick.row.name}</strong><span data-tone={pick.match ? "success" : undefined}>{pick.why}</span></span>
+          : <span id="add-client-value" className={s.placeholder}>Search or pick a client</span>}
+        {pick && <span className={s.left}>{pick.row.sessionsLeft}<small>left</small></span>}
+        <span className={s.caret} aria-hidden="true">▾</span>
+      </button>
+      {listing && <div id="add-client-list" className={s.dropdown}>
+        <input type="search" className={s.search} aria-label="Search clients" placeholder="Search clients" autoFocus value={query} onChange={event => setQuery(event.target.value)} />
+        <div role="radiogroup" aria-label="Clients" className={s.picker}>{ranked.map(({ row, ok, match, why }) => <label key={row.id} className={s.pick} data-disabled={!ok || undefined}>
+          <input type="radio" name="add-client" checked={chosen === row.id} disabled={!ok} onChange={() => pickClient(row)} />
+          <span className={s.who}><strong>{row.name}</strong><span data-tone={match && ok ? "success" : undefined}>{why}</span></span>
+          <span className={s.left}>{row.sessionsLeft}<small>left</small></span>
+        </label>)}
+          {!ranked.length && <p className={s.feedNote}>No clients match.</p>}</div>
+      </div>}
+    </div>
 
     {admin && <div className={s.field}><span className={s.label}>Coach {client && <span>· {client.coachId ? `${firstName(client.name)}’s coach` : `adding assigns them to ${firstName(client.name)}`}</span>}</span>
-      <div role="radiogroup" aria-label="Coach" className={s.chips}>{coaches.map(row => <button key={row.id} type="button" role="radio" aria-checked={coachId === row.id} className={s.chip}
+      <div role="radiogroup" aria-label="Coach" className={s.options}>{coaches.map(row => <button key={row.id} type="button" role="radio" aria-checked={coachId === row.id} className={s.chip}
         disabled={!!client?.coachId && client.coachId !== row.id} onClick={() => setCoach(row.id)}>
         <span className={s.badge} style={badge(row.id)} aria-hidden="true">{initials(row.name)[0]}</span>{row.name}</button>)}</div>
       {!coaches.length && <p className={s.error}>Create a coach in Settings → Coaching first.</p>}

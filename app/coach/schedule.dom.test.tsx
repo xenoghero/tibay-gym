@@ -95,8 +95,16 @@ it("adds a session: best-matching client first, a free time, target muscles, wee
   fireEvent.click(await screen.findByRole("button", { name: /^Thursday, November 19/ }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Add session/ }));
   const sheet = screen.getByRole("dialog", { name: "Add session" });
+  // The client list stays folded into one field until opened, then closes on a pick.
+  expect(within(sheet).queryByRole("radio", { name: /Carlo Mendoza/ })).toBeNull();
+  fireEvent.click(within(sheet).getByRole("button", { name: "Client Search or pick a client" }));
+  fireEvent.change(within(sheet).getByRole("searchbox", { name: "Search clients" }), { target: { value: "cruz" } });
+  expect(within(sheet).getAllByRole("radio").map(radio => radio.closest("label")!.textContent)).toEqual([expect.stringContaining("Jenny Cruz"), expect.stringContaining("Kristine Dela Cruz")]);
   expect((within(sheet).getByRole("radio", { name: /Kristine Dela Cruz/ }) as HTMLInputElement).disabled).toBe(true);
+  fireEvent.change(within(sheet).getByRole("searchbox", { name: "Search clients" }), { target: { value: "" } });
   fireEvent.click(within(sheet).getByRole("radio", { name: /Carlo Mendoza.*Prefers Thu afternoons/ }));
+  expect(within(sheet).queryByRole("searchbox")).toBeNull();
+  expect(within(sheet).getByRole("button", { name: /^Client Carlo Mendoza/ })).toBeTruthy();
   // 2:15–3:59 PM would run into Jenny's 3 PM, so the first free afternoon start is 4 PM.
   expect((within(sheet).getByRole("combobox", { name: "Start" }) as HTMLSelectElement).value).toBe(String(16 * 60));
   expect(within(sheet).getByText("✓ Free 4:00 PM–5:00 PM for you and Carlo")).toBeTruthy();

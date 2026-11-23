@@ -33,9 +33,12 @@
 .counts [data-tone="accent"] strong { color: var(--rs-accent-text); }
 .counts [data-tone="success"] strong { color: var(--rs-success); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 13px; border: 1px solid var(--rs-line); border-radius: 999px; background: transparent; font-size: 13px; }
-.chip:is([aria-pressed="true"], [aria-checked="true"]) { border-color: var(--rs-fg); background: var(--rs-fg); color: var(--rs-bg) !important; font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); font-size: 13px; text-align: left; }
+.chip:hover:not(:disabled) { border-color: var(--rs-muted); }
+.chip:is([aria-pressed="true"], [aria-checked="true"]) { border-color: var(--rs-accent); box-shadow: inset 0 0 0 1px var(--rs-accent); background: var(--rs-accent-soft); color: var(--rs-accent-text) !important; font-weight: 600; }
 .chip:disabled { opacity: .4; }
+/* The coach picker in Add session: equal-width options. */
+.options { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 /* A coach's colour square with their initial, so coaches never differ by colour alone. */
 .badge { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 4px; color: #171400; font-size: 10px; font-weight: 800; line-height: 1; }
 
@@ -136,8 +139,14 @@
 .freeLine { margin: -4px 0 0; font-size: 12px; color: var(--rs-success); }
 .freeLine[data-tone="danger"] { color: var(--rs-danger); }
 
-/* Client picker in Add session. */
-.picker { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+/* Client picker in Add session: a field that opens a searchable, scrolling list. */
+.select { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 14px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); text-align: left; }
+.select[aria-expanded="true"] { border-color: var(--rs-accent); }
+.placeholder { flex: 1; color: var(--rs-muted); font-size: 15px; }
+.caret { flex: none; color: var(--rs-muted); font-size: 12px; }
+.dropdown { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-bg); }
+.dropdown .pick { background: var(--rs-panel); }
+.picker { display: grid; gap: 6px; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
 .pick { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); cursor: pointer; }
 .pick:has(input:checked) { border: 2px solid var(--rs-accent); padding: 0 11px; }
 .pick[data-disabled] { opacity: .5; cursor: default; }
