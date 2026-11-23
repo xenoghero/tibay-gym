@@ -50,7 +50,7 @@ it("returns the selected customer's name and minimal status with a private cooki
   const response = await POST(new Request("https://test/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "09123456789", personId: "someone-else" }) }));
   expect(response.status).toBe(200);
   const cookie = response.headers.get("set-cookie")!;
-  expect(cookie).toMatch(/HttpOnly; SameSite=Strict/); expect(cookie).toMatch(/Max-Age=1800/);
+  expect(cookie).toMatch(/HttpOnly; SameSite=Strict/); expect(cookie).toMatch(/Max-Age=34560000/);
   expect(Object.keys(await response.json())).toEqual(["expiresAt"]);
   const status = await (await GET(new Request("https://test/api", { headers: { cookie } }))).json();
   expect(status).toMatchObject({ name: "Mara Santos", type: "guest", verified: true, rateCategory: null });
